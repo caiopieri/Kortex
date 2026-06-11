@@ -1,0 +1,37 @@
+{
+  "versao": "0.1",
+  "padrao": "fan_out_sintese",
+  "missao": {
+    "id": "pesquisa-receita-exemplo",
+    "objetivo": "Levantar oportunidades de aumento de receita no negócio de impressão 3D",
+    "contexto": "Marketplace (Mercado Livre/Shopee) + possibilidade de receita recorrente",
+    "criterios_cobertura": [
+      "canal de anúncios em marketplace coberto com evidência",
+      "canal de receita recorrente coberto com evidência"
+    ]
+  },
+  "restricoes": { "teto_custo": 2.0, "max_subagentes": 10, "max_tentativas": 3 },
+  "subagentes": [
+    {
+      "id": "pesquisa-alfa",
+      "papel": "pesquisador",
+      "objetivo": "Investigar oportunidades no canal alfa: anúncios em marketplaces",
+      "entradas": { "canais": ["Mercado Livre", "Shopee"] },
+      "resultado_esperado": "3+ oportunidades específicas, cada uma com evidência",
+      "rubrica": ["cita evidência ou fonte", "específico e acionável", "3 ou mais oportunidades"]
+    },
+    {
+      "id": "pesquisa-beta",
+      "papel": "pesquisador",
+      "objetivo": "Investigar oportunidades no canal beta: receita recorrente (assinaturas, B2B)",
+      "entradas": {},
+      "resultado_esperado": "3+ oportunidades específicas, cada uma com evidência",
+      "rubrica": ["cita evidência ou fonte", "específico e acionável", "3 ou mais oportunidades"]
+    }
+  ],
+  "gates": [],
+  "sintese": {
+    "instrucao": "Consolide as oportunidades em um relatório ranqueado por impacto estimado, com premissas explícitas no topo",
+    "formato": "markdown"
+  }
+}
