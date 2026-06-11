@@ -1,4 +1,5 @@
 __pycache__/
 *.pyc
 log.jsonl
+motor.db
 .pytest_cache/

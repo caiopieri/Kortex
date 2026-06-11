@@ -1,0 +1,212 @@
+"""Caixa do fundador (T3): nota durável + resume pós-crash via SqliteSaver.
+
+Critérios de falsificação nº1 e nº2 da migração (HANDOFF):
+  1. Resume pós-crash funciona via checkpointer nativo.
+  2. Caixa do fundador funciona via interrupt() nativo.
+
+Reusa o ClienteStub e o padrão de roteador de test_grafo.py. O evaluator
+reprovando cobertura é o que dispara o interrupt — daí `evaluator_aprova=False`.
+"""
+import json
+import re
+import sqlite3
+import threading
+import time
+from pathlib import Path
+
+from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.types import Command
+
+try:
+    from langgraph.checkpoint.memory import InMemorySaver
+except ImportError:
+    from langgraph.checkpoint.memory import MemorySaver as InMemorySaver
+
+from motor.caixa import CaixaFundador, rodar_com_caixa
+from motor.eventos import LogEventos
+from motor.grafo import construir_grafo
+from motor.modelos import ClienteStub
+
+# mesma spec dos testes do grafo (dirigida por dado)
+from tests.test_grafo import SPEC, faz_roteador
+
+
+def eventos_de(path: Path):
+    linhas = path.read_text(encoding="utf-8").strip().splitlines()
+    return [json.loads(l) for l in linhas]
+
+
+def _grafo_sqlite(tmp_path, log, roteador, nome_db="motor.db"):
+    """Constrói um grafo com SqliteSaver em arquivo (durável).
+
+    Conexão própria com check_same_thread=False — fechá-la (e descartar o grafo)
+    simula o crash; reabrir o MESMO arquivo reconstrói o estado.
+    """
+    conn = sqlite3.connect(str(tmp_path / nome_db), check_same_thread=False)
+    saver = SqliteSaver(conn)
+    saver.setup()
+    grafo = construir_grafo(ClienteStub(roteador), log, checkpointer=saver)
+    return grafo, conn
+
+
+# ---------------------------------------------------------------------------
+# (a) interrupt → nota criada no formato correto → decisão escrita conclui a missão
+# ---------------------------------------------------------------------------
+def test_interrupt_cria_nota_e_decisao_conclui(tmp_path):
+    log = LogEventos(tmp_path / "log.jsonl")
+    grafo = construir_grafo(
+        ClienteStub(faz_roteador(evaluator_aprova=False)), log,
+        checkpointer=InMemorySaver(),
+    )
+    config = {"configurable": {"thread_id": "ta"}}
+    dir_caixa = tmp_path / "Caixa do fundador"
+    caixa = CaixaFundador(dir_caixa, log, timeout_s=10, poll_s=0.05)
+
+    # thread em background escreve a decisão depois de a nota aparecer
+    def decidir():
+        nota = dir_caixa / "PENDENTE — cobertura.md"
+        for _ in range(200):
+            if nota.exists():
+                txt = nota.read_text(encoding="utf-8")
+                nota.write_text(txt.replace("decisao: \n", "decisao: prosseguir\n"),
+                                encoding="utf-8")
+                return
+            time.sleep(0.02)
+
+    t = threading.Thread(target=decidir)
+    t.start()
+    resultado = rodar_com_caixa(grafo, {"spec": SPEC}, config, caixa, log)
+    t.join(timeout=5)
+
+    assert resultado["resposta_final"] == "SÍNTESE FINAL DA MISSÃO"
+    assert resultado["avaliacao"]["prosseguir_parcial"] is True
+
+    # a nota pendente foi arquivada como `decidida ... — cobertura.md`
+    pendentes = list(dir_caixa.glob("PENDENTE — *.md"))
+    decididas = list(dir_caixa.glob("decidida * — cobertura.md"))
+    assert not pendentes and len(decididas) == 1
+
+    # formato exato do v0.4: frontmatter + corpo
+    conteudo = decididas[0].read_text(encoding="utf-8")
+    assert conteudo.startswith("---\n")
+    fm = conteudo.split("---\n")[1]
+    assert "estado: pendente" in fm
+    assert "portao: cobertura" in fm
+    assert re.search(r"^criada: \d{4}-\d{2}-\d{2} \d{2}:\d{2}$", fm, re.M)
+    assert "decisao: prosseguir" in fm
+    assert "**Pergunta:**" in conteudo
+    assert "**Contexto:**" in conteudo
+    assert "**Opções:**" in conteudo
+
+    tipos = [e["evento"] for e in eventos_de(tmp_path / "log.jsonl")]
+    assert "decisao.pendente" in tipos
+    assert "decisao.fundador" in tipos
+    assert "tarefa.concluida" in tipos
+
+
+# ---------------------------------------------------------------------------
+# (b) RESUME PÓS-CRASH — critério de falsificação nº1 e nº2
+# ---------------------------------------------------------------------------
+def test_resume_pos_crash_sqlite(tmp_path):
+    """Invoca até o interrupt, DESCARTA o grafo e a conexão (simula crash),
+    reconstrói um grafo NOVO sobre o MESMO arquivo sqlite e mesmo thread_id,
+    retoma com Command(resume='prosseguir') e verifica a resposta_final."""
+    log = LogEventos(tmp_path / "log.jsonl")
+    config = {"configurable": {"thread_id": "crash-1"}}
+
+    # --- antes do crash: roda até o gate ---
+    grafo1, conn1 = _grafo_sqlite(tmp_path, log, faz_roteador(evaluator_aprova=False))
+    resultado = grafo1.invoke({"spec": SPEC}, config)
+    assert "__interrupt__" in resultado
+    assert resultado["__interrupt__"][0].value["portao"] == "cobertura"
+
+    # --- CRASH: descarta tudo que vive em memória ---
+    conn1.close()
+    del grafo1, conn1
+
+    # --- religa: grafo NOVO, MESMO arquivo db, MESMO thread_id ---
+    grafo2, conn2 = _grafo_sqlite(tmp_path, log, faz_roteador(evaluator_aprova=False))
+
+    # sanidade: o estado foi mesmo lido do disco (há um checkpoint pendente)
+    estado = grafo2.get_state(config)
+    assert estado.next, "checkpointer não restaurou o ponto de interrupt do disco"
+
+    retomado = grafo2.invoke(Command(resume="prosseguir"), config)
+    conn2.close()
+
+    assert retomado["resposta_final"] == "SÍNTESE FINAL DA MISSÃO"
+    assert retomado["avaliacao"]["prosseguir_parcial"] is True
+
+
+def test_resume_pos_crash_via_runner(tmp_path):
+    """Mesmo cenário de crash, mas pelo caminho real `rodar_com_caixa`:
+    no religamento a nota PENDENTE pré-existente é reaproveitada e a decisão
+    escrita nela conduz o resume durável até a síntese."""
+    log = LogEventos(tmp_path / "log.jsonl")
+    config = {"configurable": {"thread_id": "crash-2"}}
+    dir_caixa = tmp_path / "Caixa do fundador"
+
+    # antes do crash: roda até o gate e escreve a nota (sem decidir)
+    grafo1, conn1 = _grafo_sqlite(tmp_path, log, faz_roteador(evaluator_aprova=False))
+    resultado = grafo1.invoke({"spec": SPEC}, config)
+    pedido = resultado["__interrupt__"][0].value
+    caixa1 = CaixaFundador(dir_caixa, log, timeout_s=10, poll_s=0.05)
+    caixa1.escrever_nota("cobertura", pedido["pergunta"],
+                         "; ".join(pedido["lacunas"]), pedido["opcoes"])
+    conn1.close()
+    del grafo1, conn1
+
+    # o humano decide enquanto o motor estava morto
+    nota = dir_caixa / "PENDENTE — cobertura.md"
+    nota.write_text(nota.read_text(encoding="utf-8")
+                    .replace("decisao: \n", "decisao: prosseguir\n"), encoding="utf-8")
+
+    # religa: grafo NOVO + runner; a nota pré-existente deve ser reaproveitada
+    grafo2, conn2 = _grafo_sqlite(tmp_path, log, faz_roteador(evaluator_aprova=False))
+    caixa2 = CaixaFundador(dir_caixa, log, timeout_s=10, poll_s=0.05)
+    # entrada de re-invoke: o grafo retoma do checkpoint pendente no disco,
+    # logo o estado inicial é ignorado e o runner cai direto no interrupt.
+    retomado = rodar_com_caixa(grafo2, {"spec": SPEC}, config, caixa2, log)
+    conn2.close()
+
+    assert retomado["resposta_final"] == "SÍNTESE FINAL DA MISSÃO"
+    tipos = [e["evento"] for e in eventos_de(tmp_path / "log.jsonl")]
+    assert "decisao.retomada" in tipos  # nota reaproveitada, não recriada
+
+
+# ---------------------------------------------------------------------------
+# (c) nota pendente pré-existente é reaproveitada (evento decisao.retomada)
+# ---------------------------------------------------------------------------
+def test_nota_pendente_preexistente_reaproveitada(tmp_path):
+    log = LogEventos(tmp_path / "log.jsonl")
+    dir_caixa = tmp_path / "Caixa do fundador"
+    caixa = CaixaFundador(dir_caixa, log, timeout_s=10, poll_s=0.05)
+
+    # 1ª escrita cria a nota (decisao.pendente)
+    caixa.escrever_nota("cobertura", "Prosseguir?", "lacuna X", "prosseguir · abortar")
+    # 2ª escrita encontra a nota: deve reaproveitar (decisao.retomada), não recriar
+    caixa.escrever_nota("cobertura", "OUTRA pergunta", "OUTRO contexto", "x · y")
+
+    conteudo = (dir_caixa / "PENDENTE — cobertura.md").read_text(encoding="utf-8")
+    # corpo original preservado (não foi sobrescrito)
+    assert "Prosseguir?" in conteudo and "OUTRA pergunta" not in conteudo
+
+    tipos = [e["evento"] for e in eventos_de(tmp_path / "log.jsonl")]
+    assert tipos.count("decisao.pendente") == 1
+    assert tipos.count("decisao.retomada") == 1
+
+
+def test_timeout_levanta_e_mantem_nota(tmp_path):
+    log = LogEventos(tmp_path / "log.jsonl")
+    dir_caixa = tmp_path / "Caixa do fundador"
+    caixa = CaixaFundador(dir_caixa, log, timeout_s=0, poll_s=0.01)
+    caixa.escrever_nota("cobertura", "Prosseguir?", "lacuna X", "prosseguir · abortar")
+
+    import pytest
+    with pytest.raises(RuntimeError):
+        caixa.aguardar_decisao("cobertura")
+
+    # nota mantida na caixa para o humano ainda decidir
+    assert (dir_caixa / "PENDENTE — cobertura.md").exists()
+    tipos = [e["evento"] for e in eventos_de(tmp_path / "log.jsonl")]
+    assert "decisao.timeout" in tipos

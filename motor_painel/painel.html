@@ -1,0 +1,207 @@
+<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Meta-fábrica v0.5 — sala de controle</title>
+<style>
+body{margin:0;font:14px -apple-system,sans-serif;background:#FAFAF7;color:#2C2C2A;display:flex;flex-direction:column;height:100vh}
+header{display:flex;align-items:center;gap:16px;padding:10px 18px;border-bottom:1px solid #E3E1D9;flex-wrap:wrap}
+header b{font-size:15px;font-weight:600}
+.pill{font-size:12px;padding:3px 10px;border-radius:12px;background:#F1EFE8;color:#444}
+.pill.on{background:#E1F5EE;color:#085041}
+.pill.err{background:#FDE8E8;color:#7B1111}
+button{font:13px inherit;padding:5px 14px;border:1px solid #D3D1C7;border-radius:8px;background:#fff;cursor:pointer}
+button:hover{background:#F1EFE8}
+#mapa{flex:1;min-height:200px}
+#ticker{height:140px;overflow-y:auto;border-top:1px solid #E3E1D9;padding:8px 18px;font:12px ui-monospace,monospace;background:#fff}
+#ticker div{padding:1px 0;color:#5F5E5A}
+#ticker .ok{color:#0F6E56}#ticker .no{color:#A32D2D}#ticker .esc{color:#854F0B}
+#ticker .abort{color:#7B1111;font-weight:600}#ticker .concluido{color:#0F6E56;font-weight:600}
+.no-circ{cursor:pointer}
+.rotulo{font-size:10px;fill:#5F5E5A;text-anchor:middle;pointer-events:none}
+</style></head><body>
+<header>
+  <b>Meta-fábrica v0.5 · sala de controle</b>
+  <span class="pill" id="stats">…</span>
+  <span class="pill" id="custo">R$ 0,00</span>
+  <button onclick="replay()">▶ reproduzir execução</button>
+  <span class="pill" id="vivo">ao vivo: aguardando eventos</span>
+</header>
+<svg id="mapa"></svg>
+<div id="ticker"></div>
+<script>
+/* Paleta por tipo de nó */
+const CORES = {
+  nucleo:   "#2C2C2A",
+  executor: "#185FA5",
+  subagente:"#2A7DB5",
+  portao:   "#BA7517",
+  decisor:  "#993556",
+  ferramenta:"#0F6E56",
+  "?":      "#888"
+};
+/* Raio orbital por tipo (fração do raio máximo) */
+const RAIO = {
+  nucleo:   0,    /* centro */
+  executor: 0.30,
+  subagente:0.60,
+  portao:   0.82,
+  decisor:  0.82,
+  ferramenta:0.82,
+  "?":      0.65,
+};
+
+let dados = null, pos = {}, nEv = 0;
+const svg = document.getElementById("mapa");
+const tick = document.getElementById("ticker");
+
+function el(t, a) {
+  const e = document.createElementNS("http://www.w3.org/2000/svg", t);
+  for (const k in a) e.setAttribute(k, a[k]);
+  return e;
+}
+
+function desenha() {
+  svg.innerHTML = "";
+  const W = svg.clientWidth, H = svg.clientHeight;
+  const cx = W / 2, cy = H / 2;
+  const R = Math.min(W, H) / 2 - 48;
+
+  /* Agrupa por tipo */
+  const grupos = {};
+  dados.nos.forEach(n => (grupos[n.tipo] = grupos[n.tipo] || []).push(n));
+
+  pos = {};
+
+  /* Nó central (nucleo) */
+  const nucleo = dados.nos.find(n => n.tipo === "nucleo");
+  if (nucleo) pos[nucleo.id] = [cx, cy];
+
+  /* Demais tipos em anéis */
+  for (const tipo in grupos) {
+    if (tipo === "nucleo") continue;
+    const lista = grupos[tipo];
+    const r = R * (RAIO[tipo] || 0.65);
+    lista.forEach((n, i) => {
+      const a = 2 * Math.PI * i / lista.length - Math.PI / 2;
+      pos[n.id] = [cx + r * Math.cos(a), cy + r * Math.sin(a)];
+    });
+  }
+
+  /* Círculos guia */
+  [0.30, 0.60, 0.82].forEach(f =>
+    svg.appendChild(el("circle", { cx, cy, r: R * f, fill: "none", stroke: "#E3E1D9", "stroke-dasharray": "3 5" }))
+  );
+
+  /* Arestas */
+  dados.arestas.forEach(a => {
+    const p = pos[a.de], q = pos[a.para];
+    if (p && q)
+      svg.appendChild(el("line", {
+        x1: p[0], y1: p[1], x2: q[0], y2: q[1],
+        stroke: "#DDD9CE", "stroke-width": 1, id: "ar-" + a.de + "-" + a.para
+      }));
+  });
+
+  /* Nós */
+  dados.nos.forEach(n => {
+    const [x, y] = pos[n.id] || [cx, cy];
+    const isNucleo = n.tipo === "nucleo";
+    if (isNucleo) {
+      const rect = el("rect", { x: cx - 24, y: cy - 24, width: 48, height: 48, rx: 10, fill: CORES.nucleo });
+      svg.appendChild(rect);
+      const t = el("text", { x: cx, y: cy + 5, fill: "#fff", "text-anchor": "middle", "font-size": "13" });
+      t.textContent = "MF"; svg.appendChild(t);
+      return;
+    }
+    const c = el("circle", {
+      cx: x, cy: y, r: 11,
+      fill: CORES[n.tipo] || "#888",
+      opacity: 0.85,
+      id: "no-" + n.id,
+      class: "no-circ"
+    });
+    c.appendChild(el("title", {})).textContent = n.id + " (" + n.tipo + ")";
+    svg.appendChild(c);
+    const label = n.id.length > 18 ? n.id.slice(0, 17) + "…" : n.id;
+    const r = el("text", { x, y: y + 25, class: "rotulo" });
+    r.textContent = label; svg.appendChild(r);
+  });
+
+  document.getElementById("stats").textContent =
+    dados.nos.length + " nós · " + dados.arestas.length + " conexões · " + dados.eventos.length + " eventos";
+}
+
+function pulsa(id, cor) {
+  const n = document.getElementById("no-" + id);
+  if (!n) return;
+  n.setAttribute("r", 18);
+  n.setAttribute("stroke", cor || "#1D9E75");
+  n.setAttribute("stroke-width", 4);
+  setTimeout(() => { n.setAttribute("r", 11); n.removeAttribute("stroke"); }, 700);
+}
+
+const CLS_EV = {
+  "portao.aprovado":  "ok",
+  "portao.reprovado": "no",
+  "tarefa.concluida": "concluido",
+  "tarefa.abortada":  "abort",
+  "escalado":         "esc",
+  "modelo.falha":     "no",
+  "executor.erro":    "no",
+};
+
+function mostra(e) {
+  const d = document.createElement("div");
+  let cls = CLS_EV[e.evento] || "";
+  if (!cls && e.evento && e.evento.startsWith("decisao")) cls = "esc";
+  d.className = cls;
+  const meta = Object.fromEntries(Object.entries(e).filter(([k]) => !["t", "evento"].includes(k)));
+  const ts = (e.t !== undefined) ? e.t.toFixed(2) + "s  " : "";
+  d.textContent = ts + e.evento + "  " + JSON.stringify(meta);
+  tick.prepend(d);
+
+  /* Pulsar nós afetados */
+  if (e.executor)  pulsa(e.executor, CORES.executor);
+  if (e.portao) {
+    pulsa(e.portao, e.evento === "portao.aprovado" ? "#1D9E75" : "#E24B4A");
+    if (e.portao.startsWith("verifier:")) {
+      const sid = e.portao.split(":")[1];
+      pulsa(sid, e.evento === "portao.aprovado" ? "#1D9E75" : "#E24B4A");
+    }
+  }
+  if (e.roteiro)   pulsa(e.roteiro, CORES.executor);
+  if (e.evento === "escalado" || (e.evento && e.evento.startsWith("decisao")))
+    pulsa("fundador", "#EF9F27");
+  if (e.evento === "paralelo.iniciado" && Array.isArray(e.subagentes))
+    e.subagentes.forEach(sid => setTimeout(() => pulsa(sid, CORES.subagente), 80));
+  if (e.acumulado !== undefined)
+    document.getElementById("custo").textContent = "R$ " + e.acumulado.toFixed(2);
+}
+
+function replay() {
+  tick.innerHTML = "";
+  document.getElementById("custo").textContent = "R$ 0,00";
+  dados.eventos.forEach((e, i) => setTimeout(() => mostra(e), i * 350));
+}
+
+async function carrega() {
+  const r = await fetch("/dados");
+  dados = await r.json();
+  desenha();
+  nEv = dados.eventos.length;
+}
+
+async function poll() {
+  try {
+    const r = await fetch("/dados");
+    const d = await r.json();
+    if (d.nos.length !== dados.nos.length) { dados = d; desenha(); }
+    if (d.eventos.length > nEv) {
+      d.eventos.slice(nEv).forEach((e, i) => setTimeout(() => mostra(e), i * 250));
+      const v = document.getElementById("vivo");
+      v.className = "pill on"; v.textContent = "ao vivo: recebendo eventos";
+      nEv = d.eventos.length; dados.eventos = d.eventos;
+    }
+  } catch (_) {}
+}
+
+carrega().then(() => setInterval(poll, 2000));
+window.onresize = () => dados && desenha();
+</script></body></html>

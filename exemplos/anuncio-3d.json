@@ -1,0 +1,83 @@
+{
+  "versao": "0.1",
+  "padrao": "fan_out_sintese",
+  "missao": {
+    "id": "anuncio-3d",
+    "objetivo": "Criar anúncio de produto de impressão 3D para marketplaces (Mercado Livre, Shopee, Amazon)",
+    "contexto": "Produto físico fabricado por impressão 3D; entradas fornecidas: descrição do produto, peso em gramas e horas de impressão estimadas. O anúncio precisa de título, descrição de vendas e preço recomendado com margem mínima validada.",
+    "criterios_cobertura": [
+      "texto do anúncio conforme: título ≤ 60 caracteres, sem promessas falsas ou termos proibidos, descrição vendedora e honesta",
+      "faixa de mercado pesquisada: min/med/max de produtos semelhantes em marketplace brasileiro com fonte citada",
+      "custo de produção estimado: número justificado com premissas de gramas e horas de impressão"
+    ]
+  },
+  "restricoes": {
+    "teto_custo": 2.0,
+    "max_subagentes": 10,
+    "max_tentativas": 3
+  },
+  "subagentes": [
+    {
+      "id": "redator",
+      "papel": "redator",
+      "objetivo": "Redigir título e descrição do anúncio de marketplace para o produto de impressão 3D",
+      "entradas": {
+        "descricao_produto": "peça de impressão 3D (suporte, acessório ou decoração)",
+        "canais_alvo": ["Mercado Livre", "Shopee", "Amazon"]
+      },
+      "resultado_esperado": "JSON com campos 'titulo' (string) e 'descricao' (string)",
+      "rubrica": [
+        "título tem no máximo 60 caracteres",
+        "título não contém promessas falsas nem termos proibidos (ex.: 'melhor do mundo', 'garantido', 'original')",
+        "descrição tem entre 3 e 5 frases vendedoras e honestas",
+        "descrição menciona material ou característica técnica relevante",
+        "tom é persuasivo sem exageros"
+      ]
+    },
+    {
+      "id": "pesquisador-mercado",
+      "papel": "pesquisador",
+      "objetivo": "Pesquisar preços de anúncios semelhantes em marketplaces brasileiros (Mercado Livre, Shopee) e retornar faixa min/med/max com fonte",
+      "entradas": {
+        "descricao_fonte": "peça de impressão 3D (suporte, acessório ou decoração)",
+        "canais": ["Mercado Livre", "Shopee"]
+      },
+      "resultado_esperado": "JSON com campos 'faixa' ({min, med, max} em R$) e 'fonte' (resumo de 1 linha da origem dos dados)",
+      "rubrica": [
+        "apresenta faixa com os três valores: mínimo, mediano e máximo",
+        "valores são numéricos em R$ e condizentes com produtos de impressão 3D",
+        "cita fonte ou marketplace de onde os preços foram extraídos"
+      ],
+      "ferramentas": "WebSearch"
+    },
+    {
+      "id": "calculadora-custo",
+      "papel": "analista",
+      "objetivo": "Estimar o custo de produção da peça a partir do peso em gramas e das horas de impressão fornecidas",
+      "entradas": {
+        "gramas": 92,
+        "horas_impressao": 5.5,
+        "custo_filamento_por_kg": 80.0,
+        "custo_hora_impressora": 2.5
+      },
+      "resultado_esperado": "JSON com campo 'custo_producao' (número em R$) e campo 'premissas' (lista de strings explicando o cálculo)",
+      "rubrica": [
+        "custo_producao é um número positivo em R$",
+        "premissas listam ao menos: custo do filamento (R$/kg × gramas), custo de tempo de máquina (R$/h × horas) e overhead ou margem de segurança",
+        "cálculo é reproduzível a partir das premissas fornecidas"
+      ]
+    }
+  ],
+  "gates": [
+    {
+      "id": "margem-minima",
+      "condicao": "O preço mediano de mercado (faixa.med do pesquisador-mercado) é menor do que custo_producao × 1.3 — ou seja, a margem mínima de 30% sobre o custo não seria atingida ao preço de mercado",
+      "pergunta": "Preço de mercado abaixo da margem mínima (custo × 1.3). Que preço usar para o anúncio?",
+      "opcoes": "um preço numérico em R$ (ex.: 26.90) · 'mercado' (usar o preço mediano de mercado mesmo assim) · 'abortar' (cancelar a missão)"
+    }
+  ],
+  "sintese": {
+    "instrucao": "Monte o anúncio final em markdown. Coloque as premissas explícitas no topo (custo de produção, faixa de mercado, preço recomendado e margem). Em seguida apresente o anúncio pronto: título, descrição completa e preço recomendado. Finalize com uma seção de observações sobre o posicionamento de preço.",
+    "formato": "markdown"
+  }
+}
