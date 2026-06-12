@@ -12,8 +12,14 @@ import json
 import re
 import shutil
 import subprocess
+import threading
 import time
 from typing import Any, Callable, Optional, Protocol
+
+# Limita chamadas simultâneas ao claude CLI para evitar burst throttle (rc=1).
+# O fan-out do LangGraph pode disparar N subagentes em paralelo; sem este semáforo
+# 6+ processos concorrentes retornam rc=1 imediatamente.
+_SEM_CLAUDE = threading.Semaphore(2)
 
 
 def extrai_json(texto: str) -> Optional[dict]:
@@ -42,6 +48,43 @@ class ClienteStub:
                timeout: int = 300) -> Optional[str]:
         self.chamadas.append((papel, prompt))
         return self.roteador(papel, prompt)
+
+
+class ClienteRoteador:
+    """Multi-provider: roteia papel → cliente. O grafo continua cego a modelos.
+
+    Decisões de design (travadas):
+    - `mapa`: papel → cliente barato (DeepSeek/Kimi via OpenAI-compat). Papel fora
+      do mapa vai ao `padrao` (claude).
+    - Regra dura de ferramentas: se `ferramentas` foi pedido e o cliente mapeado
+      declara `suporta_ferramentas = False`, roteia ao `padrao` SEM tentar o barato
+      (WebSearch etc. só existem no claude -p). Evento `modelo.roteado_ferramentas`.
+    - Fallback de qualidade-zero: cliente mapeado devolveu None (infra esgotada)
+      → tenta o `padrao` uma vez. Evento `modelo.fallback`. Falha vira evento, não crash.
+    - O retry de CONTEÚDO continua no grafo (attempt→verifier); aqui só infra.
+    """
+
+    def __init__(self, padrao: "ClienteModelo", mapa: Optional[dict[str, "ClienteModelo"]] = None,
+                 log: Optional[Any] = None):
+        self.padrao = padrao
+        self.mapa = mapa or {}
+        self.log = log
+
+    def _evento(self, tipo: str, **dados) -> None:
+        if self.log is not None:
+            self.log.evento(tipo, **dados)
+
+    def chamar(self, papel: str, prompt: str, ferramentas: Optional[str] = None,
+               timeout: int = 300) -> Optional[str]:
+        cliente = self.mapa.get(papel, self.padrao)
+        if cliente is not self.padrao and ferramentas and not getattr(cliente, "suporta_ferramentas", True):
+            self._evento("modelo.roteado_ferramentas", papel=papel, ferramentas=ferramentas)
+            cliente = self.padrao
+        resposta = cliente.chamar(papel, prompt, ferramentas=ferramentas, timeout=timeout)
+        if resposta is None and cliente is not self.padrao:
+            self._evento("modelo.fallback", papel=papel)
+            resposta = self.padrao.chamar(papel, prompt, ferramentas=ferramentas, timeout=timeout)
+        return resposta
 
 
 class ClienteClaudeCLI:
@@ -77,8 +120,9 @@ class ClienteClaudeCLI:
         motivo = "?"
         for tentativa in range(1, self.tentativas + 1):
             try:
-                r = subprocess.run(cmd, capture_output=True, text=True,
-                                   timeout=timeout, stdin=subprocess.DEVNULL)
+                with _SEM_CLAUDE:
+                    r = subprocess.run(cmd, capture_output=True, text=True,
+                                       timeout=timeout, stdin=subprocess.DEVNULL)
                 if r.returncode == 0 and r.stdout.strip():
                     return r.stdout.strip()
                 motivo = f"rc={r.returncode} stderr={r.stderr.strip()[:200]!r}"

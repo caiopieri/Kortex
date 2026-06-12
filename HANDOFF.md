@@ -60,6 +60,46 @@ DoD: matar o processo com gate pendente, religar, decidir na nota → missão co
 (ou copiar o painel para cá). Eventos novos (`spec.criada`, `paralelo.*`) aparecem no mapa.
 DoD: painel mostra uma missão v0.5 ao vivo.
 
+**T5 — ClienteOpenAICompat (executor: modelo de tier BARATO — DeepSeek/Kimi via proxy).**
+Implementar a classe `ClienteOpenAICompat` em `motor/modelos.py`, plugando endpoints
+OpenAI-compatíveis (NVIDIA API) como executores baratos. O `ClienteRoteador` (pronto,
+não tocar) decide quem atende cada papel; esta classe é só o transporte HTTP.
+
+*Interface FIXADA (não relitigar — os testes são o contrato):*
+
+```python
+class ClienteOpenAICompat:
+    suporta_ferramentas = False  # atributo de CLASSE; o roteador lê isto
+
+    def __init__(self, base_url: str, api_key: str, modelo: str,
+                 mapa_papeis: Optional[dict[str, str]] = None,
+                 log: Optional[Any] = None, tentativas: int = 3, backoff: float = 2.0): ...
+
+    def _post(self, payload: dict, timeout: int) -> dict:
+        """POST {base_url}/chat/completions, header Authorization: Bearer {api_key},
+        body JSON = payload. Devolve o JSON da resposta como dict. stdlib urllib
+        APENAS — nenhuma dependência nova no pyproject. Erros HTTP/rede: deixar
+        a exceção subir (quem trata é chamar)."""
+
+    def chamar(self, papel, prompt, ferramentas=None, timeout=300) -> Optional[str]:
+        """1. ferramentas pedidas → return None imediato (sem chamar _post).
+        2. payload: {"model": mapa_papeis.get(papel, modelo),
+                     "messages": [{"role": "user", "content": prompt}]}
+        3. extrai choices[0].message.content e aplica .strip().
+        4. Falha transiente (exceção do _post, JSON sem o campo, conteúdo vazio)
+           → evento "modelo.falha" no log (papel=, tentativa=, motivo=) e retry,
+           até `tentativas` vezes, sleep backoff×tentativa (linear, igual ClienteClaudeCLI).
+        5. Esgotou → None. Falha vira evento, não crash."""
+```
+
+*Regras duras:* (a) tocar SOMENTE em `motor/modelos.py`, adicionando a classe — nenhuma
+outra classe, teste ou arquivo; (b) dependência nova = PROIBIDO (urllib da stdlib);
+(c) NUNCA editar `tests/test_modelos.py` — se um teste parecer errado, PARAR e reportar;
+(d) ambiguidade na spec → PARAR e perguntar, não decidir.
+*DoD:* `python -m pytest tests/test_modelos.py -q` → os 7 testes `@t5` saem de skip e
+passam; suíte completa sem regressão. Smoke real (opcional, requer chave NVIDIA):
+`python -c "..."` com 1 chamada ao endpoint.
+
 ## Critérios de falsificação da migração (DoD global — medir e reportar)
 
 1. Resume pós-crash funciona via checkpointer nativo no mesmo cenário testado no v0.4.

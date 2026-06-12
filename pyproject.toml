@@ -16,5 +16,8 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=8"]
 
+[tool.setuptools.packages.find]
+include = ["motor*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
