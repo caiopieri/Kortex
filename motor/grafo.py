@@ -41,7 +41,10 @@ Produza uma WorkflowSpec versão 0.1 em JSON (responda APENAS o JSON), conforme 
 
 Regras: entre 2 e {max_sub} subagentes focados e INDEPENDENTES (depende_de sempre []);
 cada subagente com rubrica objetiva e verificável; criterios_cobertura checáveis contra a missão;
-padrao = "fan_out_sintese".{erro}"""
+padrao = "fan_out_sintese".
+Subagentes podem ser executados por modelos de capacidade limitada: escreva cada objetivo sem
+ambiguidade nem decisão de design implícita, e rubricas checáveis MECANICAMENTE (formato exigido,
+números/evidências presentes, seções obrigatórias) — nunca critérios que dependem de bom gosto.{erro}"""
 
 PROMPT_SUBAGENTE = """Você é o subagente '{id}' (papel: {papel}) de um workflow.
 Missão global: {missao_objetivo}

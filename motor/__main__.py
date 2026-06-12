@@ -3,6 +3,8 @@
   python -m motor "sua missão aqui"            # planner cria a WorkflowSpec
   python -m motor --spec exemplos/missao.json  # missão dirigida por spec pronta
   python -m motor ... --caixa "<dir>"          # gate via nota no vault + resume durável
+  python -m motor ... --modelos exemplos/modelos-nvidia.json  # papéis baratos → DeepSeek/Kimi
+                                               # (exige env var da chave, ex. NVIDIA_API_KEY)
 
 Requer `claude` CLI no PATH (Mac do Caio). Gate do fundador: sem `--caixa`, a
 decisão é via input() e o checkpointer é em memória (volátil). Com `--caixa
@@ -29,7 +31,7 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 from .caixa import CaixaFundador, rodar_com_caixa
 from .eventos import LogEventos
 from .grafo import construir_grafo
-from .modelos import ClienteClaudeCLI
+from .modelos import ClienteClaudeCLI, cliente_de_config
 
 
 def main() -> int:
@@ -48,6 +50,14 @@ def main() -> int:
         dir_caixa = args[i + 1]
         args = args[:i] + args[i + 2:]
 
+    # --modelos <cfg.json>: multi-provider (papéis baratos → OpenAI-compat;
+    # resto → claude). Sem a flag, comportamento intacto: tudo no claude.
+    cfg_modelos = None
+    if "--modelos" in args:
+        i = args.index("--modelos")
+        cfg_modelos = json.loads(Path(args[i + 1]).read_text(encoding="utf-8"))
+        args = args[:i] + args[i + 2:]
+
     entrada: dict
     if args[0] == "--spec":
         entrada = {"spec": json.loads(Path(args[1]).read_text(encoding="utf-8"))}
@@ -57,6 +67,7 @@ def main() -> int:
     raiz = Path(__file__).parent.parent
     log = LogEventos(raiz / "log.jsonl")
     config = {"configurable": {"thread_id": "cli"}}
+    cliente = cliente_de_config(cfg_modelos, log=log) if cfg_modelos else ClienteClaudeCLI(log=log)
 
     if dir_caixa:
         # Persistente: sobrevive a crash. Conexão própria (check_same_thread=False)
@@ -65,13 +76,13 @@ def main() -> int:
         conn = sqlite3.connect(str(raiz / "motor.db"), check_same_thread=False)
         checkpointer = SqliteSaver(conn)
         checkpointer.setup()
-        grafo = construir_grafo(ClienteClaudeCLI(log=log), log, checkpointer=checkpointer)
+        grafo = construir_grafo(cliente, log, checkpointer=checkpointer)
         caixa = CaixaFundador(dir_caixa, log)
         resultado = rodar_com_caixa(grafo, entrada, config, caixa, log)
         conn.close()
     else:
         # Comportamento default intacto: input() + InMemorySaver (volátil).
-        grafo = construir_grafo(ClienteClaudeCLI(log=log), log, checkpointer=InMemorySaver())
+        grafo = construir_grafo(cliente, log, checkpointer=InMemorySaver())
         resultado = grafo.invoke(entrada, config)
         while "__interrupt__" in resultado:  # gate do fundador
             pedido = resultado["__interrupt__"][0].value

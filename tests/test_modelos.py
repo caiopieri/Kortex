@@ -161,3 +161,26 @@ def test_compat_integra_com_roteador(monkeypatch):
     assert r.chamar("redator", "p") == "do-deepseek"
     # ferramentas → desvia ao padrão por suporta_ferramentas=False
     assert r.chamar("redator", "p", ferramentas="WebSearch") == "do-claude"
+
+
+# ------------------------------------------------------------ cliente_de_config
+
+def test_config_monta_roteador_com_papeis_baratos(monkeypatch):
+    from motor.modelos import ClienteOpenAICompat, cliente_de_config
+    monkeypatch.setenv("CHAVE_TESTE", "nvapi-x")
+    cfg = {"base_url": "https://x/v1", "api_key_env": "CHAVE_TESTE",
+           "modelo": "deepseek-ai/deepseek-v4", "papeis_baratos": ["redator"]}
+    r = cliente_de_config(cfg)
+    assert isinstance(r, ClienteRoteador)
+    assert set(r.mapa) == {"redator"}
+    assert isinstance(r.mapa["redator"], ClienteOpenAICompat)
+    assert "verifier" not in r.mapa  # julgamento não rebaixa por default
+
+
+def test_config_sem_chave_no_ambiente_falha_cedo(monkeypatch):
+    from motor.modelos import cliente_de_config
+    monkeypatch.delenv("CHAVE_AUSENTE", raising=False)
+    cfg = {"base_url": "https://x/v1", "api_key_env": "CHAVE_AUSENTE",
+           "modelo": "m", "papeis_baratos": []}
+    with pytest.raises(ValueError):
+        cliente_de_config(cfg)

@@ -14,6 +14,7 @@ import shutil
 import subprocess
 import threading
 import time
+import urllib.request
 from typing import Any, Callable, Optional, Protocol
 
 # Limita chamadas simultâneas ao claude CLI para evitar burst throttle (rc=1).
@@ -133,3 +134,115 @@ class ClienteClaudeCLI:
             if tentativa < self.tentativas:
                 time.sleep(self.backoff * tentativa)
         return None
+
+
+class ClienteOpenAICompat:
+    """Transporte HTTP OpenAI-compatível (NVIDIA/DeepSeek/Kimi) para papéis baratos.
+
+    Esta classe é só o transporte — não decide roteamento, não interpreta
+    respostas além de extrair ``choices[0].message.content``.
+    O ``ClienteRoteador`` decide quem atende cada papel; aqui só se codifica
+    o contrato HTTP + retry linear de infra.
+
+    Atributo de classe:
+      ``suporta_ferramentas = False`` — o roteador lê isto para desviar
+      papéis que pedem ferramentas (WebSearch etc.) ao cliente padrão.
+    """
+
+    suporta_ferramentas = False
+
+    def __init__(self, base_url: str, api_key: str, modelo: str,
+                 mapa_papeis: Optional[dict[str, str]] = None,
+                 log: Optional[Any] = None, tentativas: int = 3, backoff: float = 2.0):
+        self.base_url = base_url.rstrip("/")
+        self.api_key = api_key
+        self.modelo = modelo
+        self.mapa_papeis = mapa_papeis or {}
+        self.log = log
+        self.tentativas = tentativas
+        self.backoff = backoff
+
+    def _post(self, payload: dict, timeout: int) -> dict:
+        """POST {base_url}/chat/completions — stdlib urllib, sem dependências.
+
+        Exceções de rede/HTTP sobem para ``chamar()`` tratar como falha
+        transiente (retry + evento ``modelo.falha``).
+        """
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            f"{self.base_url}/chat/completions",
+            data=data,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.api_key}",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+
+    def chamar(self, papel: str, prompt: str, ferramentas: Optional[str] = None,
+               timeout: int = 300) -> Optional[str]:
+        """Chama o endpoint OpenAI-compatível com retry linear de infra.
+
+        Regras (contrato T5 — os testes são o DoD):
+
+        1. **Ferramentas pedidas → None imediato** (sem chamar ``_post``).
+           Clientes baratos não suportam tool-use; o roteador desvia ao padrão.
+        2. Monta payload: ``model`` = ``mapa_papeis.get(papel, modelo)``,
+           ``messages`` = único turno user com o prompt.
+        3. Extrai ``choices[0].message.content`` e aplica ``.strip()``.
+        4. Falha transiente (exceção do ``_post``, JSON sem o campo,
+           conteúdo vazio) → evento ``modelo.falha`` no log e retry,
+           até ``tentativas`` vezes, sleep ``backoff × tentativa`` (linear).
+        5. Esgotou → ``None``. Falha vira evento, não crash.
+        """
+        if ferramentas:
+            return None
+        payload: dict[str, Any] = {
+            "model": self.mapa_papeis.get(papel, self.modelo),
+            "messages": [{"role": "user", "content": prompt}],
+        }
+        motivo = "?"
+        for tentativa in range(1, self.tentativas + 1):
+            try:
+                resp = self._post(payload, timeout)
+                conteudo = resp["choices"][0]["message"]["content"].strip()
+                if conteudo:
+                    return conteudo
+                motivo = "conteúdo vazio"
+            except Exception as ex:
+                motivo = f"{type(ex).__name__}: {ex}"
+            if self.log is not None:
+                self.log.evento("modelo.falha", papel=papel, tentativa=tentativa, motivo=motivo)
+            if tentativa < self.tentativas:
+                time.sleep(self.backoff * tentativa)
+        return None
+
+
+def cliente_de_config(cfg: dict, log: Optional[Any] = None) -> "ClienteModelo":
+    """Monta o cliente do motor a partir de config JSON — zero segredo no arquivo.
+
+    Formato (ver exemplos/modelos-nvidia.json):
+      {"base_url": "https://integrate.api.nvidia.com/v1",
+       "api_key_env": "NVIDIA_API_KEY",            ← nome da env var, nunca a chave
+       "modelo": "deepseek-ai/deepseek-v4",
+       "mapa_papeis_modelo": {"redator": "moonshotai/kimi-k2.6"},   (opcional)
+       "papeis_baratos": ["redator", "synthesizer"]}
+
+    planner/verifier/evaluator ficam no padrão (claude) a menos que o Caio os
+    liste explicitamente em papeis_baratos — rebaixar julgamento é decisão
+    consciente, nunca default. Papéis com ferramentas são desviados ao padrão
+    pelo ClienteRoteador de qualquer forma.
+    """
+    import os
+    chave = os.environ.get(cfg["api_key_env"], "")
+    if not chave:
+        raise ValueError(
+            f"env var {cfg['api_key_env']!r} vazia — exporte a chave; ela nunca vai no arquivo")
+    padrao = ClienteClaudeCLI(log=log)
+    barato = ClienteOpenAICompat(
+        base_url=cfg["base_url"], api_key=chave, modelo=cfg["modelo"],
+        mapa_papeis=cfg.get("mapa_papeis_modelo"), log=log)
+    return ClienteRoteador(padrao=padrao,
+                           mapa={p: barato for p in cfg.get("papeis_baratos", [])}, log=log)
