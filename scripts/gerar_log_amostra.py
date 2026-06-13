@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Gera log.jsonl de amostra realista na raiz do repo.
+"""Gera exemplos/log-amostra.jsonl (amostra do painel — separada do log vivo log.jsonl).
 
 Monta o grafo com ClienteStub (padrão de tests/test_grafo.py) usando
 exemplos/missao-pesquisa.json e simula:
@@ -12,7 +12,7 @@ exemplos/missao-pesquisa.json e simula:
   - síntese e tarefa.concluida
 
 Uso: python3 scripts/gerar_log_amostra.py
-Saída: log.jsonl na raiz do repo.
+Saída: exemplos/log-amostra.jsonl.
 """
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ from motor.grafo import construir_grafo
 from motor.modelos import ClienteStub
 
 SPEC = json.loads((REPO / "exemplos" / "missao-pesquisa.json").read_text(encoding="utf-8"))
-LOG_PATH = REPO / "log.jsonl"
+LOG_PATH = REPO / "exemplos" / "log-amostra.jsonl"
 
 
 def faz_roteador():

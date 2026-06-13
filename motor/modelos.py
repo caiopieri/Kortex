@@ -223,26 +223,61 @@ class ClienteOpenAICompat:
 def cliente_de_config(cfg: dict, log: Optional[Any] = None) -> "ClienteModelo":
     """Monta o cliente do motor a partir de config JSON — zero segredo no arquivo.
 
-    Formato (ver exemplos/modelos-nvidia.json):
-      {"base_url": "https://integrate.api.nvidia.com/v1",
-       "api_key_env": "NVIDIA_API_KEY",            ← nome da env var, nunca a chave
-       "modelo": "deepseek-ai/deepseek-v4",
-       "mapa_papeis_modelo": {"redator": "moonshotai/kimi-k2.6"},   (opcional)
-       "papeis_baratos": ["redator", "synthesizer"]}
+    Formato multi-plataforma (ver exemplos/modelos-multi.json) — N provedores
+    OpenAI-compat (NVIDIA, OpenRouter, OpenAI, Together, Groq...):
 
-    planner/verifier/evaluator ficam no padrão (claude) a menos que o Caio os
-    liste explicitamente em papeis_baratos — rebaixar julgamento é decisão
-    consciente, nunca default. Papéis com ferramentas são desviados ao padrão
-    pelo ClienteRoteador de qualquer forma.
+      {"provedores": {
+         "nvidia":     {"base_url": "https://integrate.api.nvidia.com/v1",
+                        "api_key_env": "NVIDIA_API_KEY"},
+         "openrouter": {"base_url": "https://openrouter.ai/api/v1",
+                        "api_key_env": "OPENROUTER_API_KEY"}},
+       "papeis": {
+         "redator":     "nvidia/deepseek-ai/deepseek-v4",
+         "synthesizer": "openrouter/moonshotai/kimi-k2.6"}}
+
+    Cada papel aponta para "provedor/modelo" (o 1º '/' separa; o resto é o id
+    do modelo na plataforma). Só provedores USADOS exigem chave no ambiente.
+
+    Formato v1 (um provedor; exemplos/modelos-nvidia.json) continua aceito:
+      {"base_url", "api_key_env", "modelo", "mapa_papeis_modelo"?, "papeis_baratos"}
+
+    Em ambos: planner/verifier/evaluator ficam no padrão (claude) a menos que
+    listados explicitamente — rebaixar julgamento é decisão consciente, nunca
+    default. Papéis com ferramentas são desviados ao padrão pelo ClienteRoteador.
     """
     import os
-    chave = os.environ.get(cfg["api_key_env"], "")
-    if not chave:
-        raise ValueError(
-            f"env var {cfg['api_key_env']!r} vazia — exporte a chave; ela nunca vai no arquivo")
+
+    def _chave(env: str, quem: str) -> str:
+        chave = os.environ.get(env, "")
+        if not chave:
+            raise ValueError(
+                f"env var {env!r} vazia ({quem}) — exporte a chave; ela nunca vai no arquivo")
+        return chave
+
     padrao = ClienteClaudeCLI(log=log)
+
+    if "provedores" in cfg:  # formato multi-plataforma
+        por_prov: dict[str, dict[str, str]] = {}  # provedor -> {papel: modelo}
+        for papel, destino in cfg["papeis"].items():
+            prov, sep, modelo = destino.partition("/")
+            if not sep or not modelo or prov not in cfg["provedores"]:
+                raise ValueError(
+                    f"papel {papel!r}: destino {destino!r} deve ser 'provedor/modelo' "
+                    f"com provedor declarado em 'provedores' ({list(cfg['provedores'])})")
+            por_prov.setdefault(prov, {})[papel] = modelo
+        mapa: dict[str, Any] = {}
+        for prov, papeis in por_prov.items():
+            p = cfg["provedores"][prov]
+            cliente = ClienteOpenAICompat(
+                base_url=p["base_url"], api_key=_chave(p["api_key_env"], f"provedor {prov!r}"),
+                modelo=next(iter(papeis.values())), mapa_papeis=papeis, log=log)
+            for papel in papeis:
+                mapa[papel] = cliente
+        return ClienteRoteador(padrao=padrao, mapa=mapa, log=log)
+
+    # formato v1 — um provedor
     barato = ClienteOpenAICompat(
-        base_url=cfg["base_url"], api_key=chave, modelo=cfg["modelo"],
-        mapa_papeis=cfg.get("mapa_papeis_modelo"), log=log)
+        base_url=cfg["base_url"], api_key=_chave(cfg["api_key_env"], "provedor único"),
+        modelo=cfg["modelo"], mapa_papeis=cfg.get("mapa_papeis_modelo"), log=log)
     return ClienteRoteador(padrao=padrao,
                            mapa={p: barato for p in cfg.get("papeis_baratos", [])}, log=log)

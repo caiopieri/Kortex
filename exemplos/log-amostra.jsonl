@@ -1,0 +1,22 @@
+{"t": 0.013, "evento": "spec.recebida", "missao": "pesquisa-receita-exemplo", "subagentes": 2}
+{"t": 0.014, "evento": "paralelo.iniciado", "subagentes": ["pesquisa-alfa", "pesquisa-beta"]}
+{"t": 0.016, "evento": "executor.chamado", "executor": "pesquisa-alfa", "papel": "pesquisador", "tentativa": 1}
+{"t": 0.016, "evento": "executor.chamado", "executor": "pesquisa-beta", "papel": "pesquisador", "tentativa": 1}
+{"t": 0.016, "evento": "executor.respondeu", "executor": "pesquisa-alfa", "tentativa": 1}
+{"t": 0.017, "evento": "executor.respondeu", "executor": "pesquisa-beta", "tentativa": 1}
+{"t": 0.018, "evento": "portao.aprovado", "portao": "verifier:pesquisa-alfa", "ciclo": 1}
+{"t": 0.018, "evento": "portao.reprovado", "portao": "verifier:pesquisa-beta", "ciclo": 1, "motivo": "faltou evidência quantitativa"}
+{"t": 0.02, "evento": "executor.chamado", "executor": "pesquisa-beta", "papel": "pesquisador", "tentativa": 2}
+{"t": 0.02, "evento": "executor.respondeu", "executor": "pesquisa-beta", "tentativa": 2}
+{"t": 0.021, "evento": "portao.aprovado", "portao": "verifier:pesquisa-beta", "ciclo": 2}
+{"t": 0.022, "evento": "paralelo.concluido", "commitados": 2}
+{"t": 0.023, "evento": "executor.chamado", "executor": "global_evaluator"}
+{"t": 0.024, "evento": "portao.reprovado", "portao": "cobertura", "lacunas": ["canal beta sem evidência quantitativa de ticket médio"]}
+{"t": 0.024, "evento": "escalado", "para": "fundador"}
+{"t": 0.027, "evento": "paralelo.concluido", "commitados": 2}
+{"t": 0.028, "evento": "executor.chamado", "executor": "global_evaluator"}
+{"t": 0.028, "evento": "portao.reprovado", "portao": "cobertura", "lacunas": ["canal beta sem evidência quantitativa de ticket médio"]}
+{"t": 0.029, "evento": "escalado", "para": "fundador"}
+{"t": 0.029, "evento": "decisao.fundador", "portao": "cobertura", "decisao": "prosseguir"}
+{"t": 0.031, "evento": "executor.chamado", "executor": "synthesizer"}
+{"t": 0.032, "evento": "tarefa.concluida", "missao": "pesquisa-receita-exemplo"}

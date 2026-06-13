@@ -42,7 +42,7 @@ dados_painel  = painel.dados_painel
 # Fixtures
 # ---------------------------------------------------------------------------
 
-LOG_AMOSTRA = REPO / "log.jsonl"
+LOG_AMOSTRA = REPO / "exemplos" / "log-amostra.jsonl"  # amostra commitada — NUNCA o log vivo
 
 TODOS_TIPOS_EVENTO = [
     "spec.criada", "spec.recebida",
@@ -90,14 +90,14 @@ def test_parse_linha_json_invalido_levanta():
 def test_parse_eventos_log_amostra_sem_erro():
     """Todas as linhas do log gerado por gerar_log_amostra.py devem ser parseadas."""
     if not LOG_AMOSTRA.exists():
-        pytest.skip("log.jsonl não encontrado — rode scripts/gerar_log_amostra.py antes")
+        pytest.skip("amostra não encontrada — rode scripts/gerar_log_amostra.py")
     eventos = parse_eventos(LOG_AMOSTRA)
     assert len(eventos) > 0
 
 
 def test_parse_eventos_log_amostra_contem_tipos_esperados():
     if not LOG_AMOSTRA.exists():
-        pytest.skip("log.jsonl não encontrado — rode scripts/gerar_log_amostra.py antes")
+        pytest.skip("amostra não encontrada — rode scripts/gerar_log_amostra.py")
     eventos = parse_eventos(LOG_AMOSTRA)
     tipos = {e["evento"] for e in eventos}
     # Tipos obrigatórios no log de amostra
@@ -185,7 +185,7 @@ def test_grafo_portao_cobertura_e_fundador():
 
 def test_grafo_log_amostra_tem_nos_esperados():
     if not LOG_AMOSTRA.exists():
-        pytest.skip("log.jsonl não encontrado — rode scripts/gerar_log_amostra.py antes")
+        pytest.skip("amostra não encontrada — rode scripts/gerar_log_amostra.py")
     eventos = parse_eventos(LOG_AMOSTRA)
     nos, arestas = grafo_do_log(eventos)
     ids = {n["id"] for n in nos}

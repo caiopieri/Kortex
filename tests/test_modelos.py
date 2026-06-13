@@ -184,3 +184,44 @@ def test_config_sem_chave_no_ambiente_falha_cedo(monkeypatch):
            "modelo": "m", "papeis_baratos": []}
     with pytest.raises(ValueError):
         cliente_de_config(cfg)
+
+
+def test_config_multi_plataforma(monkeypatch):
+    from motor.modelos import ClienteOpenAICompat, cliente_de_config
+    monkeypatch.setenv("K_NVIDIA", "a")
+    monkeypatch.setenv("K_OPENROUTER", "b")
+    cfg = {"provedores": {
+               "nvidia": {"base_url": "https://nv/v1", "api_key_env": "K_NVIDIA"},
+               "openrouter": {"base_url": "https://or/v1", "api_key_env": "K_OPENROUTER"}},
+           "papeis": {"redator": "nvidia/deepseek-ai/deepseek-v4",
+                      "critico": "nvidia/moonshotai/kimi-k2.6",
+                      "synthesizer": "openrouter/qwen/qwen3-coder"}}
+    r = cliente_de_config(cfg)
+    assert set(r.mapa) == {"redator", "critico", "synthesizer"}
+    # mesmo provedor compartilha cliente; modelo certo por papel
+    assert r.mapa["redator"] is r.mapa["critico"]
+    assert r.mapa["redator"] is not r.mapa["synthesizer"]
+    assert r.mapa["redator"].mapa_papeis == {"redator": "deepseek-ai/deepseek-v4",
+                                             "critico": "moonshotai/kimi-k2.6"}
+    assert r.mapa["synthesizer"].base_url == "https://or/v1"
+    assert isinstance(r.mapa["synthesizer"], ClienteOpenAICompat)
+
+
+def test_config_multi_destino_invalido_falha_cedo(monkeypatch):
+    from motor.modelos import cliente_de_config
+    monkeypatch.setenv("K1", "x")
+    cfg = {"provedores": {"nvidia": {"base_url": "https://nv/v1", "api_key_env": "K1"}},
+           "papeis": {"redator": "inexistente/modelo-x"}}
+    with pytest.raises(ValueError):
+        cliente_de_config(cfg)
+
+
+def test_config_multi_so_exige_chave_de_provedor_usado(monkeypatch):
+    from motor.modelos import cliente_de_config
+    monkeypatch.setenv("K_USADO", "x")
+    monkeypatch.delenv("K_NAO_USADO", raising=False)
+    cfg = {"provedores": {
+               "usado": {"base_url": "https://u/v1", "api_key_env": "K_USADO"},
+               "ocioso": {"base_url": "https://o/v1", "api_key_env": "K_NAO_USADO"}},
+           "papeis": {"redator": "usado/m1"}}
+    cliente_de_config(cfg)  # não pode levantar — provedor ocioso não exige chave
