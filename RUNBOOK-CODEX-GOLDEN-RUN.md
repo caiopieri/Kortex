@@ -83,6 +83,21 @@ Saída = mini-spec da fatia 2 (categorias de custo + modelo de dados encaixado n
 fatia 1 + consulta de custo por caminhão/período). Revisa o artefato; se servir,
 vira a base do specify da fatia 2.
 
+## Quando um modelo acaba (Corte B — disponibilidade)
+
+Se o limite do Claude (ou de qualquer provedor) acabar no meio, marca ele como
+esgotado e o motor reroteia o que iria pra ele — inclusive o julgamento
+(verifier/evaluator/synthesizer) — pro fallback, em vez de pendurar:
+
+```bash
+python3 -m motor --spec exemplos/logisti-fatia2.json --modelos exemplos/modelos-codex.json --esgotado claude
+```
+
+Isso é o que mata o travamento do synthesizer: com `claude` esgotado, a síntese
+sai no Codex. `--esgotado` é repetível (`--esgotado claude --esgotado nvidia`).
+Também dá pra fixar no JSON da config: `"esgotados": ["claude"]`. No log vais ver
+`modelo.reroteado_esgotado` (de→para) por tarefa reroteada.
+
 ## Critérios de falsificação (anota o veredito)
 
 1. **Separação de papéis real**: no `log.jsonl`, subagentes saíram do Codex e os

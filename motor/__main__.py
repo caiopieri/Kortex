@@ -5,6 +5,8 @@
   python -m motor ... --caixa "<dir>"          # gate via nota no vault + resume durável
   python -m motor ... --modelos exemplos/modelos-nvidia.json  # papéis baratos → DeepSeek/Kimi
                                                # (exige env var da chave, ex. NVIDIA_API_KEY)
+  python -m motor ... --modelos cfg.json --esgotado claude     # claude indisponível →
+                                               # reroteia pro fallback (Corte B). Repetível.
 
 Requer `claude` CLI no PATH (Mac do Caio). Gate do fundador: sem `--caixa`, a
 decisão é via input() e o checkpointer é em memória (volátil). Com `--caixa
@@ -58,6 +60,14 @@ def main() -> int:
         cfg_modelos = json.loads(Path(args[i + 1]).read_text(encoding="utf-8"))
         args = args[:i] + args[i + 2:]
 
+    # --esgotado <provedor>: marca um provedor como indisponível (Corte B). Repetível.
+    # Ex.: `--esgotado claude` → reroteia o julgamento pro fallback (Codex). Exige --modelos.
+    esgotados: list[str] = []
+    while "--esgotado" in args:
+        i = args.index("--esgotado")
+        esgotados.append(args[i + 1])
+        args = args[:i] + args[i + 2:]
+
     entrada: dict
     if args[0] == "--spec":
         entrada = {"spec": json.loads(Path(args[1]).read_text(encoding="utf-8"))}
@@ -68,6 +78,12 @@ def main() -> int:
     log = LogEventos(raiz / "log.jsonl")
     config = {"configurable": {"thread_id": "cli"}}
     cliente = cliente_de_config(cfg_modelos, log=log) if cfg_modelos else ClienteClaudeCLI(log=log)
+    if esgotados:
+        if hasattr(cliente, "esgotados"):
+            cliente.esgotados |= set(esgotados)
+            log.evento("provedor.esgotado", provedores=esgotados)
+        else:
+            print(f"aviso: --esgotado {esgotados} ignorado (precisa de --modelos com roteador).")
 
     if dir_caixa:
         # Persistente: sobrevive a crash. Conexão própria (check_same_thread=False)

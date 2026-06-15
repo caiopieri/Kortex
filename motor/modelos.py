@@ -76,15 +76,37 @@ class ClienteRoteador:
 
     def __init__(self, padrao: "ClienteModelo", mapa: Optional[dict[str, "ClienteModelo"]] = None,
                  tiers: Optional[dict[str, "ClienteModelo"]] = None,
+                 esgotados: Optional[set[str]] = None,
+                 cadeia: Optional[list["ClienteModelo"]] = None,
                  log: Optional[Any] = None):
         self.padrao = padrao
         self.mapa = mapa or {}
         self.tiers = tiers or {}   # tier → cliente (roteamento por custo)
+        # Corte B — disponibilidade global: `esgotados` é o conjunto de provedores
+        # indisponíveis (ex.: {"claude"} quando o limite acaba). MUTÁVEL de propósito:
+        # o Corte C (UI/arquivo) liga/desliga ao vivo. `cadeia` = ordem de fallback
+        # de clientes quando o provedor resolvido está esgotado.
+        self.esgotados = set(esgotados or ())
+        self.cadeia = list(cadeia or ())
         self.log = log
 
     def _evento(self, tipo: str, **dados) -> None:
         if self.log is not None:
             self.log.evento(tipo, **dados)
+
+    def _disponivel(self, cliente: "ClienteModelo", papel: Optional[str] = None) -> "ClienteModelo":
+        """Se o provedor do `cliente` está esgotado, reroteia pro 1º da cadeia (+ padrao)
+        que não esteja esgotado. Tudo esgotado → devolve o original (deixa falhar e
+        virar evento — nunca trava esperando um provedor que acabou)."""
+        if not self.esgotados or getattr(cliente, "provedor", None) not in self.esgotados:
+            return cliente
+        for alt in [*self.cadeia, self.padrao]:
+            if getattr(alt, "provedor", None) not in self.esgotados:
+                self._evento("modelo.reroteado_esgotado", papel=papel,
+                             de=getattr(cliente, "provedor", None),
+                             para=getattr(alt, "provedor", None))
+                return alt
+        return cliente
 
     def chamar(self, papel: str, prompt: str, ferramentas: Optional[str] = None,
                tier: Optional[str] = None, timeout: int = 300) -> Optional[str]:
@@ -94,13 +116,16 @@ class ClienteRoteador:
             self._evento("modelo.roteado_tier", papel=papel, tier=tier)
         else:
             cliente = self.mapa.get(papel, self.padrao)
+        cliente = self._disponivel(cliente, papel)   # provedor esgotado → reroteia
         if cliente is not self.padrao and ferramentas and not getattr(cliente, "suporta_ferramentas", True):
             self._evento("modelo.roteado_ferramentas", papel=papel, ferramentas=ferramentas)
-            cliente = self.padrao
+            cliente = self._disponivel(self.padrao, papel)
         resposta = cliente.chamar(papel, prompt, ferramentas=ferramentas, tier=tier, timeout=timeout)
         if resposta is None and cliente is not self.padrao:
-            self._evento("modelo.fallback", papel=papel)
-            resposta = self.padrao.chamar(papel, prompt, ferramentas=ferramentas, tier=tier, timeout=timeout)
+            alvo = self._disponivel(self.padrao, papel)
+            if alvo is not cliente:
+                self._evento("modelo.fallback", papel=papel)
+                resposta = alvo.chamar(papel, prompt, ferramentas=ferramentas, tier=tier, timeout=timeout)
         return resposta
 
 
@@ -114,6 +139,7 @@ class ClienteClaudeCLI:
     def __init__(self, mapa_papeis: Optional[dict[str, str]] = None,
                  log: Optional[Any] = None, tentativas: int = 3, backoff: float = 2.0):
         self.mapa_papeis = mapa_papeis or {}
+        self.provedor = "claude"      # rótulo p/ o roteador marcar esgotamento (Corte B)
         self.log = log                # LogEventos opcional: falha vira evento, não silêncio
         self.tentativas = tentativas  # retentativas para falha TRANSIENTE de infra (throttle/erro do CLI)
         self.backoff = backoff        # segundos × tentativa (linear)
@@ -186,6 +212,7 @@ class ClienteCodex:
                  log: Optional[Any] = None, tentativas: int = 3, backoff: float = 2.0):
         self.modelo = modelo            # None/"default" → usa o modelo padrão do codex
         self.mapa_papeis = mapa_papeis or {}
+        self.provedor = "codex"         # rótulo p/ esgotamento (Corte B)
         # read-only por default: os nós do motor são texto-entra/texto-sai; o
         # executor devolve artefato como TEXTO. Quem precisar que o Codex EDITE
         # o repo (executor de código) seta sandbox="workspace-write" na config.
@@ -259,11 +286,13 @@ class ClienteOpenAICompat:
 
     def __init__(self, base_url: str, api_key: str, modelo: str,
                  mapa_papeis: Optional[dict[str, str]] = None,
-                 log: Optional[Any] = None, tentativas: int = 3, backoff: float = 2.0):
+                 log: Optional[Any] = None, tentativas: int = 3, backoff: float = 2.0,
+                 provedor: str = "openai-compat"):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.modelo = modelo
         self.mapa_papeis = mapa_papeis or {}
+        self.provedor = provedor      # rótulo p/ esgotamento (Corte B); cliente_de_config seta o nome real
         self.log = log
         self.tentativas = tentativas
         self.backoff = backoff
@@ -391,7 +420,7 @@ def cliente_de_config(cfg: dict, log: Optional[Any] = None) -> "ClienteModelo":
             if tipo == "openai-compat":
                 return ClienteOpenAICompat(
                     base_url=p["base_url"], api_key=_chave(p["api_key_env"], f"provedor {prov!r}"),
-                    modelo=modelo, log=log)
+                    modelo=modelo, log=log, provedor=prov)
             raise ValueError(
                 f"provedor {prov!r}: tipo {tipo!r} desconhecido (use 'codex' ou 'openai-compat')")
 
@@ -415,7 +444,7 @@ def cliente_de_config(cfg: dict, log: Optional[Any] = None) -> "ClienteModelo":
             elif tipo == "openai-compat":
                 cliente = ClienteOpenAICompat(
                     base_url=p["base_url"], api_key=_chave(p["api_key_env"], f"provedor {prov!r}"),
-                    modelo=next(iter(papeis.values())), mapa_papeis=papeis, log=log)
+                    modelo=next(iter(papeis.values())), mapa_papeis=papeis, log=log, provedor=prov)
             else:
                 raise ValueError(
                     f"provedor {prov!r}: tipo {tipo!r} desconhecido "
@@ -428,11 +457,20 @@ def cliente_de_config(cfg: dict, log: Optional[Any] = None) -> "ClienteModelo":
             tier: _cliente_destino(destino, f"tier {tier!r}")
             for tier, destino in cfg.get("tiers", {}).items()
         }
-        return ClienteRoteador(padrao=padrao, mapa=mapa, tiers=tiers_map, log=log)
+        # Cadeia de fallback p/ esgotamento (Corte B): clientes distintos (não-padrao),
+        # em ordem estável. O padrao (claude) é o último recurso, tratado no roteador.
+        cadeia: list[Any] = []
+        for c in [*tiers_map.values(), *mapa.values()]:
+            if c is not padrao and not any(c is x for x in cadeia):
+                cadeia.append(c)
+        return ClienteRoteador(padrao=padrao, mapa=mapa, tiers=tiers_map,
+                               esgotados=set(cfg.get("esgotados", [])), cadeia=cadeia, log=log)
 
     # formato v1 — um provedor
     barato = ClienteOpenAICompat(
         base_url=cfg["base_url"], api_key=_chave(cfg["api_key_env"], "provedor único"),
-        modelo=cfg["modelo"], mapa_papeis=cfg.get("mapa_papeis_modelo"), log=log)
+        modelo=cfg["modelo"], mapa_papeis=cfg.get("mapa_papeis_modelo"), log=log,
+        provedor=cfg.get("provedor", "openai-compat"))
     return ClienteRoteador(padrao=padrao,
-                           mapa={p: barato for p in cfg.get("papeis_baratos", [])}, log=log)
+                           mapa={p: barato for p in cfg.get("papeis_baratos", [])},
+                           esgotados=set(cfg.get("esgotados", [])), cadeia=[barato], log=log)

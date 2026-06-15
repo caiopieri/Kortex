@@ -115,6 +115,63 @@ def test_roteador_tier_none_faz_fallback_ao_padrao():
     assert "modelo.fallback" in log.tipos()
 
 
+# --------------------------------------- disponibilidade / esgotamento (Corte B)
+
+def _stub_prov(resposta, provedor):
+    s = ClienteStub(lambda papel, prompt: resposta)
+    s.provedor = provedor
+    return s
+
+
+def test_esgotar_claude_reroteia_julgamento_ao_codex():
+    """O cenário que travou o Caio: synthesizer (papel sem tier → padrao=claude)
+    com claude esgotado deve cair no Codex, não pendurar."""
+    claude = _stub_prov("do-claude", "claude")
+    codex = _stub_prov("do-codex", "codex")
+    log = FakeLog()
+    r = ClienteRoteador(padrao=claude, cadeia=[codex], esgotados={"claude"}, log=log)
+    assert r.chamar("synthesizer", "feche a missão") == "do-codex"
+    assert len(claude.chamadas) == 0  # nem tentou o claude esgotado
+    assert "modelo.reroteado_esgotado" in log.tipos()
+
+
+def test_esgotar_codex_executor_cai_no_claude():
+    claude = _stub_prov("do-claude", "claude")
+    codex = _stub_prov("do-codex", "codex")
+    r = ClienteRoteador(padrao=claude, tiers={"simples": codex}, cadeia=[codex],
+                        esgotados={"codex"})
+    # tarefa simples iria pro codex, mas está esgotado → padrao (claude)
+    assert r.chamar("pesquisador", "x", tier="simples") == "do-claude"
+
+
+def test_sem_esgotados_nao_reroteia():
+    claude = _stub_prov("do-claude", "claude")
+    codex = _stub_prov("do-codex", "codex")
+    r = ClienteRoteador(padrao=claude, tiers={"simples": codex}, cadeia=[codex])
+    assert r.chamar("pesquisador", "x", tier="simples") == "do-codex"
+
+
+def test_tudo_esgotado_nao_trava_devolve_original():
+    claude = _stub_prov("do-claude", "claude")
+    codex = _stub_prov("do-codex", "codex")
+    r = ClienteRoteador(padrao=claude, cadeia=[codex], esgotados={"claude", "codex"})
+    # nada disponível: devolve o original (deixa falhar/responder, não entra em loop)
+    assert r.chamar("synthesizer", "x") == "do-claude"
+
+
+def test_config_esgotados_e_cadeia(monkeypatch):
+    from motor.modelos import cliente_de_config
+    cfg = {"provedores": {"codex": {"tipo": "codex"}},
+           "tiers": {"simples": "codex/default", "complexa": "padrao"},
+           "esgotados": ["claude"]}
+    r = cliente_de_config(cfg)
+    assert r.esgotados == {"claude"}
+    # cadeia tem o cliente do codex (não-padrao) como fallback
+    assert any(getattr(c, "provedor", None) == "codex" for c in r.cadeia)
+    # claude esgotado → _disponivel reroteia o padrao pro codex (sem shell out)
+    assert getattr(r._disponivel(r.padrao), "provedor", None) == "codex"
+
+
 # ------------------------------------------- contrato ClienteOpenAICompat (T5)
 
 OpenAICompat = getattr(modelos, "ClienteOpenAICompat", None)
