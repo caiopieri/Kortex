@@ -22,6 +22,7 @@ from langgraph.types import Send, interrupt
 
 from .eventos import LogEventos
 from .modelos import ClienteModelo, extrai_json
+from .politica import PoliticaGates
 from .spec import WorkflowSpec
 
 
@@ -89,8 +90,12 @@ Resultados verificados dos subagentes:
 Produza a resposta final da missão."""
 
 
-def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None):
-    """Compila o grafo. `cliente` e `log` são injetados — o grafo não conhece backends."""
+def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
+                    politica: PoliticaGates | None = None):
+    """Compila o grafo. `cliente` e `log` são injetados — o grafo não conhece backends.
+    `politica` decide quais gates pausam (manual) ou resolvem sozinhos (auto-mode);
+    ausente = tudo manual (comportamento default)."""
+    politica = politica or PoliticaGates()
 
     def planner(state: EstadoMotor) -> dict:
         if state.get("spec"):  # spec fornecida pelo usuário: valida e segue (missão dirigida por dado)
@@ -170,14 +175,19 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None):
             log.evento("portao.aprovado", portao="cobertura")
             return {"avaliacao": veredito}
         log.evento("portao.reprovado", portao="cobertura", lacunas=veredito.get("lacunas", []))
-        log.evento("escalado", para="fundador")
-        decisao = interrupt({  # pausa durável: o checkpointer segura aqui até Command(resume=...)
-            "portao": "cobertura",
-            "pergunta": "Cobertura insuficiente. Prosseguir com síntese parcial ou abortar?",
-            "lacunas": veredito.get("lacunas", []),
-            "opcoes": "prosseguir · abortar",
-        })
-        log.evento("decisao.fundador", portao="cobertura", decisao=str(decisao))
+        auto = politica.decisao_auto("cobertura", default="prosseguir")
+        if auto is not None:  # auto-mode (ou override): resolve sozinho, sem pausar
+            log.evento("gate.auto", portao="cobertura", decisao=auto)
+            decisao: Any = auto
+        else:
+            log.evento("escalado", para="fundador")
+            decisao = interrupt({  # pausa durável: o checkpointer segura até Command(resume=...)
+                "portao": "cobertura",
+                "pergunta": "Cobertura insuficiente. Prosseguir com síntese parcial ou abortar?",
+                "lacunas": veredito.get("lacunas", []),
+                "opcoes": "prosseguir · abortar",
+            })
+            log.evento("decisao.fundador", portao="cobertura", decisao=str(decisao))
         if str(decisao).strip().lower().startswith("abort"):
             log.evento("tarefa.abortada", motivo="decisão do fundador")
             return {"avaliacao": {**veredito, "abortada": True}}

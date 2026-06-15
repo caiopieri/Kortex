@@ -98,6 +98,25 @@ sai no Codex. `--esgotado` é repetível (`--esgotado claude --esgotado nvidia`)
 Também dá pra fixar no JSON da config: `"esgotados": ["claude"]`. No log vais ver
 `modelo.reroteado_esgotado` (de→para) por tarefa reroteada.
 
+## Auto-mode: quanto o motor te interrompe (Corte C)
+
+Por padrão, quando a cobertura fica insuficiente o motor PAUSA e te pergunta
+(prosseguir/abortar). Com auto-mode ele resolve sozinho e segue:
+
+```bash
+python3 -m motor --spec exemplos/logisti-fatia2.json --modelos exemplos/modelos-codex.json --auto
+```
+
+Exceção por gate (tudo auto, MENOS um): `--auto --gate cobertura=manual`.
+Automatizar só um gate sem ligar o master: `--gate cobertura=prosseguir` (ou
+`=abortar`). Também dá pra fixar no JSON: `"politica_gates": {"auto_mode": true,
+"gates": {"cobertura": "manual"}}`. No log: `gate.auto` (resolveu sozinho) vs
+`escalado`+`decisao.fundador` (pausou e perguntou).
+
+> Nota: o gate de cobertura só dispara DEPOIS das retentativas do verifier
+> esgotarem. "Prosseguir" = sintetizar com o que passou; "abortar" = encerrar.
+> (Uma 3ª opção "preencher a lacuna" — re-fan-out pro buraco — é candidata futura.)
+
 ## Critérios de falsificação (anota o veredito)
 
 1. **Separação de papéis real**: no `log.jsonl`, subagentes saíram do Codex e os

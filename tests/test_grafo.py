@@ -104,6 +104,44 @@ def test_gate_fundador_abortar(tmp_path):
     assert "tarefa.abortada" in [e["evento"] for e in eventos_de(tmp_path)]
 
 
+def test_gate_auto_mode_nao_interrompe(tmp_path):
+    """Auto-mode (Corte C): cobertura reprova mas NÃO pausa — resolve 'prosseguir' e
+    completa a missão sozinho. Sem 'escalado', com 'gate.auto'."""
+    from motor.politica import PoliticaGates
+    log = LogEventos(tmp_path / "log.jsonl")
+    grafo = construir_grafo(ClienteStub(faz_roteador(evaluator_aprova=False)), log,
+                            checkpointer=InMemorySaver(), politica=PoliticaGates(auto_mode=True))
+    res = grafo.invoke({"spec": SPEC}, {"configurable": {"thread_id": "auto"}})
+    assert "__interrupt__" not in res
+    assert res["resposta_final"] == "SÍNTESE FINAL DA MISSÃO"
+    assert res["avaliacao"]["prosseguir_parcial"] is True
+    tipos = [e["evento"] for e in eventos_de(tmp_path)]
+    assert "gate.auto" in tipos and "escalado" not in tipos
+
+
+def test_gate_override_manual_interrompe_mesmo_com_auto(tmp_path):
+    """Exceção por gate: auto-mode ligado, mas 'cobertura' cravado manual → ainda pausa."""
+    from motor.politica import PoliticaGates
+    log = LogEventos(tmp_path / "log.jsonl")
+    pol = PoliticaGates(auto_mode=True, overrides={"cobertura": "manual"})
+    grafo = construir_grafo(ClienteStub(faz_roteador(evaluator_aprova=False)), log,
+                            checkpointer=InMemorySaver(), politica=pol)
+    res = grafo.invoke({"spec": SPEC}, {"configurable": {"thread_id": "ovr"}})
+    assert "__interrupt__" in res  # override forçou manual apesar do auto_mode
+    assert "gate.auto" not in [e["evento"] for e in eventos_de(tmp_path)]
+
+
+def test_gate_auto_abortar_por_override(tmp_path):
+    """Override pode automatizar pra ABORTAR também (não só prosseguir)."""
+    from motor.politica import PoliticaGates
+    log = LogEventos(tmp_path / "log.jsonl")
+    pol = PoliticaGates(overrides={"cobertura": "abortar"})
+    grafo = construir_grafo(ClienteStub(faz_roteador(evaluator_aprova=False)), log,
+                            checkpointer=InMemorySaver(), politica=pol)
+    res = grafo.invoke({"spec": SPEC}, {"configurable": {"thread_id": "abrt"}})
+    assert "__interrupt__" not in res and res["avaliacao"]["abortada"] is True
+
+
 def test_subagente_esgotado_vira_lacuna(tmp_path):
     """Verifier sempre reprova alfa → 3 tentativas → commit reprovado → evaluator
     recebe a lacuna mesmo que o modelo aprove (regra dura no código, não no prompt)."""

@@ -7,6 +7,8 @@
                                                # (exige env var da chave, ex. NVIDIA_API_KEY)
   python -m motor ... --modelos cfg.json --esgotado claude     # claude indisponível →
                                                # reroteia pro fallback (Corte B). Repetível.
+  python -m motor ... --auto                   # auto-mode: gates resolvem sozinhos (Corte C)
+  python -m motor ... --auto --gate cobertura=manual  # tudo auto, MENOS o gate de cobertura
 
 Requer `claude` CLI no PATH (Mac do Caio). Gate do fundador: sem `--caixa`, a
 decisão é via input() e o checkpointer é em memória (volátil). Com `--caixa
@@ -68,6 +70,20 @@ def main() -> int:
         esgotados.append(args[i + 1])
         args = args[:i] + args[i + 2:]
 
+    # --auto / --gate <id>=<modo>: política de gates (Corte C). --auto liga o
+    # master (tudo automático); --gate crava exceção por gate (repetível). Também
+    # lê "politica_gates" da config de --modelos. CLI tem precedência.
+    from .politica import politica_de_config
+    politica = politica_de_config((cfg_modelos or {}).get("politica_gates"))
+    if "--auto" in args:
+        politica.auto_mode = True
+        args.remove("--auto")
+    while "--gate" in args:
+        i = args.index("--gate")
+        gid, _, modo = args[i + 1].partition("=")
+        politica.overrides[gid] = modo or "manual"
+        args = args[:i] + args[i + 2:]
+
     entrada: dict
     if args[0] == "--spec":
         entrada = {"spec": json.loads(Path(args[1]).read_text(encoding="utf-8"))}
@@ -92,13 +108,13 @@ def main() -> int:
         conn = sqlite3.connect(str(raiz / "motor.db"), check_same_thread=False)
         checkpointer = SqliteSaver(conn)
         checkpointer.setup()
-        grafo = construir_grafo(cliente, log, checkpointer=checkpointer)
+        grafo = construir_grafo(cliente, log, checkpointer=checkpointer, politica=politica)
         caixa = CaixaFundador(dir_caixa, log)
         resultado = rodar_com_caixa(grafo, entrada, config, caixa, log)
         conn.close()
     else:
         # Comportamento default intacto: input() + InMemorySaver (volátil).
-        grafo = construir_grafo(cliente, log, checkpointer=InMemorySaver())
+        grafo = construir_grafo(cliente, log, checkpointer=InMemorySaver(), politica=politica)
         resultado = grafo.invoke(entrada, config)
         while "__interrupt__" in resultado:  # gate do fundador
             pedido = resultado["__interrupt__"][0].value
