@@ -44,7 +44,10 @@ cada subagente com rubrica objetiva e verificável; criterios_cobertura checáve
 padrao = "fan_out_sintese".
 Subagentes podem ser executados por modelos de capacidade limitada: escreva cada objetivo sem
 ambiguidade nem decisão de design implícita, e rubricas checáveis MECANICAMENTE (formato exigido,
-números/evidências presentes, seções obrigatórias) — nunca critérios que dependem de bom gosto.{erro}"""
+números/evidências presentes, seções obrigatórias) — nunca critérios que dependem de bom gosto.
+Para cada subagente, classifique o campo "tier" pela complexidade da tarefa (roteamento por custo):
+"simples" (extração/formatação/lookup direto), "media" (pesquisa ou redação com algum raciocínio),
+"complexa" (design, trade-offs, modelagem ou síntese que exige um modelo forte).{erro}"""
 
 PROMPT_SUBAGENTE = """Você é o subagente '{id}' (papel: {papel}) de um workflow.
 Missão global: {missao_objetivo}
@@ -123,14 +126,15 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None):
         max_t = spec["restricoes"]["max_tentativas"]
         feedback, ultima = "", None
         for tentativa in range(1, max_t + 1):
-            log.evento("executor.chamado", executor=sub["id"], papel=sub["papel"], tentativa=tentativa)
+            log.evento("executor.chamado", executor=sub["id"], papel=sub["papel"],
+                       tier=sub.get("tier"), tentativa=tentativa)
             ultima = cliente.chamar(sub["papel"], PROMPT_SUBAGENTE.format(
                 id=sub["id"], papel=sub["papel"],
                 missao_objetivo=missao["objetivo"], missao_contexto=missao["contexto"],
                 objetivo=sub["objetivo"], entradas=json.dumps(sub["entradas"], ensure_ascii=False),
                 resultado_esperado=sub["resultado_esperado"],
                 feedback=f"\nNa tentativa anterior o verificador reprovou: \"{feedback}\". Corrija." if feedback else "",
-            ), ferramentas=sub.get("ferramentas"))
+            ), ferramentas=sub.get("ferramentas"), tier=sub.get("tier"))
             if not ultima:
                 feedback = "modelo não respondeu"
                 log.evento("executor.erro", executor=sub["id"], motivo=feedback, tentativa=tentativa)

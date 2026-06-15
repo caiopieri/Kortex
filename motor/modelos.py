@@ -22,6 +22,10 @@ from typing import Any, Callable, Optional, Protocol
 # 6+ processos concorrentes retornam rc=1 imediatamente.
 _SEM_CLAUDE = threading.Semaphore(2)
 
+# Mesmo motivo para o codex CLI: o fan-out pode disparar N execuções agênticas
+# em paralelo; limitar a concorrência evita throttle/erro de burst do CLI.
+_SEM_CODEX = threading.Semaphore(2)
+
 
 def extrai_json(texto: str) -> Optional[dict]:
     m = re.search(r"\{.*\}", texto, re.S)
@@ -35,7 +39,7 @@ def extrai_json(texto: str) -> Optional[dict]:
 
 class ClienteModelo(Protocol):
     def chamar(self, papel: str, prompt: str, ferramentas: Optional[str] = None,
-               timeout: int = 300) -> Optional[str]: ...
+               tier: Optional[str] = None, timeout: int = 300) -> Optional[str]: ...
 
 
 class ClienteStub:
@@ -46,7 +50,7 @@ class ClienteStub:
         self.chamadas: list[tuple[str, str]] = []
 
     def chamar(self, papel: str, prompt: str, ferramentas: Optional[str] = None,
-               timeout: int = 300) -> Optional[str]:
+               tier: Optional[str] = None, timeout: int = 300) -> Optional[str]:
         self.chamadas.append((papel, prompt))
         return self.roteador(papel, prompt)
 
@@ -55,20 +59,27 @@ class ClienteRoteador:
     """Multi-provider: roteia papel → cliente. O grafo continua cego a modelos.
 
     Decisões de design (travadas):
-    - `mapa`: papel → cliente barato (DeepSeek/Kimi via OpenAI-compat). Papel fora
-      do mapa vai ao `padrao` (claude).
-    - Regra dura de ferramentas: se `ferramentas` foi pedido e o cliente mapeado
+    - Resolução do cliente, em ordem: (1) `tier` da tarefa, se presente e na tabela
+      `tiers` — é o roteamento por custo (o planner classifica, a tabela mapeia
+      tier→modelo); (2) senão, `mapa` por papel (rota legada); (3) senão, `padrao`.
+      Tier presente mas fora da tabela → cai pro papel/padrão (seguro). Evento
+      `modelo.roteado_tier`.
+    - `mapa`: papel → cliente (DeepSeek/Kimi via OpenAI-compat ou Codex). Papel fora
+      do mapa (e sem tier) vai ao `padrao` (claude).
+    - Regra dura de ferramentas: se `ferramentas` foi pedido e o cliente resolvido
       declara `suporta_ferramentas = False`, roteia ao `padrao` SEM tentar o barato
-      (WebSearch etc. só existem no claude -p). Evento `modelo.roteado_ferramentas`.
-    - Fallback de qualidade-zero: cliente mapeado devolveu None (infra esgotada)
+      (WebSearch etc.). Evento `modelo.roteado_ferramentas`.
+    - Fallback de qualidade-zero: cliente resolvido devolveu None (infra esgotada)
       → tenta o `padrao` uma vez. Evento `modelo.fallback`. Falha vira evento, não crash.
     - O retry de CONTEÚDO continua no grafo (attempt→verifier); aqui só infra.
     """
 
     def __init__(self, padrao: "ClienteModelo", mapa: Optional[dict[str, "ClienteModelo"]] = None,
+                 tiers: Optional[dict[str, "ClienteModelo"]] = None,
                  log: Optional[Any] = None):
         self.padrao = padrao
         self.mapa = mapa or {}
+        self.tiers = tiers or {}   # tier → cliente (roteamento por custo)
         self.log = log
 
     def _evento(self, tipo: str, **dados) -> None:
@@ -76,15 +87,20 @@ class ClienteRoteador:
             self.log.evento(tipo, **dados)
 
     def chamar(self, papel: str, prompt: str, ferramentas: Optional[str] = None,
-               timeout: int = 300) -> Optional[str]:
-        cliente = self.mapa.get(papel, self.padrao)
+               tier: Optional[str] = None, timeout: int = 300) -> Optional[str]:
+        cliente: "ClienteModelo"
+        if tier and tier in self.tiers:
+            cliente = self.tiers[tier]
+            self._evento("modelo.roteado_tier", papel=papel, tier=tier)
+        else:
+            cliente = self.mapa.get(papel, self.padrao)
         if cliente is not self.padrao and ferramentas and not getattr(cliente, "suporta_ferramentas", True):
             self._evento("modelo.roteado_ferramentas", papel=papel, ferramentas=ferramentas)
             cliente = self.padrao
-        resposta = cliente.chamar(papel, prompt, ferramentas=ferramentas, timeout=timeout)
+        resposta = cliente.chamar(papel, prompt, ferramentas=ferramentas, tier=tier, timeout=timeout)
         if resposta is None and cliente is not self.padrao:
             self._evento("modelo.fallback", papel=papel)
-            resposta = self.padrao.chamar(papel, prompt, ferramentas=ferramentas, timeout=timeout)
+            resposta = self.padrao.chamar(papel, prompt, ferramentas=ferramentas, tier=tier, timeout=timeout)
         return resposta
 
 
@@ -107,8 +123,11 @@ class ClienteClaudeCLI:
         return shutil.which("claude") is not None
 
     def chamar(self, papel: str, prompt: str, ferramentas: Optional[str] = None,
-               timeout: int = 300) -> Optional[str]:
+               tier: Optional[str] = None, timeout: int = 300) -> Optional[str]:
         """Chama `claude -p`, retentando falhas transientes de infra.
+
+        `tier` é ignorado aqui (sinal de roteamento consumido pelo ClienteRoteador);
+        faz parte do contrato uniforme do Protocol.
 
         Distinto da retentativa do grafo (attempt→verifier, que é por CONTEÚDO
         reprovado): aqui tratamos a falha de INFRA — rc≠0, stdout vazio, timeout —
@@ -122,6 +141,93 @@ class ClienteClaudeCLI:
         for tentativa in range(1, self.tentativas + 1):
             try:
                 with _SEM_CLAUDE:
+                    r = subprocess.run(cmd, capture_output=True, text=True,
+                                       timeout=timeout, stdin=subprocess.DEVNULL)
+                if r.returncode == 0 and r.stdout.strip():
+                    return r.stdout.strip()
+                motivo = f"rc={r.returncode} stderr={r.stderr.strip()[:200]!r}"
+            except Exception as ex:
+                motivo = f"exceção: {type(ex).__name__}: {ex}"
+            if self.log is not None:
+                self.log.evento("modelo.falha", papel=papel, tentativa=tentativa, motivo=motivo)
+            if tentativa < self.tentativas:
+                time.sleep(self.backoff * tentativa)
+        return None
+
+
+class ClienteCodex:
+    """Backend real via `codex exec` (Codex CLI da OpenAI, assinatura ChatGPT do Caio).
+
+    Papel deste cliente no motor: **EXECUTOR** (alto volume). O julgamento
+    (planner/verifier/evaluator/synthesizer) fica no claude — separação
+    cross-model que combate viés de auto-preferência (lei do harness). O
+    `ClienteRoteador` decide o mapa papel→cliente; aqui só o transporte.
+
+    `codex exec` roda uma sessão até o fim sem TUI, streama o progresso pro
+    stderr e imprime **só a mensagem final do agente no stdout** — daí o mesmo
+    contrato de subprocess do ClienteClaudeCLI. Flags fixas:
+      - sandbox read-only (default): os nós do motor são texto-entra/texto-sai;
+        o executor devolve o artefato como TEXTO, não edita o repo aqui.
+      - `--skip-git-repo-check`: o motor pode rodar fora de um repo git.
+      - `--ephemeral`: não acumula arquivos de rollout em disco.
+
+    Auth: reusa o login salvo do CLI (`codex login`) — a assinatura do Caio,
+    sem chave de API no arquivo (mesma fronteira do claude -p).
+    """
+
+    # Codex É agêntico (web search, leitura de arquivos, MCP). Ao contrário dos
+    # clientes HTTP baratos, ELE atende papéis com ferramentas — não desvia ao
+    # claude. WebSearch do papel → `--search` (busca ao vivo).
+    suporta_ferramentas = True
+
+    def __init__(self, modelo: Optional[str] = None,
+                 mapa_papeis: Optional[dict[str, str]] = None,
+                 sandbox: str = "read-only", busca_ao_vivo: bool = False,
+                 log: Optional[Any] = None, tentativas: int = 3, backoff: float = 2.0):
+        self.modelo = modelo            # None/"default" → usa o modelo padrão do codex
+        self.mapa_papeis = mapa_papeis or {}
+        # read-only por default: os nós do motor são texto-entra/texto-sai; o
+        # executor devolve artefato como TEXTO. Quem precisar que o Codex EDITE
+        # o repo (executor de código) seta sandbox="workspace-write" na config.
+        self.sandbox = sandbox
+        self.busca_ao_vivo = busca_ao_vivo  # True → sempre --search (mesmo sem ferramenta pedida)
+        self.log = log
+        self.tentativas = tentativas
+        self.backoff = backoff
+
+    @staticmethod
+    def disponivel() -> bool:
+        return shutil.which("codex") is not None
+
+    def chamar(self, papel: str, prompt: str, ferramentas: Optional[str] = None,
+               tier: Optional[str] = None, timeout: int = 300) -> Optional[str]:
+        """Chama `codex exec`, retentando falhas transientes de infra. `tier` é
+        ignorado aqui (roteamento é do ClienteRoteador); parte do contrato uniforme.
+
+        Regras (espelham o contrato dos outros clientes):
+
+        1. **Ferramentas**: papel que pede ferramenta (ex.: WebSearch) → adiciona
+           ``--search`` (browsing ao vivo). Codex usa as próprias ferramentas
+           agênticas dentro do sandbox — não há desvio ao claude.
+        2. Modelo = ``mapa_papeis.get(papel, self.modelo)``; só vira ``-m <id>``
+           se não for vazio/"default" (senão usa o padrão do codex login).
+        3. ``codex exec`` imprime só a mensagem final no stdout → ``.strip()``.
+        4. Falha transiente (rc≠0, stdout vazio, timeout, exceção) → evento
+           ``modelo.falha`` no log e retry linear (``backoff × tentativa``).
+        5. Esgotou → ``None``. Falha vira evento, não crash.
+        """
+        cmd = ["codex", "exec", "--skip-git-repo-check", "--ephemeral",
+               "--sandbox", self.sandbox]
+        modelo = self.mapa_papeis.get(papel, self.modelo)
+        if modelo and modelo != "default":
+            cmd += ["-m", modelo]
+        if ferramentas or self.busca_ao_vivo:
+            cmd.append("--search")
+        cmd.append(prompt)
+        motivo = "?"
+        for tentativa in range(1, self.tentativas + 1):
+            try:
+                with _SEM_CODEX:
                     r = subprocess.run(cmd, capture_output=True, text=True,
                                        timeout=timeout, stdin=subprocess.DEVNULL)
                 if r.returncode == 0 and r.stdout.strip():
@@ -182,8 +288,9 @@ class ClienteOpenAICompat:
             return json.loads(resp.read().decode("utf-8"))
 
     def chamar(self, papel: str, prompt: str, ferramentas: Optional[str] = None,
-               timeout: int = 300) -> Optional[str]:
-        """Chama o endpoint OpenAI-compatível com retry linear de infra.
+               tier: Optional[str] = None, timeout: int = 300) -> Optional[str]:
+        """Chama o endpoint OpenAI-compatível com retry linear de infra. `tier` é
+        ignorado aqui (roteamento é do ClienteRoteador); parte do contrato uniforme.
 
         Regras (contrato T5 — os testes são o DoD):
 
@@ -238,6 +345,16 @@ def cliente_de_config(cfg: dict, log: Optional[Any] = None) -> "ClienteModelo":
     Cada papel aponta para "provedor/modelo" (o 1º '/' separa; o resto é o id
     do modelo na plataforma). Só provedores USADOS exigem chave no ambiente.
 
+    Um provedor pode declarar ``"tipo": "codex"`` — cliente CLI (`codex exec`,
+    assinatura ChatGPT, SEM chave de API). Usado para por o Codex como EXECUTOR:
+      {"provedores": {"codex": {"tipo": "codex", "sandbox": "read-only", "search": false}},
+       "papeis": {"pesquisador": "codex/default"}}
+    O modelo após a barra vira ``-m`` (ou "default" = padrão do codex login).
+    ``sandbox`` (default "read-only"; "workspace-write" deixa o Codex editar o
+    repo) e ``search`` (default false = web search cached; true = ao vivo) são
+    opcionais. Codex atende papéis com ferramentas (não desvia ao claude).
+    O padrão dos provedores é "openai-compat" (HTTP, exige api_key_env).
+
     Formato v1 (um provedor; exemplos/modelos-nvidia.json) continua aceito:
       {"base_url", "api_key_env", "modelo", "mapa_papeis_modelo"?, "papeis_baratos"}
 
@@ -257,8 +374,30 @@ def cliente_de_config(cfg: dict, log: Optional[Any] = None) -> "ClienteModelo":
     padrao = ClienteClaudeCLI(log=log)
 
     if "provedores" in cfg:  # formato multi-plataforma
+        def _cliente_destino(destino: str, quem: str):
+            """Constrói UM cliente para 'provedor/modelo' (ou 'padrao')."""
+            if destino == "padrao":
+                return padrao
+            prov, sep, modelo = destino.partition("/")
+            if not sep or not modelo or prov not in cfg["provedores"]:
+                raise ValueError(
+                    f"{quem}: destino {destino!r} deve ser 'provedor/modelo' (ou 'padrao'); "
+                    f"provedores declarados: {list(cfg['provedores'])}")
+            p = cfg["provedores"][prov]
+            tipo = p.get("tipo", "openai-compat")
+            if tipo == "codex":
+                return ClienteCodex(modelo=modelo, sandbox=p.get("sandbox", "read-only"),
+                                    busca_ao_vivo=p.get("search", False), log=log)
+            if tipo == "openai-compat":
+                return ClienteOpenAICompat(
+                    base_url=p["base_url"], api_key=_chave(p["api_key_env"], f"provedor {prov!r}"),
+                    modelo=modelo, log=log)
+            raise ValueError(
+                f"provedor {prov!r}: tipo {tipo!r} desconhecido (use 'codex' ou 'openai-compat')")
+
+        # Rota legada papel→modelo: um cliente por provedor, compartilhado, com mapa_papeis.
         por_prov: dict[str, dict[str, str]] = {}  # provedor -> {papel: modelo}
-        for papel, destino in cfg["papeis"].items():
+        for papel, destino in cfg.get("papeis", {}).items():
             prov, sep, modelo = destino.partition("/")
             if not sep or not modelo or prov not in cfg["provedores"]:
                 raise ValueError(
@@ -268,12 +407,28 @@ def cliente_de_config(cfg: dict, log: Optional[Any] = None) -> "ClienteModelo":
         mapa: dict[str, Any] = {}
         for prov, papeis in por_prov.items():
             p = cfg["provedores"][prov]
-            cliente = ClienteOpenAICompat(
-                base_url=p["base_url"], api_key=_chave(p["api_key_env"], f"provedor {prov!r}"),
-                modelo=next(iter(papeis.values())), mapa_papeis=papeis, log=log)
+            tipo = p.get("tipo", "openai-compat")
+            if tipo == "codex":
+                cliente: Any = ClienteCodex(
+                    mapa_papeis=papeis, sandbox=p.get("sandbox", "read-only"),
+                    busca_ao_vivo=p.get("search", False), log=log)
+            elif tipo == "openai-compat":
+                cliente = ClienteOpenAICompat(
+                    base_url=p["base_url"], api_key=_chave(p["api_key_env"], f"provedor {prov!r}"),
+                    modelo=next(iter(papeis.values())), mapa_papeis=papeis, log=log)
+            else:
+                raise ValueError(
+                    f"provedor {prov!r}: tipo {tipo!r} desconhecido "
+                    f"(use 'codex' ou 'openai-compat')")
             for papel in papeis:
                 mapa[papel] = cliente
-        return ClienteRoteador(padrao=padrao, mapa=mapa, log=log)
+
+        # Roteamento por custo: tier→modelo. "padrao" referencia o claude.
+        tiers_map: dict[str, Any] = {
+            tier: _cliente_destino(destino, f"tier {tier!r}")
+            for tier, destino in cfg.get("tiers", {}).items()
+        }
+        return ClienteRoteador(padrao=padrao, mapa=mapa, tiers=tiers_map, log=log)
 
     # formato v1 — um provedor
     barato = ClienteOpenAICompat(
