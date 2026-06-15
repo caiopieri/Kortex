@@ -9,6 +9,7 @@ Falha vira None — quem chama decide o fallback (lei: falha vira evento, não c
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -25,6 +26,9 @@ _SEM_CLAUDE = threading.Semaphore(2)
 # Mesmo motivo para o codex CLI: o fan-out pode disparar N execuções agênticas
 # em paralelo; limitar a concorrência evita throttle/erro de burst do CLI.
 _SEM_CODEX = threading.Semaphore(2)
+
+# Idem para o opencode CLI.
+_SEM_OPENCODE = threading.Semaphore(2)
 
 
 def extrai_json(texto: str) -> Optional[dict]:
@@ -78,10 +82,15 @@ class ClienteRoteador:
                  tiers: Optional[dict[str, "ClienteModelo"]] = None,
                  esgotados: Optional[set[str]] = None,
                  cadeia: Optional[list["ClienteModelo"]] = None,
+                 pins: Optional[dict[str, "ClienteModelo"]] = None,
                  log: Optional[Any] = None):
         self.padrao = padrao
         self.mapa = mapa or {}
         self.tiers = tiers or {}   # tier → cliente (roteamento por custo)
+        # Pins MANUAIS (decisão do Caio, "não me questiona"): chave papel|tier|"*"
+        # → cliente. Precedência MÁXIMA, acima do tier e do papel — o planner não
+        # sobrepõe. "*" = vale pra tudo (o "esse no todo"). Evento modelo.pin.
+        self.pins = pins or {}
         # Corte B — disponibilidade global: `esgotados` é o conjunto de provedores
         # indisponíveis (ex.: {"claude"} quando o limite acaba). MUTÁVEL de propósito:
         # o Corte C (UI/arquivo) liga/desliga ao vivo. `cadeia` = ordem de fallback
@@ -111,7 +120,11 @@ class ClienteRoteador:
     def chamar(self, papel: str, prompt: str, ferramentas: Optional[str] = None,
                tier: Optional[str] = None, timeout: int = 300) -> Optional[str]:
         cliente: "ClienteModelo"
-        if tier and tier in self.tiers:
+        pin = self.pins.get(papel) or (self.pins.get(tier) if tier else None) or self.pins.get("*")
+        if pin is not None:                          # pin manual vence tier e papel
+            cliente = pin
+            self._evento("modelo.pin", papel=papel, tier=tier)
+        elif tier and tier in self.tiers:
             cliente = self.tiers[tier]
             self._evento("modelo.roteado_tier", papel=papel, tier=tier)
         else:
@@ -257,6 +270,74 @@ class ClienteCodex:
                 with _SEM_CODEX:
                     r = subprocess.run(cmd, capture_output=True, text=True,
                                        timeout=timeout, stdin=subprocess.DEVNULL)
+                if r.returncode == 0 and r.stdout.strip():
+                    return r.stdout.strip()
+                motivo = f"rc={r.returncode} stderr={r.stderr.strip()[:200]!r}"
+            except Exception as ex:
+                motivo = f"exceção: {type(ex).__name__}: {ex}"
+            if self.log is not None:
+                self.log.evento("modelo.falha", papel=papel, tentativa=tentativa, motivo=motivo)
+            if tentativa < self.tentativas:
+                time.sleep(self.backoff * tentativa)
+        return None
+
+
+class ClienteOpenCode:
+    """Backend real via `opencode run` (CLI open source da SST, model-agnostic).
+
+    Papel no motor: EXECUTOR pros OUTROS modelos — qualquer provider/model que o
+    opencode suporta (openai/gpt-5.5, anthropic/..., openrouter/..., local...).
+    Útil quando o Caio NÃO está pagando o Codex mas quer GPT-5.5 pago por token,
+    ou pra rodar modelos que nem Codex nem claude expõem.
+
+    `opencode run "prompt"` roda não-interativo, imprime a resposta no stdout e sai;
+    `-m provider/model` escolhe o modelo (daí o "modelo" aqui é "provider/model",
+    não só o id). Auth: `opencode auth login` (creds próprias), SEM chave no nosso
+    arquivo — mesma fronteira do claude/codex.
+
+    Segurança: em `run`, o opencode AUTO-APROVA as permissões da sessão. Como os nós
+    do motor são texto-entra/texto-sai, dá pra travar via `permissao` (vira a env
+    OPENCODE_PERMISSION, ex.: '{"edit":"deny","bash":"deny"}'); ausente = default do
+    opencode. Configurável no provedor.
+    """
+
+    suporta_ferramentas = True  # opencode é agêntico (igual ao Codex)
+
+    def __init__(self, modelo: Optional[str] = None,
+                 mapa_papeis: Optional[dict[str, str]] = None,
+                 permissao: Optional[str] = None,
+                 log: Optional[Any] = None, tentativas: int = 3, backoff: float = 2.0,
+                 provedor: str = "opencode"):
+        self.modelo = modelo            # "provider/model" (ou None/"default")
+        self.mapa_papeis = mapa_papeis or {}
+        self.permissao = permissao      # JSON p/ OPENCODE_PERMISSION (opcional)
+        self.provedor = provedor        # rótulo p/ esgotamento (Corte B)
+        self.log = log
+        self.tentativas = tentativas
+        self.backoff = backoff
+
+    @staticmethod
+    def disponivel() -> bool:
+        return shutil.which("opencode") is not None
+
+    def chamar(self, papel: str, prompt: str, ferramentas: Optional[str] = None,
+               tier: Optional[str] = None, timeout: int = 300) -> Optional[str]:
+        """Chama `opencode run`, retentando falhas transientes de infra.
+        `ferramentas`/`tier` não viram flag aqui (o roteador já decidiu o modelo)."""
+        cmd = ["opencode", "run"]
+        modelo = self.mapa_papeis.get(papel, self.modelo)
+        if modelo and modelo != "default":
+            cmd += ["-m", modelo]
+        cmd.append(prompt)
+        env = os.environ.copy()
+        if self.permissao:
+            env["OPENCODE_PERMISSION"] = self.permissao
+        motivo = "?"
+        for tentativa in range(1, self.tentativas + 1):
+            try:
+                with _SEM_OPENCODE:
+                    r = subprocess.run(cmd, capture_output=True, text=True,
+                                       timeout=timeout, stdin=subprocess.DEVNULL, env=env)
                 if r.returncode == 0 and r.stdout.strip():
                     return r.stdout.strip()
                 motivo = f"rc={r.returncode} stderr={r.stderr.strip()[:200]!r}"
@@ -417,12 +498,16 @@ def cliente_de_config(cfg: dict, log: Optional[Any] = None) -> "ClienteModelo":
             if tipo == "codex":
                 return ClienteCodex(modelo=modelo, sandbox=p.get("sandbox", "read-only"),
                                     busca_ao_vivo=p.get("search", False), log=log)
+            if tipo == "opencode":
+                return ClienteOpenCode(modelo=modelo, permissao=p.get("permissao"),
+                                       log=log, provedor=prov)
             if tipo == "openai-compat":
                 return ClienteOpenAICompat(
                     base_url=p["base_url"], api_key=_chave(p["api_key_env"], f"provedor {prov!r}"),
                     modelo=modelo, log=log, provedor=prov)
             raise ValueError(
-                f"provedor {prov!r}: tipo {tipo!r} desconhecido (use 'codex' ou 'openai-compat')")
+                f"provedor {prov!r}: tipo {tipo!r} desconhecido "
+                f"(use 'codex', 'opencode' ou 'openai-compat')")
 
         # Rota legada papel→modelo: um cliente por provedor, compartilhado, com mapa_papeis.
         por_prov: dict[str, dict[str, str]] = {}  # provedor -> {papel: modelo}
@@ -441,6 +526,9 @@ def cliente_de_config(cfg: dict, log: Optional[Any] = None) -> "ClienteModelo":
                 cliente: Any = ClienteCodex(
                     mapa_papeis=papeis, sandbox=p.get("sandbox", "read-only"),
                     busca_ao_vivo=p.get("search", False), log=log)
+            elif tipo == "opencode":
+                cliente = ClienteOpenCode(mapa_papeis=papeis, permissao=p.get("permissao"),
+                                          log=log, provedor=prov)
             elif tipo == "openai-compat":
                 cliente = ClienteOpenAICompat(
                     base_url=p["base_url"], api_key=_chave(p["api_key_env"], f"provedor {prov!r}"),
@@ -448,7 +536,7 @@ def cliente_de_config(cfg: dict, log: Optional[Any] = None) -> "ClienteModelo":
             else:
                 raise ValueError(
                     f"provedor {prov!r}: tipo {tipo!r} desconhecido "
-                    f"(use 'codex' ou 'openai-compat')")
+                    f"(use 'codex', 'opencode' ou 'openai-compat')")
             for papel in papeis:
                 mapa[papel] = cliente
 
@@ -457,13 +545,18 @@ def cliente_de_config(cfg: dict, log: Optional[Any] = None) -> "ClienteModelo":
             tier: _cliente_destino(destino, f"tier {tier!r}")
             for tier, destino in cfg.get("tiers", {}).items()
         }
+        # Pins manuais: chave (papel|tier|"*") → modelo, precedência máxima.
+        pins_map: dict[str, Any] = {
+            chave: _cliente_destino(destino, f"pin {chave!r}")
+            for chave, destino in cfg.get("pins", {}).items()
+        }
         # Cadeia de fallback p/ esgotamento (Corte B): clientes distintos (não-padrao),
         # em ordem estável. O padrao (claude) é o último recurso, tratado no roteador.
         cadeia: list[Any] = []
-        for c in [*tiers_map.values(), *mapa.values()]:
+        for c in [*pins_map.values(), *tiers_map.values(), *mapa.values()]:
             if c is not padrao and not any(c is x for x in cadeia):
                 cadeia.append(c)
-        return ClienteRoteador(padrao=padrao, mapa=mapa, tiers=tiers_map,
+        return ClienteRoteador(padrao=padrao, mapa=mapa, tiers=tiers_map, pins=pins_map,
                                esgotados=set(cfg.get("esgotados", [])), cadeia=cadeia, log=log)
 
     # formato v1 — um provedor

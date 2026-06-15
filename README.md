@@ -11,4 +11,14 @@ python -m motor --spec exemplos/missao-pesquisa.json   # requer `claude` CLI
 python -m motor "pesquise oportunidades de aumento de receita"
 ```
 
+LangGraph Studio local, sem Docker:
+
+```bash
+pip install -e ".[dev,studio]"
+langgraph dev
+```
+
+Se mexer em dependências, pare o `langgraph dev` antes. O hot reload observa
+mudanças em `.venv` e pode reiniciar enquanto o pip ainda está escrevendo arquivos.
+
 Fabricação pendente: ver `HANDOFF.md`. Visão e kernel: vault Obsidian (`2. Pessoal/Meta-fábrica*.md`).

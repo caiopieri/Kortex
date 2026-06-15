@@ -9,6 +9,9 @@
                                                # reroteia pro fallback (Corte B). Repetível.
   python -m motor ... --auto                   # auto-mode: gates resolvem sozinhos (Corte C)
   python -m motor ... --auto --gate cobertura=manual  # tudo auto, MENOS o gate de cobertura
+  python -m motor ... --modelos cfg.json --pin synthesizer=oc/openai/gpt-5.5  # fixa modelo
+                                               # numa chave (papel|tier|"*"), precedência máxima.
+                                               # Pins globais (todos os projetos): ~/.motor/pins.json
 
 Requer `claude` CLI no PATH (Mac do Caio). Gate do fundador: sem `--caixa`, a
 decisão é via input() e o checkpointer é em memória (volátil). Com `--caixa
@@ -38,6 +41,15 @@ from .grafo import construir_grafo
 from .modelos import ClienteClaudeCLI, cliente_de_config
 
 
+def _merge_cfg(base: dict, over: dict) -> dict:
+    """Merge raso por chave de topo (over vence). Usado p/ pôr a config do projeto
+    por cima da global (~/.motor/pins.json): provedores/pins/tiers/papeis."""
+    out = dict(base)
+    for k, v in over.items():
+        out[k] = {**out[k], **v} if isinstance(v, dict) and isinstance(out.get(k), dict) else v
+    return out
+
+
 def main() -> int:
     args = sys.argv[1:]
     if not args:
@@ -61,6 +73,25 @@ def main() -> int:
         i = args.index("--modelos")
         cfg_modelos = json.loads(Path(args[i + 1]).read_text(encoding="utf-8"))
         args = args[:i] + args[i + 2:]
+
+    # --pin <chave>=<provedor/modelo>: pin manual (repetível). chave = papel|tier|"*".
+    # Precisa de 'provedores' (via --modelos ou ~/.motor/pins.json) pra resolver.
+    pins_cli: dict[str, str] = {}
+    while "--pin" in args:
+        i = args.index("--pin")
+        chave, _, dest = args[i + 1].partition("=")
+        pins_cli[chave] = dest
+        args = args[:i] + args[i + 2:]
+
+    # Config GLOBAL (todos os projetos): ~/.motor/pins.json — mesma forma de uma
+    # config de --modelos {provedores, pins, tiers, ...}. O projeto SOBREPÕE a global.
+    global_path = Path.home() / ".motor" / "pins.json"
+    if global_path.exists():
+        cfg_global = json.loads(global_path.read_text(encoding="utf-8"))
+        cfg_modelos = _merge_cfg(cfg_global, cfg_modelos or {})
+    if pins_cli:
+        cfg_modelos = cfg_modelos or {}
+        cfg_modelos["pins"] = {**cfg_modelos.get("pins", {}), **pins_cli}
 
     # --esgotado <provedor>: marca um provedor como indisponível (Corte B). Repetível.
     # Ex.: `--esgotado claude` → reroteia o julgamento pro fallback (Codex). Exige --modelos.
@@ -93,7 +124,12 @@ def main() -> int:
     raiz = Path(__file__).parent.parent
     log = LogEventos(raiz / "log.jsonl")
     config = {"configurable": {"thread_id": "cli"}}
-    cliente = cliente_de_config(cfg_modelos, log=log) if cfg_modelos else ClienteClaudeCLI(log=log)
+    if cfg_modelos and ("provedores" in cfg_modelos or "base_url" in cfg_modelos):
+        cliente = cliente_de_config(cfg_modelos, log=log)
+    else:
+        if cfg_modelos and cfg_modelos.get("pins"):
+            print("aviso: pins ignorados — precisam de 'provedores' (via --modelos ou ~/.motor/pins.json).")
+        cliente = ClienteClaudeCLI(log=log)
     if esgotados:
         if hasattr(cliente, "esgotados"):
             cliente.esgotados |= set(esgotados)

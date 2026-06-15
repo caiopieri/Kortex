@@ -4,3 +4,4 @@ __pycache__/
 log.jsonl
 motor.db
 .pytest_cache/
+.langgraph_api/

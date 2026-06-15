@@ -437,6 +437,110 @@ def test_config_provedor_tipo_desconhecido_falha(monkeypatch):
         cliente_de_config(cfg)
 
 
+# ----------------------------------------------------- ClienteOpenCode (3º executor)
+
+def _opencode(monkeypatch, resultados, **kw):
+    from motor.modelos import ClienteOpenCode
+    kw.setdefault("backoff", 0)
+    c = ClienteOpenCode(log=kw.pop("log", None), **kw)
+    cmds: list[list[str]] = []
+    envs: list[dict] = []
+    fila = list(resultados)
+
+    def fake_run(cmd, **kwargs):
+        cmds.append(cmd)
+        envs.append(kwargs.get("env") or {})
+        r = fila.pop(0)
+        if isinstance(r, Exception):
+            raise r
+        return r
+
+    monkeypatch.setattr(modelos.subprocess, "run", fake_run)
+    return c, cmds, envs
+
+
+def test_opencode_run_e_modelo(monkeypatch):
+    from motor.modelos import ClienteOpenCode
+    assert ClienteOpenCode.suporta_ferramentas is True
+    c, cmds, _ = _opencode(monkeypatch, [_proc(0, "  saída  ")],
+                           mapa_papeis={"redator": "openai/gpt-5.5"})
+    assert c.chamar("redator", "escreva X") == "saída"
+    cmd = cmds[0]
+    assert cmd[:2] == ["opencode", "run"]
+    assert cmd[cmd.index("-m") + 1] == "openai/gpt-5.5"
+    assert cmd[-1] == "escreva X"
+
+
+def test_opencode_permissao_vira_env(monkeypatch):
+    c, cmds, envs = _opencode(monkeypatch, [_proc(0, "ok")],
+                              permissao='{"edit":"deny"}')
+    c.chamar("redator", "p")
+    assert envs[0].get("OPENCODE_PERMISSION") == '{"edit":"deny"}'
+
+
+def test_opencode_retry_e_provedor(monkeypatch):
+    from motor.modelos import ClienteOpenCode
+    log = FakeLog()
+    c, cmds, _ = _opencode(monkeypatch, [_proc(1, "", "boom"), _proc(0, "ok")],
+                           log=log, provedor="oc")
+    assert c.chamar("redator", "p") == "ok"
+    assert len(cmds) == 2 and log.tipos().count("modelo.falha") == 1
+    assert c.provedor == "oc"
+
+
+def test_config_tipo_opencode(monkeypatch):
+    from motor.modelos import ClienteOpenCode, cliente_de_config
+    cfg = {"provedores": {"oc": {"tipo": "opencode", "permissao": "{}"}},
+           "papeis": {"redator": "oc/openai/gpt-5.5"}}
+    r = cliente_de_config(cfg)
+    assert isinstance(r.mapa["redator"], ClienteOpenCode)
+    assert r.mapa["redator"].provedor == "oc"
+
+
+# --------------------------------------------------------- pins manuais (controle)
+
+def test_pin_por_papel_vence_tier_e_mapa():
+    pin, por_tier, por_papel, padrao = (_stub("PIN"), _stub("TIER"),
+                                        _stub("PAPEL"), _stub("CLAUDE"))
+    log = FakeLog()
+    r = ClienteRoteador(padrao=padrao, mapa={"redator": por_papel},
+                        tiers={"simples": por_tier}, pins={"redator": pin}, log=log)
+    assert r.chamar("redator", "p", tier="simples") == "PIN"
+    assert "modelo.pin" in log.tipos()
+    assert len(por_tier.chamadas) == 0 and len(por_papel.chamadas) == 0
+
+
+def test_pin_curinga_vale_pra_tudo():
+    pin, padrao = _stub("PIN"), _stub("CLAUDE")
+    r = ClienteRoteador(padrao=padrao, pins={"*": pin})
+    assert r.chamar("synthesizer", "x") == "PIN"   # "esse no todo"
+    assert r.chamar("pesquisador", "y", tier="media") == "PIN"
+
+
+def test_pin_por_tier():
+    pin, padrao = _stub("PIN"), _stub("CLAUDE")
+    r = ClienteRoteador(padrao=padrao, pins={"complexa": pin})
+    assert r.chamar("modelador", "x", tier="complexa") == "PIN"
+    assert r.chamar("modelador", "x", tier="simples") == "CLAUDE"  # outro tier não casa
+
+
+def test_precedencia_pin_papel_sobre_pin_curinga():
+    especifico, curinga, padrao = _stub("ESPECIFICO"), _stub("CURINGA"), _stub("CLAUDE")
+    r = ClienteRoteador(padrao=padrao, pins={"verifier": especifico, "*": curinga})
+    assert r.chamar("verifier", "x") == "ESPECIFICO"   # papel > "*"
+    assert r.chamar("planner", "x") == "CURINGA"
+
+
+def test_config_pins(monkeypatch):
+    from motor.modelos import ClienteOpenCode, cliente_de_config
+    cfg = {"provedores": {"oc": {"tipo": "opencode"}},
+           "pins": {"synthesizer": "oc/openai/gpt-5.5"}}
+    r = cliente_de_config(cfg)
+    assert set(r.pins) == {"synthesizer"}
+    assert isinstance(r.pins["synthesizer"], ClienteOpenCode)
+    assert r.pins["synthesizer"].modelo == "openai/gpt-5.5"
+
+
 # ------------------------------------------------- cliente_de_config: tiers (Corte A)
 
 def test_config_tiers_codex_e_padrao(monkeypatch):

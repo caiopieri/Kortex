@@ -1,0 +1,15 @@
+{
+  "_comentario": "Três executores: Codex (assinatura), OpenCode (outros modelos / GPT-5.5 pago-por-token), e o claude como padrão/julgamento. Tiers roteiam por custo; 'pins' fixam manualmente um modelo numa chave (papel|tier|*) com precedência máxima — o planner não sobrepõe. Auth do OpenCode: `opencode auth login` (sem chave no arquivo).",
+  "provedores": {
+    "codex": { "tipo": "codex" },
+    "oc":    { "tipo": "opencode", "permissao": "{\"edit\":\"deny\",\"bash\":\"deny\"}" }
+  },
+  "tiers": {
+    "simples": "oc/openai/gpt-5.5-mini",
+    "media":   "codex/default",
+    "complexa": "padrao"
+  },
+  "pins": {
+    "synthesizer": "oc/openai/gpt-5.5"
+  }
+}

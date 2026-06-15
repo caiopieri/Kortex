@@ -117,6 +117,22 @@ Automatizar só um gate sem ligar o master: `--gate cobertura=prosseguir` (ou
 > esgotarem. "Prosseguir" = sintetizar com o que passou; "abortar" = encerrar.
 > (Uma 3ª opção "preencher a lacuna" — re-fan-out pro buraco — é candidata futura.)
 
+## Três executores + pins manuais
+
+Além de Codex e Claude, há o **OpenCode** (`tipo: opencode`) pros outros modelos —
+inclusive GPT-5.5 pago-por-token quando tu não estiver no Codex. Auth:
+`opencode auth login` (sem chave no nosso arquivo). Exemplo: `exemplos/modelos-opencode.json`.
+
+**Pins** = fixar manualmente um modelo, com precedência sobre o planner ("não me
+questiona"). Chave = papel, tier ou `"*"` (tudo). Três jeitos:
+
+- No JSON do projeto: `"pins": {"synthesizer": "oc/openai/gpt-5.5"}`.
+- Ad-hoc na linha: `--pin synthesizer=oc/openai/gpt-5.5` (repetível).
+- Global, todos os projetos: `~/.motor/pins.json` (mesma forma; o projeto sobrepõe).
+
+Precedência geral: **pin (papel > tier > `*`) > tier > papel > padrão**, e o
+esgotamento (Corte B) ainda reroteia se o provedor pinado cair. Log: `modelo.pin`.
+
 ## Critérios de falsificação (anota o veredito)
 
 1. **Separação de papéis real**: no `log.jsonl`, subagentes saíram do Codex e os
