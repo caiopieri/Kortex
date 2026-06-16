@@ -39,7 +39,7 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 from .caixa import CaixaFundador, rodar_com_caixa
 from .eventos import LogEventos
 from .grafo import construir_grafo
-from .modelos import ClienteClaudeCLI, cliente_de_config
+from .modelos import ClienteClaudeCLI, ClienteModelo, cliente_de_config
 from .registro import cliente_de_registro
 
 
@@ -136,7 +136,7 @@ def main() -> int:
     log = LogEventos(raiz / "log.jsonl")
     config = {"configurable": {"thread_id": "cli"}}
     if dir_registro is not None:
-        cliente = cliente_de_registro(dir_registro, log=log)
+        cliente: ClienteModelo = cliente_de_registro(dir_registro, log=log)
     elif cfg_modelos and ("provedores" in cfg_modelos or "base_url" in cfg_modelos):
         cliente = cliente_de_config(cfg_modelos, log=log)
     else:

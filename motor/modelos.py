@@ -44,6 +44,7 @@ def extrai_json(texto: str) -> Optional[dict]:
 class ClienteModelo(Protocol):
     def chamar(self, papel: str, prompt: str, ferramentas: Optional[str] = None,
                tier: Optional[str] = None, timeout: int = 300,
+               evitar: Optional[str] = None,
                capacidades: Optional[list[str]] = None) -> Optional[str]: ...
 
 
@@ -56,6 +57,7 @@ class ClienteStub:
 
     def chamar(self, papel: str, prompt: str, ferramentas: Optional[str] = None,
                tier: Optional[str] = None, timeout: int = 300,
+               evitar: Optional[str] = None,
                capacidades: Optional[list[str]] = None) -> Optional[str]:
         self.chamadas.append((papel, prompt))
         return self.roteador(papel, prompt)
@@ -239,6 +241,7 @@ class ClienteClaudeCLI:
 
     def chamar(self, papel: str, prompt: str, ferramentas: Optional[str] = None,
                tier: Optional[str] = None, timeout: int = 300,
+               evitar: Optional[str] = None,
                capacidades: Optional[list[str]] = None) -> Optional[str]:
         """Chama `claude -p`, retentando falhas transientes de infra.
 
@@ -318,6 +321,7 @@ class ClienteCodex:
 
     def chamar(self, papel: str, prompt: str, ferramentas: Optional[str] = None,
                tier: Optional[str] = None, timeout: int = 300,
+               evitar: Optional[str] = None,
                capacidades: Optional[list[str]] = None) -> Optional[str]:
         """Chama `codex exec`, retentando falhas transientes de infra. `tier` é
         ignorado aqui (roteamento é do ClienteRoteador); parte do contrato uniforme.
@@ -400,6 +404,7 @@ class ClienteOpenCode:
 
     def chamar(self, papel: str, prompt: str, ferramentas: Optional[str] = None,
                tier: Optional[str] = None, timeout: int = 300,
+               evitar: Optional[str] = None,
                capacidades: Optional[list[str]] = None) -> Optional[str]:
         """Chama `opencode run`, retentando falhas transientes de infra.
         `ferramentas`/`tier` não viram flag aqui (o roteador já decidiu o modelo)."""
@@ -478,6 +483,7 @@ class ClienteOpenAICompat:
 
     def chamar(self, papel: str, prompt: str, ferramentas: Optional[str] = None,
                tier: Optional[str] = None, timeout: int = 300,
+               evitar: Optional[str] = None,
                capacidades: Optional[list[str]] = None) -> Optional[str]:
         """Chama o endpoint OpenAI-compatível com retry linear de infra. `tier` é
         ignorado aqui (roteamento é do ClienteRoteador); parte do contrato uniforme.
