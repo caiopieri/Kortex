@@ -12,6 +12,7 @@
   python -m motor ... --modelos cfg.json --pin synthesizer=oc/openai/gpt-5.5  # fixa modelo
                                                # numa chave (papel|tier|"*"), precedência máxima.
                                                # Pins globais (todos os projetos): ~/.motor/pins.json
+  python -m motor ... --registro "4. Registry/Modelos"  # catálogo via entidades .md
 
 Requer `claude` CLI no PATH (Mac do Caio). Gate do fundador: sem `--caixa`, a
 decisão é via input() e o checkpointer é em memória (volátil). Com `--caixa
@@ -39,6 +40,7 @@ from .caixa import CaixaFundador, rodar_com_caixa
 from .eventos import LogEventos
 from .grafo import construir_grafo
 from .modelos import ClienteClaudeCLI, cliente_de_config
+from .registro import cliente_de_registro
 
 
 def _merge_cfg(base: dict, over: dict) -> dict:
@@ -55,9 +57,6 @@ def main() -> int:
     if not args:
         print(__doc__)
         return 2
-    if not ClienteClaudeCLI.disponivel():
-        print("erro: `claude` CLI não encontrado no PATH — rode no Mac do Caio ou use o ClienteStub em testes.")
-        return 1
 
     # --caixa <dir>: gate via nota no vault + checkpointer SQLite durável.
     dir_caixa = None
@@ -73,6 +72,18 @@ def main() -> int:
         i = args.index("--modelos")
         cfg_modelos = json.loads(Path(args[i + 1]).read_text(encoding="utf-8"))
         args = args[:i] + args[i + 2:]
+
+    dir_registro = None
+    if "--registro" in args:
+        i = args.index("--registro")
+        dir_registro = args[i + 1]
+        args = args[:i] + args[i + 2:]
+    if cfg_modelos is not None and dir_registro is not None:
+        print("erro: use --registro OU --modelos, não os dois.")
+        return 2
+    if not ClienteClaudeCLI.disponivel():
+        print("erro: `claude` CLI não encontrado no PATH — rode no Mac do Caio ou use o ClienteStub em testes.")
+        return 1
 
     # --pin <chave>=<provedor/modelo>: pin manual (repetível). chave = papel|tier|"*".
     # Precisa de 'provedores' (via --modelos ou ~/.motor/pins.json) pra resolver.
@@ -124,7 +135,9 @@ def main() -> int:
     raiz = Path(__file__).parent.parent
     log = LogEventos(raiz / "log.jsonl")
     config = {"configurable": {"thread_id": "cli"}}
-    if cfg_modelos and ("provedores" in cfg_modelos or "base_url" in cfg_modelos):
+    if dir_registro is not None:
+        cliente = cliente_de_registro(dir_registro, log=log)
+    elif cfg_modelos and ("provedores" in cfg_modelos or "base_url" in cfg_modelos):
         cliente = cliente_de_config(cfg_modelos, log=log)
     else:
         if cfg_modelos and cfg_modelos.get("pins"):
