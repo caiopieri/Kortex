@@ -253,3 +253,30 @@ def test_revisao_plano_resume_dict_edita_tier_antes_do_fanout(tmp_path):
     assert alfa and alfa[0]["tier"] == "complexa"
     assert any(e["evento"] == "decisao.plano" and e.get("edicoes") == {"pesquisa-alfa": "complexa"}
                for e in eventos)
+
+
+def test_subagente_usa_catalogo_por_capacidade(tmp_path):
+    spec = {
+        **SPEC,
+        "subagentes": [{
+            **SPEC["subagentes"][0],
+            "id": "capaz",
+            "papel": "executor-capaz",
+            "tier": None,
+            "capacidades_requeridas": ["x"],
+        }],
+    }
+    padrao = ClienteStub(faz_roteador())
+    padrao.provedor = "claude"
+    capaz = ClienteStub(lambda papel, prompt: "RESULTADO capacidade")
+    capaz.provedor = "capaz"
+    log = LogEventos(tmp_path / "log.jsonl")
+    cliente = ClienteRoteador(padrao=padrao, catalogo=[(capaz, frozenset({"x"}), 1)], log=log)
+    grafo = construir_grafo(cliente, log, checkpointer=InMemorySaver(),
+                            politica=PoliticaGates(overrides={"plano": "prosseguir"}))
+
+    resultado = grafo.invoke({"spec": spec}, {"configurable": {"thread_id": "capacidade"}})
+
+    assert resultado["resultados"][0]["saida"] == "RESULTADO capacidade"
+    assert len(capaz.chamadas) == 1
+    assert "modelo.roteado_capacidade" in [e["evento"] for e in eventos_de(tmp_path)]

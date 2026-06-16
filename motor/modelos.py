@@ -43,7 +43,8 @@ def extrai_json(texto: str) -> Optional[dict]:
 
 class ClienteModelo(Protocol):
     def chamar(self, papel: str, prompt: str, ferramentas: Optional[str] = None,
-               tier: Optional[str] = None, timeout: int = 300) -> Optional[str]: ...
+               tier: Optional[str] = None, timeout: int = 300,
+               capacidades: Optional[list[str]] = None) -> Optional[str]: ...
 
 
 class ClienteStub:
@@ -54,7 +55,8 @@ class ClienteStub:
         self.chamadas: list[tuple[str, str]] = []
 
     def chamar(self, papel: str, prompt: str, ferramentas: Optional[str] = None,
-               tier: Optional[str] = None, timeout: int = 300) -> Optional[str]:
+               tier: Optional[str] = None, timeout: int = 300,
+               capacidades: Optional[list[str]] = None) -> Optional[str]:
         self.chamadas.append((papel, prompt))
         return self.roteador(papel, prompt)
 
@@ -63,11 +65,12 @@ class ClienteRoteador:
     """Multi-provider: roteia papel → cliente. O grafo continua cego a modelos.
 
     Decisões de design (travadas):
-    - Resolução do cliente, em ordem: (1) `tier` da tarefa, se presente e na tabela
+    - Resolução do cliente, em ordem: (0) pin manual; (1) `tier` da tarefa, se presente e na tabela
       `tiers` — é o roteamento por custo (o planner classifica, a tabela mapeia
-      tier→modelo); (2) senão, `mapa` por papel (rota legada); (3) senão, `padrao`.
-      Tier presente mas fora da tabela → cai pro papel/padrão (seguro). Evento
-      `modelo.roteado_tier`.
+      tier→modelo); (2) capacidade via catálogo, se declarada; (3) senão, `mapa`
+      por papel (rota legada); (4) senão, `padrao`. Tier presente mas fora da
+      tabela → pode cair em capacidade/papel/padrão (seguro). Evento
+      `modelo.roteado_tier` ou `modelo.roteado_capacidade`.
     - `mapa`: papel → cliente (DeepSeek/Kimi via OpenAI-compat ou Codex). Papel fora
       do mapa (e sem tier) vai ao `padrao` (claude).
     - Regra dura de ferramentas: se `ferramentas` foi pedido e o cliente resolvido
@@ -83,6 +86,7 @@ class ClienteRoteador:
                  esgotados: Optional[set[str]] = None,
                  cadeia: Optional[list["ClienteModelo"]] = None,
                  pins: Optional[dict[str, "ClienteModelo"]] = None,
+                 catalogo: Optional[list[tuple["ClienteModelo", frozenset[str], int]]] = None,
                  log: Optional[Any] = None):
         self.padrao = padrao
         self.mapa = mapa or {}
@@ -97,6 +101,7 @@ class ClienteRoteador:
         # de clientes quando o provedor resolvido está esgotado.
         self.esgotados = set(esgotados or ())
         self.cadeia = list(cadeia or ())
+        self.catalogo = list(catalogo or [])
         self.log = log
 
     def _evento(self, tipo: str, **dados) -> None:
@@ -122,9 +127,24 @@ class ClienteRoteador:
     def _eh_pin(self, papel: str, tier: Optional[str]) -> bool:
         return bool(self.pins.get(papel) or (self.pins.get(tier) if tier else None) or self.pins.get("*"))
 
+    def selecionar_por_capacidade(self, capacidades, evitar=None, emitir: bool = True):
+        """Escolhe o cliente mais barato que cobre todas as capacidades pedidas."""
+        req = set(capacidades or ())
+        candidatos = [
+            (ordem, i, cli) for i, (cli, caps, ordem) in enumerate(self.catalogo)
+            if req <= caps
+            and getattr(cli, "provedor", None) not in self.esgotados
+            and (evitar is None or getattr(cli, "provedor", None) != evitar)
+        ]
+        if not candidatos:
+            return None
+        candidatos.sort()
+        return candidatos[0][2]
+
     def _resolver(self, papel: str, tier: Optional[str], ferramentas: Optional[str],
+                  capacidades: Optional[list[str]] = None, evitar: Optional[str] = None,
                   emitir: bool = True) -> "ClienteModelo":
-        """Resolve o cliente: pin > tier > papel > padrão, depois esgotamento e desvio
+        """Resolve o cliente: pin > tier > capacidade > papel > padrão, depois esgotamento e desvio
         de ferramentas. `emitir=False` para consulta sem efeitos (provedor_de)."""
         pin = self.pins.get(papel) or (self.pins.get(tier) if tier else None) or self.pins.get("*")
         if pin is not None:                          # pin manual vence tier e papel
@@ -135,6 +155,19 @@ class ClienteRoteador:
             cliente = self.tiers[tier]
             if emitir:
                 self._evento("modelo.roteado_tier", papel=papel, tier=tier)
+        elif capacidades and self.catalogo:
+            cli = self.selecionar_por_capacidade(capacidades, evitar=evitar, emitir=emitir)
+            if cli is not None:
+                cliente = cli
+                if emitir:
+                    self._evento("modelo.roteado_capacidade", papel=papel,
+                                 capacidades=list(capacidades),
+                                 provedor=getattr(cli, "provedor", None))
+            else:
+                if emitir:
+                    self._evento("registro.sem_executor", papel=papel,
+                                 capacidades=list(capacidades))
+                cliente = self.mapa.get(papel, self.padrao)
         else:
             cliente = self.mapa.get(papel, self.padrao)
         cliente = self._disponivel(cliente, papel, emitir=emitir)   # provedor esgotado → reroteia
@@ -145,10 +178,12 @@ class ClienteRoteador:
         return cliente
 
     def provedor_de(self, papel: str, tier: Optional[str] = None,
-                    ferramentas: Optional[str] = None) -> Optional[str]:
+                    ferramentas: Optional[str] = None,
+                    capacidades: Optional[list[str]] = None) -> Optional[str]:
         """Qual provedor ATENDERIA esta chamada, sem executá-la nem logar. Usado pelo
         grafo p/ o guard de independência do juiz (verifier ≠ provedor do executor)."""
-        return getattr(self._resolver(papel, tier, ferramentas, emitir=False), "provedor", None)
+        return getattr(self._resolver(papel, tier, ferramentas, capacidades=capacidades,
+                                      emitir=False), "provedor", None)
 
     def _outro_provedor(self, evitar: str) -> Optional["ClienteModelo"]:
         """Primeiro cliente disponível (cadeia + padrao) cujo provedor != `evitar`."""
@@ -160,8 +195,9 @@ class ClienteRoteador:
 
     def chamar(self, papel: str, prompt: str, ferramentas: Optional[str] = None,
                tier: Optional[str] = None, timeout: int = 300,
-               evitar: Optional[str] = None) -> Optional[str]:
-        cliente = self._resolver(papel, tier, ferramentas)
+               evitar: Optional[str] = None,
+               capacidades: Optional[list[str]] = None) -> Optional[str]:
+        cliente = self._resolver(papel, tier, ferramentas, capacidades=capacidades, evitar=evitar)
         # Guard de independência do juiz: o verifier não pode rodar no MESMO provedor
         # do executor que ele julga (senão o modelo se auto-aprova). `evitar` = provedor
         # do executor. Um PIN explícito do Caio vence o guard (decisão consciente).
@@ -171,12 +207,14 @@ class ClienteRoteador:
                 self._evento("juiz.independencia", papel=papel, evitar=evitar,
                              para=getattr(alt, "provedor", None))
                 cliente = alt
-        resposta = cliente.chamar(papel, prompt, ferramentas=ferramentas, tier=tier, timeout=timeout)
+        resposta = cliente.chamar(papel, prompt, ferramentas=ferramentas, tier=tier,
+                                  timeout=timeout, capacidades=capacidades)
         if resposta is None and cliente is not self.padrao:
             alvo = self._disponivel(self.padrao, papel)
             if alvo is not cliente:
                 self._evento("modelo.fallback", papel=papel)
-                resposta = alvo.chamar(papel, prompt, ferramentas=ferramentas, tier=tier, timeout=timeout)
+                resposta = alvo.chamar(papel, prompt, ferramentas=ferramentas, tier=tier,
+                                       timeout=timeout, capacidades=capacidades)
         return resposta
 
 
@@ -200,7 +238,8 @@ class ClienteClaudeCLI:
         return shutil.which("claude") is not None
 
     def chamar(self, papel: str, prompt: str, ferramentas: Optional[str] = None,
-               tier: Optional[str] = None, timeout: int = 300) -> Optional[str]:
+               tier: Optional[str] = None, timeout: int = 300,
+               capacidades: Optional[list[str]] = None) -> Optional[str]:
         """Chama `claude -p`, retentando falhas transientes de infra.
 
         `tier` é ignorado aqui (sinal de roteamento consumido pelo ClienteRoteador);
@@ -278,7 +317,8 @@ class ClienteCodex:
         return shutil.which("codex") is not None
 
     def chamar(self, papel: str, prompt: str, ferramentas: Optional[str] = None,
-               tier: Optional[str] = None, timeout: int = 300) -> Optional[str]:
+               tier: Optional[str] = None, timeout: int = 300,
+               capacidades: Optional[list[str]] = None) -> Optional[str]:
         """Chama `codex exec`, retentando falhas transientes de infra. `tier` é
         ignorado aqui (roteamento é do ClienteRoteador); parte do contrato uniforme.
 
@@ -359,7 +399,8 @@ class ClienteOpenCode:
         return shutil.which("opencode") is not None
 
     def chamar(self, papel: str, prompt: str, ferramentas: Optional[str] = None,
-               tier: Optional[str] = None, timeout: int = 300) -> Optional[str]:
+               tier: Optional[str] = None, timeout: int = 300,
+               capacidades: Optional[list[str]] = None) -> Optional[str]:
         """Chama `opencode run`, retentando falhas transientes de infra.
         `ferramentas`/`tier` não viram flag aqui (o roteador já decidiu o modelo)."""
         cmd = ["opencode", "run"]
@@ -436,7 +477,8 @@ class ClienteOpenAICompat:
             return json.loads(resp.read().decode("utf-8"))
 
     def chamar(self, papel: str, prompt: str, ferramentas: Optional[str] = None,
-               tier: Optional[str] = None, timeout: int = 300) -> Optional[str]:
+               tier: Optional[str] = None, timeout: int = 300,
+               capacidades: Optional[list[str]] = None) -> Optional[str]:
         """Chama o endpoint OpenAI-compatível com retry linear de infra. `tier` é
         ignorado aqui (roteamento é do ClienteRoteador); parte do contrato uniforme.
 

@@ -130,7 +130,8 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
     def plano_de(spec: dict[str, Any]) -> list[dict[str, Any]]:
         plano = []
         for sub in spec["subagentes"]:
-            modelo = (cliente.provedor_de(sub["papel"], sub.get("tier"), sub.get("ferramentas"))
+            modelo = (cliente.provedor_de(sub["papel"], sub.get("tier"), sub.get("ferramentas"),
+                                          capacidades=sub.get("capacidades_requeridas"))
                       if hasattr(cliente, "provedor_de") else None)
             plano.append({
                 "id": sub["id"],
@@ -187,7 +188,8 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         max_t = spec["restricoes"]["max_tentativas"]
         # Guard de independência: o verifier deve evitar o provedor DO executor desta
         # tarefa (cross-model anti-auto-aprovação). Só quando o cliente sabe rotear.
-        prov_exec = (cliente.provedor_de(sub["papel"], sub.get("tier"), sub.get("ferramentas"))
+        prov_exec = (cliente.provedor_de(sub["papel"], sub.get("tier"), sub.get("ferramentas"),
+                                         capacidades=sub.get("capacidades_requeridas"))
                      if hasattr(cliente, "provedor_de") else None)
         kw_verifier = {"evitar": prov_exec} if prov_exec else {}
         feedback, ultima = payload.get("feedback", ""), None
@@ -200,7 +202,8 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                 objetivo=sub["objetivo"], entradas=json.dumps(sub["entradas"], ensure_ascii=False),
                 resultado_esperado=sub["resultado_esperado"],
                 feedback=f"\nNa tentativa anterior o verificador reprovou: \"{feedback}\". Corrija." if feedback else "",
-            ), ferramentas=sub.get("ferramentas"), tier=sub.get("tier"))
+            ), ferramentas=sub.get("ferramentas"), tier=sub.get("tier"),
+                capacidades=sub.get("capacidades_requeridas"))
             if not ultima:
                 feedback = "modelo não respondeu"
                 log.evento("executor.erro", executor=sub["id"], motivo=feedback, tentativa=tentativa)

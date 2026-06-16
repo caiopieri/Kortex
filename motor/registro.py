@@ -130,6 +130,7 @@ def cliente_de_registro(pasta: str | Path, log: Optional[Any] = None) -> Cliente
 
     mapa: dict[str, Any] = {}
     tiers: dict[str, Any] = {}
+    catalogo: list[tuple[Any, frozenset[str], int]] = []
     dono_papel: dict[str, str] = {}
     dono_tier: dict[str, str] = {}
     for caminho, cliente, entidade in clientes:
@@ -145,10 +146,14 @@ def cliente_de_registro(pasta: str | Path, log: Optional[Any] = None) -> Cliente
                     f"tier {tier!r} reivindicado por {dono_tier[tier]} e {caminho.name}")
             tiers[tier] = cliente
             dono_tier[tier] = caminho.name
+        capacidades = _lista(entidade.get("capacidades"))
+        if capacidades:
+            catalogo.append((cliente, frozenset(capacidades), int(entidade.get("custo_ordem") or 0)))
 
     cadeia: list[Any] = []
     for _, cliente, _ in clientes:
         if cliente is not padrao and not any(cliente is existente for existente in cadeia):
             cadeia.append(cliente)
 
-    return ClienteRoteador(padrao=padrao, mapa=mapa, tiers=tiers, cadeia=cadeia, log=log)
+    return ClienteRoteador(padrao=padrao, mapa=mapa, tiers=tiers, cadeia=cadeia,
+                           catalogo=catalogo, log=log)

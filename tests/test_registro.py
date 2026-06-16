@@ -109,3 +109,23 @@ def test_registro_openai_compat_sem_env_falha(tmp_path, monkeypatch):
     )
     with pytest.raises(ValueError, match="exporte a chave; ela nunca vai no arquivo"):
         cliente_de_registro(tmp_path)
+
+
+def test_registro_monta_catalogo_de_capacidades(tmp_path):
+    (tmp_path / "codex.md").write_text(
+        "---\n"
+        "tipo: modelo-executor\n"
+        "transporte: codex\n"
+        "capacidades: [codigo, ferramentas]\n"
+        "custo_ordem: 3\n"
+        "---\n",
+        encoding="utf-8",
+    )
+
+    r = cliente_de_registro(tmp_path)
+
+    assert len(r.catalogo) == 1
+    cliente, capacidades, custo = r.catalogo[0]
+    assert getattr(cliente, "provedor", None) == "codex"
+    assert capacidades == frozenset({"codigo", "ferramentas"})
+    assert custo == 3

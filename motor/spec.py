@@ -28,6 +28,11 @@ class Subagente(BaseModel):
     rubrica: list[str] = Field(min_length=1, description="critérios objetivos que o verifier checa")
     ferramentas: Optional[str] = Field(default=None, description="ex.: 'WebSearch' para claude -p")
     tier: Optional[str] = Field(default=None, description="classe de complexidade p/ roteamento por custo (ex.: simples/media/complexa); o planner classifica, a tabela tiers do cliente mapeia tier→modelo. Ausente → roteia por papel.")
+    capacidades_requeridas: list[str] = Field(
+        default_factory=list,
+        description="capacidades que a tarefa exige (ex.: codigo, redacao, calculo). "
+                    "Vazio → roteia por tier/papel como antes. O cliente escolhe o "
+                    "executor mais barato que cobre TODAS estas capacidades.")
     depende_de: list[str] = Field(default_factory=list, description="reservado; v0 só executa fan-out paralelo")
 
 
