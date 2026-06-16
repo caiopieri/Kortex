@@ -158,6 +158,37 @@ def test_subagente_esgotado_vira_lacuna(tmp_path):
     assert any("pesquisa-alfa" in l for l in lacunas)
 
 
+def test_gate_cobertura_preencher_reexecuta_reprovado_uma_vez(tmp_path):
+    """Decisão preencher reexecuta só o subagente citado na lacuna, no máximo uma rodada."""
+
+    def roteador(papel, prompt):
+        base = faz_roteador()
+        if papel == "verifier" and "pesquisa-alfa" in prompt:
+            return json.dumps({"aprovado": False, "motivo": "insuficiente"})
+        return base(papel, prompt)
+
+    log = LogEventos(tmp_path / "log.jsonl")
+    pol = PoliticaGates(overrides={"plano": "prosseguir", "cobertura": "preencher"})
+    grafo = construir_grafo(ClienteStub(roteador), log, checkpointer=InMemorySaver(), politica=pol)
+
+    resultado = grafo.invoke({"spec": SPEC}, {"configurable": {"thread_id": "preencher"}})
+
+    assert "__interrupt__" not in resultado
+    assert resultado["resposta_final"] == "SÍNTESE FINAL DA MISSÃO"
+    eventos = eventos_de(tmp_path)
+    assert sum(1 for e in eventos if e["evento"] == "lacuna.preenchida") == 1
+    assert any(e["evento"] == "lacuna.preenchida" and e["subagente"] == "pesquisa-alfa"
+               for e in eventos)
+    chamados_alfa = [e for e in eventos if e["evento"] == "executor.chamado"
+                     and e.get("executor") == "pesquisa-alfa"]
+    chamados_beta = [e for e in eventos if e["evento"] == "executor.chamado"
+                     and e.get("executor") == "pesquisa-beta"]
+    assert len(chamados_alfa) == SPEC["restricoes"]["max_tentativas"] * 2
+    assert len(chamados_beta) == 1
+    assert len([e for e in eventos if e["evento"] == "executor.chamado"
+                and e.get("executor") == "global_evaluator"]) == 2
+
+
 def _cliente_roteador(roteador):
     stub = ClienteStub(roteador)
     stub.provedor = "stub"

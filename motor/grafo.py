@@ -14,7 +14,6 @@ Regras de fronteira (anti-lock-in):
 from __future__ import annotations
 
 import json
-import operator
 from typing import Annotated, Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
@@ -26,10 +25,18 @@ from .politica import PoliticaGates
 from .spec import WorkflowSpec
 
 
+def mesclar_resultados(a: list[dict[str, Any]], b: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Mescla commits de subagentes por id; commits mais novos substituem antigos."""
+    por_id = {r["id"]: r for r in a}
+    for resultado in b:
+        por_id[resultado["id"]] = resultado
+    return list(por_id.values())
+
+
 class EstadoMotor(TypedDict, total=False):
     missao_texto: str
     spec: dict[str, Any]
-    resultados: Annotated[list[dict[str, Any]], operator.add]
+    resultados: Annotated[list[dict[str, Any]], mesclar_resultados]
     avaliacao: dict[str, Any]
     resposta_final: str
 
@@ -183,7 +190,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         prov_exec = (cliente.provedor_de(sub["papel"], sub.get("tier"), sub.get("ferramentas"))
                      if hasattr(cliente, "provedor_de") else None)
         kw_verifier = {"evitar": prov_exec} if prov_exec else {}
-        feedback, ultima = "", None
+        feedback, ultima = payload.get("feedback", ""), None
         for tentativa in range(1, max_t + 1):
             log.evento("executor.chamado", executor=sub["id"], papel=sub["papel"],
                        tier=sub.get("tier"), tentativa=tentativa)
@@ -212,9 +219,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         return {"resultados": [{"id": sub["id"], "saida": ultima or "",
                                 "tentativas": max_t, "aprovado": False, "motivo": feedback}]}
 
-    def avaliar(state: EstadoMotor) -> dict:
-        spec, resultados = state["spec"], state["resultados"]
-        log.evento("paralelo.concluido", commitados=len(resultados))
+    def avaliar_cobertura(spec: dict[str, Any], resultados: list[dict[str, Any]]) -> dict[str, Any]:
         reprovados = [r["id"] for r in resultados if not r["aprovado"]]
         log.evento("executor.chamado", executor="global_evaluator")
         veredito = extrai_json(cliente.chamar("evaluator", PROMPT_EVALUATOR.format(
@@ -225,27 +230,75 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         if reprovados:
             veredito = {"aprovado": False,
                         "lacunas": list(veredito.get("lacunas", [])) + [f"subagente reprovado: {i}" for i in reprovados]}
+        return veredito
+
+    def decidir_cobertura(veredito: dict[str, Any], permitir_preencher: bool) -> Any:
+        auto = politica.decisao_auto("cobertura", default="prosseguir")
+        if auto == "preencher" and not permitir_preencher:
+            auto = "prosseguir"
+        if auto is not None:  # auto-mode (ou override): resolve sozinho, sem pausar
+            log.evento("gate.auto", portao="cobertura", decisao=auto)
+            return auto
+
+        log.evento("escalado", para="fundador")
+        opcoes = "prosseguir · preencher · abortar" if permitir_preencher else "prosseguir · abortar"
+        pergunta = ("Cobertura insuficiente. Prosseguir com síntese parcial, preencher lacunas ou abortar?"
+                    if permitir_preencher else
+                    "Cobertura insuficiente. Prosseguir com síntese parcial ou abortar?")
+        decisao = interrupt({  # pausa durável: o checkpointer segura até Command(resume=...)
+            "portao": "cobertura",
+            "pergunta": pergunta,
+            "lacunas": veredito.get("lacunas", []),
+            "opcoes": opcoes,
+        })
+        log.evento("decisao.fundador", portao="cobertura", decisao=str(decisao))
+        return decisao
+
+    def preencher_lacunas(spec: dict[str, Any], resultados: list[dict[str, Any]],
+                          veredito: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        reprovados = {r["id"] for r in resultados if not r["aprovado"]}
+        lacunas = [str(l) for l in veredito.get("lacunas", [])]
+        ids = [sid for sid in reprovados if any(sid in lacuna for lacuna in lacunas)]
+        if not ids:
+            return resultados, []
+
+        por_id = {s["id"]: s for s in spec["subagentes"]}
+        novos: list[dict[str, Any]] = []
+        for sid in ids:
+            feedback = "; ".join(l for l in lacunas if sid in l)
+            retorno = subagente({"sub": por_id[sid], "spec": spec, "feedback": feedback})
+            novos.extend(retorno["resultados"])
+            log.evento("lacuna.preenchida", subagente=sid)
+        return mesclar_resultados(resultados, novos), novos
+
+    def finalizar_cobertura(veredito: dict[str, Any], decisao: Any) -> dict[str, Any]:
+        if str(decisao).strip().lower().startswith("abort"):
+            log.evento("tarefa.abortada", motivo="decisão do fundador")
+            return {**veredito, "abortada": True}
+        return {**veredito, "prosseguir_parcial": True}
+
+    def avaliar(state: EstadoMotor) -> dict:
+        spec, resultados = state["spec"], state["resultados"]
+        log.evento("paralelo.concluido", commitados=len(resultados))
+        veredito = avaliar_cobertura(spec, resultados)
         if veredito.get("aprovado"):
             log.evento("portao.aprovado", portao="cobertura")
             return {"avaliacao": veredito}
         log.evento("portao.reprovado", portao="cobertura", lacunas=veredito.get("lacunas", []))
-        auto = politica.decisao_auto("cobertura", default="prosseguir")
-        if auto is not None:  # auto-mode (ou override): resolve sozinho, sem pausar
-            log.evento("gate.auto", portao="cobertura", decisao=auto)
-            decisao: Any = auto
-        else:
-            log.evento("escalado", para="fundador")
-            decisao = interrupt({  # pausa durável: o checkpointer segura até Command(resume=...)
-                "portao": "cobertura",
-                "pergunta": "Cobertura insuficiente. Prosseguir com síntese parcial ou abortar?",
-                "lacunas": veredito.get("lacunas", []),
-                "opcoes": "prosseguir · abortar",
-            })
-            log.evento("decisao.fundador", portao="cobertura", decisao=str(decisao))
-        if str(decisao).strip().lower().startswith("abort"):
-            log.evento("tarefa.abortada", motivo="decisão do fundador")
-            return {"avaliacao": {**veredito, "abortada": True}}
-        return {"avaliacao": {**veredito, "prosseguir_parcial": True}}
+        decisao = decidir_cobertura(veredito, permitir_preencher=True)
+
+        if str(decisao).strip().lower().startswith("preench"):
+            resultados, novos = preencher_lacunas(spec, resultados, veredito)
+            if novos:
+                veredito = avaliar_cobertura(spec, resultados)
+                if veredito.get("aprovado"):
+                    log.evento("portao.aprovado", portao="cobertura")
+                    return {"resultados": novos, "avaliacao": veredito}
+                log.evento("portao.reprovado", portao="cobertura", lacunas=veredito.get("lacunas", []))
+            decisao = decidir_cobertura(veredito, permitir_preencher=False)
+            return {"resultados": novos, "avaliacao": finalizar_cobertura(veredito, decisao)}
+
+        return {"avaliacao": finalizar_cobertura(veredito, decisao)}
 
     def rota_pos_avaliacao(state: EstadoMotor):
         return END if state["avaliacao"].get("abortada") else "sintetizar"
