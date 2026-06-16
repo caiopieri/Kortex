@@ -26,6 +26,7 @@ from motor.caixa import CaixaFundador, rodar_com_caixa
 from motor.eventos import LogEventos
 from motor.grafo import construir_grafo
 from motor.modelos import ClienteStub
+from motor.politica import PoliticaGates
 
 # mesma spec dos testes do grafo (dirigida por dado)
 from tests.test_grafo import SPEC, faz_roteador
@@ -45,7 +46,8 @@ def _grafo_sqlite(tmp_path, log, roteador, nome_db="motor.db"):
     conn = sqlite3.connect(str(tmp_path / nome_db), check_same_thread=False)
     saver = SqliteSaver(conn)
     saver.setup()
-    grafo = construir_grafo(ClienteStub(roteador), log, checkpointer=saver)
+    grafo = construir_grafo(ClienteStub(roteador), log, checkpointer=saver,
+                            politica=PoliticaGates(overrides={"plano": "prosseguir"}))
     return grafo, conn
 
 
@@ -57,6 +59,7 @@ def test_interrupt_cria_nota_e_decisao_conclui(tmp_path):
     grafo = construir_grafo(
         ClienteStub(faz_roteador(evaluator_aprova=False)), log,
         checkpointer=InMemorySaver(),
+        politica=PoliticaGates(overrides={"plano": "prosseguir"}),
     )
     config = {"configurable": {"thread_id": "ta"}}
     dir_caixa = tmp_path / "Caixa do fundador"

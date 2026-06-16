@@ -159,8 +159,8 @@ class ClienteRoteador:
         return None
 
     def chamar(self, papel: str, prompt: str, ferramentas: Optional[str] = None,
-               tier: Optional[str] = None, evitar: Optional[str] = None,
-               timeout: int = 300) -> Optional[str]:
+               tier: Optional[str] = None, timeout: int = 300,
+               evitar: Optional[str] = None) -> Optional[str]:
         cliente = self._resolver(papel, tier, ferramentas)
         # Guard de independência do juiz: o verifier não pode rodar no MESMO provedor
         # do executor que ele julga (senão o modelo se auto-aprova). `evitar` = provedor

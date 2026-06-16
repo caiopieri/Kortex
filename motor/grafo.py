@@ -2,7 +2,7 @@
 
 Topologia (espelha a referência dynamic-workflow-harness, ver memória do projeto):
 
-    START → planner → [fan-out: subagente × N] → avaliar → sintetizar → END
+    START → planner → revisar_plano → [fan-out: subagente × N] → avaliar → sintetizar → END
                           (attempt → verifier → commit, retry ≤ max_tentativas)
                                               (cobertura reprovada → interrupt() ao fundador)
 
@@ -120,10 +120,59 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
             log.evento("executor.erro", executor="planner", motivo="spec inválida ou sem JSON", tentativa=tentativa)
         raise RuntimeError("planner não produziu WorkflowSpec válida em 3 tentativas")
 
+    def plano_de(spec: dict[str, Any]) -> list[dict[str, Any]]:
+        plano = []
+        for sub in spec["subagentes"]:
+            modelo = (cliente.provedor_de(sub["papel"], sub.get("tier"), sub.get("ferramentas"))
+                      if hasattr(cliente, "provedor_de") else None)
+            plano.append({
+                "id": sub["id"],
+                "papel": sub["papel"],
+                "tier": sub.get("tier"),
+                "modelo": modelo,
+            })
+        return plano
+
+    def revisar_plano(state: EstadoMotor) -> dict:
+        spec = state["spec"]
+        plano = plano_de(spec)
+        auto = politica.decisao_auto("plano", default="prosseguir")
+        if auto is not None:
+            log.evento("gate.auto", portao="plano", decisao=auto)
+            return {}
+
+        log.evento("escalado", para="plano")
+        decisao = interrupt({
+            "portao": "plano",
+            "plano": plano,
+            "pergunta": "Revise o plano. prosseguir / editar / abortar",
+            "opcoes": "prosseguir · editar · abortar",
+        })
+
+        if isinstance(decisao, dict):
+            edicoes = dict(decisao)
+            spec_editada = {**spec, "subagentes": [dict(s) for s in spec["subagentes"]]}
+            for sub in spec_editada["subagentes"]:
+                if sub["id"] in edicoes:
+                    sub["tier"] = edicoes[sub["id"]]
+            log.evento("decisao.plano", edicoes=edicoes)
+            return {"spec": spec_editada}
+
+        decisao_txt = str(decisao).strip().lower()
+        log.evento("decisao.plano", decisao=str(decisao))
+        if decisao_txt.startswith("abort"):
+            return {"avaliacao": {"abortada": True, "motivo": "plano rejeitado"}}
+        return {}
+
     def despachar(state: EstadoMotor):
         spec = state["spec"]
         log.evento("paralelo.iniciado", subagentes=[s["id"] for s in spec["subagentes"]])
         return [Send("subagente", {"sub": s, "spec": spec}) for s in spec["subagentes"]]
+
+    def rota_pos_plano(state: EstadoMotor):
+        if state.get("avaliacao", {}).get("abortada"):
+            return END
+        return despachar(state)
 
     def subagente(payload: dict) -> dict:
         sub, spec = payload["sub"], payload["spec"]
@@ -214,11 +263,13 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
 
     g = StateGraph(EstadoMotor)
     g.add_node("planner", planner)
-    g.add_node("subagente", subagente)
+    g.add_node("revisar_plano", revisar_plano)
+    g.add_node("subagente", subagente)  # type: ignore[arg-type]
     g.add_node("avaliar", avaliar)
     g.add_node("sintetizar", sintetizar)
     g.add_edge(START, "planner")
-    g.add_conditional_edges("planner", despachar, ["subagente"])
+    g.add_edge("planner", "revisar_plano")
+    g.add_conditional_edges("revisar_plano", rota_pos_plano, ["subagente", END])
     g.add_edge("subagente", "avaliar")
     g.add_conditional_edges("avaliar", rota_pos_avaliacao, ["sintetizar", END])
     g.add_edge("sintetizar", END)

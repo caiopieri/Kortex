@@ -12,7 +12,8 @@ except ImportError:
 
 from motor.eventos import LogEventos
 from motor.grafo import construir_grafo
-from motor.modelos import ClienteStub
+from motor.modelos import ClienteRoteador, ClienteStub
+from motor.politica import PoliticaGates
 
 SPEC = json.loads(
     (Path(__file__).parent.parent / "exemplos" / "missao-pesquisa.json").read_text(encoding="utf-8")
@@ -46,7 +47,8 @@ def faz_roteador(reprovar_beta_uma_vez=False, evaluator_aprova=True):
 
 def roda(tmp_path, roteador, entrada):
     log = LogEventos(tmp_path / "log.jsonl")
-    grafo = construir_grafo(ClienteStub(roteador), log, checkpointer=InMemorySaver())
+    grafo = construir_grafo(ClienteStub(roteador), log, checkpointer=InMemorySaver(),
+                            politica=PoliticaGates(overrides={"plano": "prosseguir"}))
     config = {"configurable": {"thread_id": "t1"}}
     return grafo, config, log, grafo.invoke(entrada, config)
 
@@ -107,7 +109,6 @@ def test_gate_fundador_abortar(tmp_path):
 def test_gate_auto_mode_nao_interrompe(tmp_path):
     """Auto-mode (Corte C): cobertura reprova mas NÃO pausa — resolve 'prosseguir' e
     completa a missão sozinho. Sem 'escalado', com 'gate.auto'."""
-    from motor.politica import PoliticaGates
     log = LogEventos(tmp_path / "log.jsonl")
     grafo = construir_grafo(ClienteStub(faz_roteador(evaluator_aprova=False)), log,
                             checkpointer=InMemorySaver(), politica=PoliticaGates(auto_mode=True))
@@ -121,21 +122,20 @@ def test_gate_auto_mode_nao_interrompe(tmp_path):
 
 def test_gate_override_manual_interrompe_mesmo_com_auto(tmp_path):
     """Exceção por gate: auto-mode ligado, mas 'cobertura' cravado manual → ainda pausa."""
-    from motor.politica import PoliticaGates
     log = LogEventos(tmp_path / "log.jsonl")
     pol = PoliticaGates(auto_mode=True, overrides={"cobertura": "manual"})
     grafo = construir_grafo(ClienteStub(faz_roteador(evaluator_aprova=False)), log,
                             checkpointer=InMemorySaver(), politica=pol)
     res = grafo.invoke({"spec": SPEC}, {"configurable": {"thread_id": "ovr"}})
     assert "__interrupt__" in res  # override forçou manual apesar do auto_mode
-    assert "gate.auto" not in [e["evento"] for e in eventos_de(tmp_path)]
+    assert not any(e["evento"] == "gate.auto" and e["portao"] == "cobertura"
+                   for e in eventos_de(tmp_path))
 
 
 def test_gate_auto_abortar_por_override(tmp_path):
     """Override pode automatizar pra ABORTAR também (não só prosseguir)."""
-    from motor.politica import PoliticaGates
     log = LogEventos(tmp_path / "log.jsonl")
-    pol = PoliticaGates(overrides={"cobertura": "abortar"})
+    pol = PoliticaGates(overrides={"plano": "prosseguir", "cobertura": "abortar"})
     grafo = construir_grafo(ClienteStub(faz_roteador(evaluator_aprova=False)), log,
                             checkpointer=InMemorySaver(), politica=pol)
     res = grafo.invoke({"spec": SPEC}, {"configurable": {"thread_id": "abrt"}})
@@ -156,3 +156,69 @@ def test_subagente_esgotado_vira_lacuna(tmp_path):
     assert "__interrupt__" in resultado  # reprovado força gate, apesar do evaluator stub aprovar
     lacunas = resultado["__interrupt__"][0].value["lacunas"]
     assert any("pesquisa-alfa" in l for l in lacunas)
+
+
+def _cliente_roteador(roteador):
+    stub = ClienteStub(roteador)
+    stub.provedor = "stub"
+    return ClienteRoteador(padrao=stub)
+
+
+def test_revisao_plano_auto_mode_nao_interrompe(tmp_path):
+    log = LogEventos(tmp_path / "log.jsonl")
+    grafo = construir_grafo(_cliente_roteador(faz_roteador()), log,
+                            checkpointer=InMemorySaver(), politica=PoliticaGates(auto_mode=True))
+    res = grafo.invoke({"spec": SPEC}, {"configurable": {"thread_id": "plano-auto"}})
+
+    assert "__interrupt__" not in res
+    assert res["resposta_final"] == "SÍNTESE FINAL DA MISSÃO"
+    eventos = eventos_de(tmp_path)
+    assert any(e["evento"] == "gate.auto" and e["portao"] == "plano" for e in eventos)
+
+
+def test_revisao_plano_manual_interrompe_com_payload(tmp_path):
+    log = LogEventos(tmp_path / "log.jsonl")
+    grafo = construir_grafo(_cliente_roteador(faz_roteador()), log,
+                            checkpointer=InMemorySaver())
+    res = grafo.invoke({"spec": SPEC}, {"configurable": {"thread_id": "plano-manual"}})
+
+    assert "__interrupt__" in res
+    pedido = res["__interrupt__"][0].value
+    assert pedido["portao"] == "plano"
+    assert len(pedido["plano"]) == len(SPEC["subagentes"])
+    assert all({"id", "papel", "tier", "modelo"} <= set(item) for item in pedido["plano"])
+
+
+def test_revisao_plano_resume_abortar_nao_roda_fanout(tmp_path):
+    log = LogEventos(tmp_path / "log.jsonl")
+    grafo = construir_grafo(_cliente_roteador(faz_roteador()), log,
+                            checkpointer=InMemorySaver())
+    config = {"configurable": {"thread_id": "plano-abortar"}}
+    res = grafo.invoke({"spec": SPEC}, config)
+    assert res["__interrupt__"][0].value["portao"] == "plano"
+
+    retomado = grafo.invoke(Command(resume="abortar"), config)
+
+    assert "resposta_final" not in retomado
+    assert retomado["avaliacao"]["abortada"] is True
+    eventos = eventos_de(tmp_path)
+    assert not any(e["evento"] == "executor.chamado" and e.get("papel") == "pesquisador"
+                   for e in eventos)
+
+
+def test_revisao_plano_resume_dict_edita_tier_antes_do_fanout(tmp_path):
+    log = LogEventos(tmp_path / "log.jsonl")
+    grafo = construir_grafo(_cliente_roteador(faz_roteador()), log,
+                            checkpointer=InMemorySaver())
+    config = {"configurable": {"thread_id": "plano-editar"}}
+    res = grafo.invoke({"spec": SPEC}, config)
+    assert res["__interrupt__"][0].value["portao"] == "plano"
+
+    retomado = grafo.invoke(Command(resume={"pesquisa-alfa": "complexa"}), config)
+
+    assert retomado["resposta_final"] == "SÍNTESE FINAL DA MISSÃO"
+    eventos = eventos_de(tmp_path)
+    alfa = [e for e in eventos if e["evento"] == "executor.chamado" and e.get("executor") == "pesquisa-alfa"]
+    assert alfa and alfa[0]["tier"] == "complexa"
+    assert any(e["evento"] == "decisao.plano" and e.get("edicoes") == {"pesquisa-alfa": "complexa"}
+               for e in eventos)
