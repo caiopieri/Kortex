@@ -1,6 +1,12 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from motor.modelos import ClienteRoteador, ClienteStub
+from motor.registro import cliente_de_registro
+
+
+RAIZ = Path(__file__).parent.parent
 
 
 class FakeLog:
@@ -97,3 +103,15 @@ def test_catalogo_vazio_e_capacidades_vazias_mantem_roteamento_antigo():
 
     assert r.chamar("redator", "p") == "PAPEL"
     assert r.chamar("outro", "p", capacidades=["x"]) == "CLAUDE"
+
+
+def test_fixtures_registry_selecionam_por_vocabulario(monkeypatch):
+    r = cliente_de_registro(RAIZ / "exemplos/registro-modelos")
+
+    assert r.provedor_de("x", capacidades=["codigo"]) == "oc"
+    assert r.provedor_de("x", capacidades=["raciocinio-longo"]) == "codex"
+    assert r.provedor_de("x", capacidades=["pesquisa", "redacao"]) == "codex"
+
+    monkeypatch.setattr(r.padrao, "chamar", lambda *args, **kwargs: "CLAUDE")
+    assert r.chamar("verifier", "p", evitar="codex",
+                    capacidades=["raciocinio-longo"]) is not None

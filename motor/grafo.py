@@ -55,7 +55,8 @@ ambiguidade nem decisão de design implícita, e rubricas checáveis MECANICAMEN
 números/evidências presentes, seções obrigatórias) — nunca critérios que dependem de bom gosto.
 Para cada subagente, classifique o campo "tier" pela complexidade da tarefa (roteamento por custo):
 "simples" (extração/formatação/lookup direto), "media" (pesquisa ou redação com algum raciocínio),
-"complexa" (design, trade-offs, modelagem ou síntese que exige um modelo forte).{erro}"""
+"complexa" (design, trade-offs, modelagem ou síntese que exige um modelo forte).
+Para cada subagente, preencha também "capacidades_requeridas": a LISTA de capacidades que a tarefa exige, escolhidas SOMENTE deste vocabulário fixo (use exatamente estas palavras): codigo (escrever/editar/revisar código ou script), redacao (texto natural: relatório, doc, spec, descrição), calculo (quantitativo determinístico: custos, tolerâncias, dimensionamento), pesquisa (levantar info externa: busca, sourcing, lookup), raciocinio-longo (planejamento, trade-offs, design ou síntese multi-passo). Liste só o que a tarefa REALMENTE exige (em geral 1–2 tags). Estas tags valem para qualquer domínio (software, hardware, manufatura): a produção física é de outros executores; aqui você classifica só o trabalho cognitivo.{erro}"""
 
 PROMPT_SUBAGENTE = """Você é o subagente '{id}' (papel: {papel}) de um workflow.
 Missão global: {missao_objetivo}
