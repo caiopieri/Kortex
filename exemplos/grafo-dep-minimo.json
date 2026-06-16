@@ -1,0 +1,48 @@
+{
+  "versao": "0.1",
+  "padrao": "grafo_dependencias",
+  "missao": {
+    "id": "grafo-dep-minimo",
+    "objetivo": "Produzir uma resposta em três etapas dependentes",
+    "contexto": "Exemplo mínimo do padrão grafo_dependencias com passagem textual entre subagentes.",
+    "criterios_cobertura": [
+      "arquitetura proposta",
+      "implementação descrita",
+      "validação realizada"
+    ]
+  },
+  "restricoes": { "teto_custo": 2.0, "max_subagentes": 10, "max_tentativas": 3 },
+  "subagentes": [
+    {
+      "id": "arquiteto",
+      "papel": "raciocinador",
+      "objetivo": "Definir uma arquitetura curta para resolver a missão",
+      "entradas": {},
+      "resultado_esperado": "Arquitetura textual com decisões principais",
+      "rubrica": ["lista decisões principais", "mantém escopo textual"]
+    },
+    {
+      "id": "codificador",
+      "papel": "codificador",
+      "objetivo": "Descrever a implementação usando a arquitetura recebida",
+      "entradas": {},
+      "resultado_esperado": "Plano de implementação textual",
+      "rubrica": ["usa a arquitetura anterior", "descreve passos de implementação"],
+      "depende_de": ["arquiteto"]
+    },
+    {
+      "id": "validador",
+      "papel": "validador",
+      "objetivo": "Validar a implementação proposta contra a arquitetura",
+      "entradas": {},
+      "resultado_esperado": "Checklist textual de validação",
+      "rubrica": ["cita arquitetura e implementação", "aponta riscos ou pendências"],
+      "depende_de": ["codificador"]
+    }
+  ],
+  "gates": [],
+  "sintese": {
+    "instrucao": "Consolide as três etapas em uma resposta curta",
+    "formato": "markdown"
+  }
+}

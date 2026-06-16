@@ -63,7 +63,7 @@ Missão global: {missao_objetivo}
 Contexto: {missao_contexto}
 Seu objetivo: {objetivo}
 Entradas: {entradas}
-Resultado esperado: {resultado_esperado}{feedback}
+Resultado esperado: {resultado_esperado}{deps_txt}{feedback}
 
 Entregue diretamente o resultado, específico e fundamentado."""
 
@@ -181,12 +181,20 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
     def rota_pos_plano(state: EstadoMotor):
         if state.get("avaliacao", {}).get("abortada"):
             return END
+        if state["spec"]["padrao"] == "grafo_dependencias":
+            return "executar_grafo_dep"
         return despachar(state)
 
     def subagente(payload: dict) -> dict:
         sub, spec = payload["sub"], payload["spec"]
         missao = spec["missao"]
         max_t = spec["restricoes"]["max_tentativas"]
+        deps = payload.get("deps", {})
+        deps_txt = ""
+        if deps:
+            deps_txt = "\nResultados das dependências:\n" + "\n".join(
+                f"- {sid}: {saida}" for sid, saida in deps.items()
+            )
         # Guard de independência: o verifier deve evitar o provedor DO executor desta
         # tarefa (cross-model anti-auto-aprovação). Só quando o cliente sabe rotear.
         prov_exec = (cliente.provedor_de(sub["papel"], sub.get("tier"), sub.get("ferramentas"),
@@ -202,6 +210,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                 missao_objetivo=missao["objetivo"], missao_contexto=missao["contexto"],
                 objetivo=sub["objetivo"], entradas=json.dumps(sub["entradas"], ensure_ascii=False),
                 resultado_esperado=sub["resultado_esperado"],
+                deps_txt=deps_txt,
                 feedback=f"\nNa tentativa anterior o verificador reprovou: \"{feedback}\". Corrija." if feedback else "",
             ), ferramentas=sub.get("ferramentas"), tier=sub.get("tier"),
                 capacidades=sub.get("capacidades_requeridas"))
@@ -222,6 +231,33 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
             log.evento("portao.reprovado", portao=f"verifier:{sub['id']}", ciclo=tentativa, motivo=feedback)
         return {"resultados": [{"id": sub["id"], "saida": ultima or "",
                                 "tentativas": max_t, "aprovado": False, "motivo": feedback}]}
+
+    def executar_grafo_dep(state: EstadoMotor) -> dict:
+        spec = state["spec"]
+        subs = {s["id"]: s for s in spec["subagentes"]}
+        concluidos: dict[str, dict[str, Any]] = {}
+        resultados: list[dict[str, Any]] = []
+        restantes = set(subs)
+        log.evento("grafo_dep.iniciado", subagentes=list(subs))
+        while restantes:
+            onda = sorted(
+                sid for sid in restantes
+                if set(subs[sid].get("depende_de", [])) <= set(concluidos)
+            )
+            if not onda:
+                log.evento("grafo_dep.travado", restantes=sorted(restantes))
+                break
+            log.evento("onda.iniciada", ids=onda)
+            for sid in onda:
+                sub = subs[sid]
+                deps = {d: concluidos[d]["saida"] for d in sub.get("depende_de", [])}
+                retorno = subagente({"sub": sub, "spec": spec, "deps": deps})
+                resultado = retorno["resultados"][0]
+                concluidos[sid] = resultado
+                resultados.append(resultado)
+                restantes.discard(sid)
+            log.evento("onda.concluida", ids=onda)
+        return {"resultados": resultados}
 
     def avaliar_cobertura(spec: dict[str, Any], resultados: list[dict[str, Any]]) -> dict[str, Any]:
         reprovados = [r["id"] for r in resultados if not r["aprovado"]]
@@ -322,12 +358,14 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
     g.add_node("planner", planner)
     g.add_node("revisar_plano", revisar_plano)
     g.add_node("subagente", subagente)  # type: ignore[arg-type]
+    g.add_node("executar_grafo_dep", executar_grafo_dep)
     g.add_node("avaliar", avaliar)
     g.add_node("sintetizar", sintetizar)
     g.add_edge(START, "planner")
     g.add_edge("planner", "revisar_plano")
-    g.add_conditional_edges("revisar_plano", rota_pos_plano, ["subagente", END])
+    g.add_conditional_edges("revisar_plano", rota_pos_plano, ["subagente", "executar_grafo_dep", END])
     g.add_edge("subagente", "avaliar")
+    g.add_edge("executar_grafo_dep", "avaliar")
     g.add_conditional_edges("avaliar", rota_pos_avaliacao, ["sintetizar", END])
     g.add_edge("sintetizar", END)
     return g.compile(checkpointer=checkpointer)

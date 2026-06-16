@@ -33,7 +33,7 @@ class Subagente(BaseModel):
         description="capacidades que a tarefa exige (ex.: codigo, redacao, calculo). "
                     "Vazio → roteia por tier/papel como antes. O cliente escolhe o "
                     "executor mais barato que cobre TODAS estas capacidades.")
-    depende_de: list[str] = Field(default_factory=list, description="reservado; v0 só executa fan-out paralelo")
+    depende_de: list[str] = Field(default_factory=list, description="ids de subagentes dos quais este depende")
 
 
 class GateFundador(BaseModel):
@@ -57,7 +57,7 @@ class Sintese(BaseModel):
 
 class WorkflowSpec(BaseModel):
     versao: str = VERSAO_SUPORTADA
-    padrao: Literal["fan_out_sintese"] = "fan_out_sintese"
+    padrao: Literal["fan_out_sintese", "grafo_dependencias"] = "fan_out_sintese"
     missao: Missao
     restricoes: Restricoes = Field(default_factory=Restricoes)
     subagentes: list[Subagente] = Field(min_length=1)
@@ -73,10 +73,43 @@ class WorkflowSpec(BaseModel):
             raise ValueError("ids de subagentes duplicados")
         if len(ids) > self.restricoes.max_subagentes:
             raise ValueError(f"{len(ids)} subagentes excede max_subagentes={self.restricoes.max_subagentes}")
+        if self.padrao == "fan_out_sintese":
+            for s in self.subagentes:
+                if s.depende_de:
+                    raise ValueError(
+                        f"subagente '{s.id}' usa depende_de — o padrão fan_out_sintese v0 "
+                        "só executa em paralelo; ondas/dependências entram em padrão futuro"
+                    )
+            return self
+
+        id_set = set(ids)
+        deps_por_id = {s.id: list(s.depende_de) for s in self.subagentes}
         for s in self.subagentes:
-            if s.depende_de:
-                raise ValueError(
-                    f"subagente '{s.id}' usa depende_de — o padrão fan_out_sintese v0 "
-                    "só executa em paralelo; ondas/dependências entram em padrão futuro"
-                )
+            for dep in s.depende_de:
+                if dep not in id_set:
+                    raise ValueError(f"subagente '{s.id}' depende de id inexistente '{dep}'")
+                if dep == s.id:
+                    raise ValueError(f"subagente '{s.id}' não pode depender de si mesmo")
+
+        visitando: set[str] = set()
+        visitados: set[str] = set()
+        pilha: list[str] = []
+
+        def visitar(sid: str) -> None:
+            if sid in visitados:
+                return
+            if sid in visitando:
+                inicio = pilha.index(sid) if sid in pilha else 0
+                ciclo = pilha[inicio:] + [sid]
+                raise ValueError(f"ciclo em depende_de: {', '.join(ciclo)}")
+            visitando.add(sid)
+            pilha.append(sid)
+            for dep in deps_por_id[sid]:
+                visitar(dep)
+            pilha.pop()
+            visitando.remove(sid)
+            visitados.add(sid)
+
+        for sid in ids:
+            visitar(sid)
         return self
