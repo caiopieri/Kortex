@@ -34,6 +34,7 @@ class Subagente(BaseModel):
                     "Vazio → roteia por tier/papel como antes. O cliente escolhe o "
                     "executor mais barato que cobre TODAS estas capacidades.")
     depende_de: list[str] = Field(default_factory=list, description="ids de subagentes dos quais este depende")
+    produz_artefatos: list[dict[str, Any]] = Field(default_factory=list, description="artefatos textuais produzidos pelo nó")
 
 
 class GateFundador(BaseModel):
@@ -73,6 +74,14 @@ class WorkflowSpec(BaseModel):
             raise ValueError("ids de subagentes duplicados")
         if len(ids) > self.restricoes.max_subagentes:
             raise ValueError(f"{len(ids)} subagentes excede max_subagentes={self.restricoes.max_subagentes}")
+        for s in self.subagentes:
+            if len(s.produz_artefatos) > 1:
+                raise ValueError(f"subagente '{s.id}' declara mais de um artefato")
+            for artefato in s.produz_artefatos:
+                if not str(artefato.get("nome", "")).strip():
+                    raise ValueError(f"subagente '{s.id}' declara artefato sem nome")
+                if not str(artefato.get("tipo", "")).strip():
+                    raise ValueError(f"subagente '{s.id}' declara artefato sem tipo")
         if self.padrao == "fan_out_sintese":
             for s in self.subagentes:
                 if s.depende_de:

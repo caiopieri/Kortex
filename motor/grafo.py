@@ -13,8 +13,12 @@ Regras de fronteira (anti-lock-in):
 """
 from __future__ import annotations
 
+import hashlib
 import json
+from datetime import datetime
+from pathlib import Path
 from typing import Annotated, Any, TypedDict
+from uuid import uuid4
 
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send, interrupt
@@ -36,6 +40,7 @@ def mesclar_resultados(a: list[dict[str, Any]], b: list[dict[str, Any]]) -> list
 class EstadoMotor(TypedDict, total=False):
     missao_texto: str
     spec: dict[str, Any]
+    run_id: str
     resultados: Annotated[list[dict[str, Any]], mesclar_resultados]
     avaliacao: dict[str, Any]
     resposta_final: str
@@ -98,18 +103,37 @@ Resultados verificados dos subagentes:
 Produza a resposta final da missão."""
 
 
+def registrar_artefato(workspace: str | Path, nome: str, tipo: str, conteudo: str) -> dict[str, str]:
+    """Escreve conteúdo textual no workspace e devolve só a referência serializável."""
+    raiz = Path(workspace)
+    raiz.mkdir(parents=True, exist_ok=True)
+    caminho = raiz / nome
+    caminho.write_text(conteudo, encoding="utf-8")
+    digest = hashlib.sha256(conteudo.encode("utf-8")).hexdigest()
+    return {"nome": nome, "caminho": str(caminho), "tipo": tipo, "hash": digest}
+
+
 def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
-                    politica: PoliticaGates | None = None):
+                    politica: PoliticaGates | None = None,
+                    workspace_base: str | Path = "runs"):
     """Compila o grafo. `cliente` e `log` são injetados — o grafo não conhece backends.
     `politica` decide quais gates pausam (manual) ou resolvem sozinhos (auto-mode);
     ausente = tudo manual (comportamento default)."""
     politica = politica or PoliticaGates()
+    workspace_base = Path(workspace_base)
+
+    def run_id_de(state: EstadoMotor) -> str:
+        return state.get("run_id") or f"{datetime.now():%Y%m%d-%H%M%S}-{uuid4().hex[:6]}"
+
+    def workspace_de(state: EstadoMotor) -> Path:
+        return workspace_base / state["run_id"] / "artefatos"
 
     def planner(state: EstadoMotor) -> dict:
+        run_id = run_id_de(state)
         if state.get("spec"):  # spec fornecida pelo usuário: valida e segue (missão dirigida por dado)
             spec = WorkflowSpec.model_validate(state["spec"])
             log.evento("spec.recebida", missao=spec.missao.id, subagentes=len(spec.subagentes))
-            return {"spec": spec.model_dump()}
+            return {"spec": spec.model_dump(), "run_id": run_id}
         erro = ""
         for tentativa in (1, 2, 3):
             log.evento("executor.chamado", executor="planner", tentativa=tentativa)
@@ -122,7 +146,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                 try:
                     spec = WorkflowSpec.model_validate(bruto)
                     log.evento("spec.criada", missao=spec.missao.id, subagentes=len(spec.subagentes))
-                    return {"spec": spec.model_dump()}
+                    return {"spec": spec.model_dump(), "run_id": run_id}
                 except Exception as ex:  # validação pydantic reprovada → reinjeta o erro
                     erro = f"\n\nSua tentativa anterior falhou na validação: {ex}\nCorrija e reenvie só o JSON."
             log.evento("executor.erro", executor="planner", motivo="spec inválida ou sem JSON", tentativa=tentativa)
@@ -176,7 +200,8 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
     def despachar(state: EstadoMotor):
         spec = state["spec"]
         log.evento("paralelo.iniciado", subagentes=[s["id"] for s in spec["subagentes"]])
-        return [Send("subagente", {"sub": s, "spec": spec}) for s in spec["subagentes"]]
+        workspace = workspace_de(state)
+        return [Send("subagente", {"sub": s, "spec": spec, "workspace": workspace}) for s in spec["subagentes"]]
 
     def rota_pos_plano(state: EstadoMotor):
         if state.get("avaliacao", {}).get("abortada"):
@@ -225,8 +250,15 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
             ), **kw_verifier) or "") or {"aprovado": False, "motivo": "verifier sem JSON"}
             if veredito.get("aprovado"):
                 log.evento("portao.aprovado", portao=f"verifier:{sub['id']}", ciclo=tentativa)
-                return {"resultados": [{"id": sub["id"], "saida": ultima,
-                                        "tentativas": tentativa, "aprovado": True}]}
+                resultado = {"id": sub["id"], "saida": ultima,
+                             "tentativas": tentativa, "aprovado": True}
+                if sub.get("produz_artefatos"):
+                    artefato = sub["produz_artefatos"][0]
+                    nome = f"{sub['id']}__{artefato['nome']}"
+                    ref = registrar_artefato(payload["workspace"], nome, artefato["tipo"], ultima)
+                    ref["nome"] = artefato["nome"]
+                    resultado["artefatos"] = [ref]
+                return {"resultados": [resultado]}
             feedback = veredito.get("motivo", "sem motivo")
             log.evento("portao.reprovado", portao=f"verifier:{sub['id']}", ciclo=tentativa, motivo=feedback)
         return {"resultados": [{"id": sub["id"], "saida": ultima or "",
@@ -235,6 +267,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
     def executar_grafo_dep(state: EstadoMotor) -> dict:
         spec = state["spec"]
         subs = {s["id"]: s for s in spec["subagentes"]}
+        workspace = workspace_de(state)
         concluidos: dict[str, dict[str, Any]] = {}
         resultados: list[dict[str, Any]] = []
         restantes = set(subs)
@@ -251,7 +284,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
             for sid in onda:
                 sub = subs[sid]
                 deps = {d: concluidos[d]["saida"] for d in sub.get("depende_de", [])}
-                retorno = subagente({"sub": sub, "spec": spec, "deps": deps})
+                retorno = subagente({"sub": sub, "spec": spec, "deps": deps, "workspace": workspace})
                 resultado = retorno["resultados"][0]
                 concluidos[sid] = resultado
                 resultados.append(resultado)
@@ -295,6 +328,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         return decisao
 
     def preencher_lacunas(spec: dict[str, Any], resultados: list[dict[str, Any]],
+                          workspace: Path,
                           veredito: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         reprovados = {r["id"] for r in resultados if not r["aprovado"]}
         lacunas = [str(l) for l in veredito.get("lacunas", [])]
@@ -306,7 +340,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         novos: list[dict[str, Any]] = []
         for sid in ids:
             feedback = "; ".join(l for l in lacunas if sid in l)
-            retorno = subagente({"sub": por_id[sid], "spec": spec, "feedback": feedback})
+            retorno = subagente({"sub": por_id[sid], "spec": spec, "feedback": feedback, "workspace": workspace})
             novos.extend(retorno["resultados"])
             log.evento("lacuna.preenchida", subagente=sid)
         return mesclar_resultados(resultados, novos), novos
@@ -328,7 +362,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         decisao = decidir_cobertura(veredito, permitir_preencher=True)
 
         if str(decisao).strip().lower().startswith("preench"):
-            resultados, novos = preencher_lacunas(spec, resultados, veredito)
+            resultados, novos = preencher_lacunas(spec, resultados, workspace_de(state), veredito)
             if novos:
                 veredito = avaliar_cobertura(spec, resultados)
                 if veredito.get("aprovado"):

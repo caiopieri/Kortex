@@ -13,6 +13,7 @@
                                                # numa chave (papel|tier|"*"), precedência máxima.
                                                # Pins globais (todos os projetos): ~/.motor/pins.json
   python -m motor ... --registro "4. Registry/Modelos"  # catálogo via entidades .md
+  python -m motor ... --workspace runs  # base dos artefatos por execução
 
 Requer `claude` CLI no PATH (Mac do Caio). Gate do fundador: sem `--caixa`, a
 decisão é via input() e o checkpointer é em memória (volátil). Com `--caixa
@@ -63,6 +64,12 @@ def main() -> int:
     if "--caixa" in args:
         i = args.index("--caixa")
         dir_caixa = args[i + 1]
+        args = args[:i] + args[i + 2:]
+
+    workspace_base = "runs"
+    if "--workspace" in args:
+        i = args.index("--workspace")
+        workspace_base = args[i + 1]
         args = args[:i] + args[i + 2:]
 
     # --modelos <cfg.json>: multi-provider (papéis baratos → OpenAI-compat;
@@ -157,13 +164,15 @@ def main() -> int:
         conn = sqlite3.connect(str(raiz / "motor.db"), check_same_thread=False)
         checkpointer = SqliteSaver(conn)
         checkpointer.setup()
-        grafo = construir_grafo(cliente, log, checkpointer=checkpointer, politica=politica)
+        grafo = construir_grafo(cliente, log, checkpointer=checkpointer, politica=politica,
+                                workspace_base=workspace_base)
         caixa = CaixaFundador(dir_caixa, log)
         resultado = rodar_com_caixa(grafo, entrada, config, caixa, log)
         conn.close()
     else:
         # Comportamento default intacto: input() + InMemorySaver (volátil).
-        grafo = construir_grafo(cliente, log, checkpointer=InMemorySaver(), politica=politica)
+        grafo = construir_grafo(cliente, log, checkpointer=InMemorySaver(), politica=politica,
+                                workspace_base=workspace_base)
         resultado = grafo.invoke(entrada, config)
         while "__interrupt__" in resultado:  # gate do fundador
             pedido = resultado["__interrupt__"][0].value
