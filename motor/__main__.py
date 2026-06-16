@@ -41,7 +41,7 @@ from .caixa import CaixaFundador, rodar_com_caixa
 from .eventos import LogEventos
 from .grafo import construir_grafo
 from .modelos import ClienteClaudeCLI, ClienteModelo, cliente_de_config
-from .registro import cliente_de_registro
+from .registro import cliente_de_registro, ferramentas_de_registro
 
 
 def _merge_cfg(base: dict, over: dict) -> dict:
@@ -144,12 +144,15 @@ def main() -> int:
     config = {"configurable": {"thread_id": "cli"}}
     if dir_registro is not None:
         cliente: ClienteModelo = cliente_de_registro(dir_registro, log=log)
+        ferramentas = ferramentas_de_registro(dir_registro)
     elif cfg_modelos and ("provedores" in cfg_modelos or "base_url" in cfg_modelos):
         cliente = cliente_de_config(cfg_modelos, log=log)
+        ferramentas = {}
     else:
         if cfg_modelos and cfg_modelos.get("pins"):
             print("aviso: pins ignorados — precisam de 'provedores' (via --modelos ou ~/.motor/pins.json).")
         cliente = ClienteClaudeCLI(log=log)
+        ferramentas = {}
     if esgotados:
         if hasattr(cliente, "esgotados"):
             cliente.esgotados |= set(esgotados)
@@ -165,14 +168,14 @@ def main() -> int:
         checkpointer = SqliteSaver(conn)
         checkpointer.setup()
         grafo = construir_grafo(cliente, log, checkpointer=checkpointer, politica=politica,
-                                workspace_base=workspace_base)
+                                workspace_base=workspace_base, ferramentas=ferramentas)
         caixa = CaixaFundador(dir_caixa, log)
         resultado = rodar_com_caixa(grafo, entrada, config, caixa, log)
         conn.close()
     else:
         # Comportamento default intacto: input() + InMemorySaver (volátil).
         grafo = construir_grafo(cliente, log, checkpointer=InMemorySaver(), politica=politica,
-                                workspace_base=workspace_base)
+                                workspace_base=workspace_base, ferramentas=ferramentas)
         resultado = grafo.invoke(entrada, config)
         while "__interrupt__" in resultado:  # gate do fundador
             pedido = resultado["__interrupt__"][0].value

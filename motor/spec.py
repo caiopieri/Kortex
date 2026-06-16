@@ -21,11 +21,13 @@ class Restricoes(BaseModel):
 
 class Subagente(BaseModel):
     id: str = Field(min_length=1)
-    papel: str = Field(min_length=1, description="papel de modelo (mapeado no cliente: pesquisador, redator...)")
+    tipo: Literal["modelo", "ferramenta"] = "modelo"
+    papel: Optional[str] = Field(default=None, description="papel de modelo (mapeado no cliente: pesquisador, redator...)")
+    ferramenta: Optional[str] = Field(default=None, description="nome lógico da ferramenta determinística")
     objetivo: str = Field(min_length=1)
     entradas: dict[str, Any] = Field(default_factory=dict)
     resultado_esperado: str = Field(min_length=1)
-    rubrica: list[str] = Field(min_length=1, description="critérios objetivos que o verifier checa")
+    rubrica: list[str] = Field(default_factory=list, description="critérios objetivos que o verifier checa")
     ferramentas: Optional[str] = Field(default=None, description="ex.: 'WebSearch' para claude -p")
     tier: Optional[str] = Field(default=None, description="classe de complexidade p/ roteamento por custo (ex.: simples/media/complexa); o planner classifica, a tabela tiers do cliente mapeia tier→modelo. Ausente → roteia por papel.")
     capacidades_requeridas: list[str] = Field(
@@ -75,6 +77,13 @@ class WorkflowSpec(BaseModel):
         if len(ids) > self.restricoes.max_subagentes:
             raise ValueError(f"{len(ids)} subagentes excede max_subagentes={self.restricoes.max_subagentes}")
         for s in self.subagentes:
+            if s.tipo == "modelo":
+                if not s.papel:
+                    raise ValueError(f"subagente '{s.id}' do tipo modelo exige papel")
+                if not s.rubrica:
+                    raise ValueError(f"subagente '{s.id}' do tipo modelo exige rubrica")
+            if s.tipo == "ferramenta" and not s.ferramenta:
+                raise ValueError(f"subagente '{s.id}' do tipo ferramenta exige ferramenta")
             if len(s.produz_artefatos) > 1:
                 raise ValueError(f"subagente '{s.id}' declara mais de um artefato")
             for artefato in s.produz_artefatos:

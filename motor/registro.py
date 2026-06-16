@@ -6,6 +6,7 @@ fronteira do motor: quem chama recebe um ClienteRoteador pronto.
 from __future__ import annotations
 
 import os
+import json
 from pathlib import Path
 from typing import Any, Optional
 
@@ -25,6 +26,10 @@ def _valor_frontmatter(valor: str) -> Any:
     if valor in {"true", "false"}:
         return valor == "true"
     if valor.startswith("[") and valor.endswith("]"):
+        try:
+            return json.loads(valor)
+        except json.JSONDecodeError:
+            pass
         miolo = valor[1:-1].strip()
         if not miolo:
             return []
@@ -157,3 +162,22 @@ def cliente_de_registro(pasta: str | Path, log: Optional[Any] = None) -> Cliente
 
     return ClienteRoteador(padrao=padrao, mapa=mapa, tiers=tiers, cadeia=cadeia,
                            catalogo=catalogo, log=log)
+
+
+def ferramentas_de_registro(pasta: str | Path) -> dict[str, dict[str, Any]]:
+    """Carrega entidades `tipo: ferramenta` do Registry, indexadas pelo nome lógico."""
+    raiz = Path(pasta)
+    ferramentas: dict[str, dict[str, Any]] = {}
+    dono: dict[str, str] = {}
+    for caminho in sorted(raiz.glob("*.md"), key=lambda p: p.name):
+        dados = _frontmatter(caminho)
+        if dados.get("tipo") != "ferramenta":
+            continue
+        nome = str(dados.get("nome") or "").strip()
+        if not nome:
+            raise ValueError(f"ferramenta sem nome em {caminho.name}")
+        if nome in ferramentas:
+            raise ValueError(f"ferramenta {nome!r} duplicada em {dono[nome]} e {caminho.name}")
+        ferramentas[nome] = dados
+        dono[nome] = caminho.name
+    return ferramentas

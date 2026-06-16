@@ -15,6 +15,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shlex
+import shutil
+import subprocess
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any, TypedDict
@@ -113,14 +116,22 @@ def registrar_artefato(workspace: str | Path, nome: str, tipo: str, conteudo: st
     return {"nome": nome, "caminho": str(caminho), "tipo": tipo, "hash": digest}
 
 
+def referenciar_artefato(caminho: str | Path, nome: str, tipo: str) -> dict[str, str]:
+    caminho = Path(caminho)
+    digest = hashlib.sha256(caminho.read_bytes()).hexdigest()
+    return {"nome": nome, "caminho": str(caminho), "tipo": tipo, "hash": digest}
+
+
 def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                     politica: PoliticaGates | None = None,
-                    workspace_base: str | Path = "runs"):
+                    workspace_base: str | Path = "runs",
+                    ferramentas: dict[str, dict[str, Any]] | None = None):
     """Compila o grafo. `cliente` e `log` são injetados — o grafo não conhece backends.
     `politica` decide quais gates pausam (manual) ou resolvem sozinhos (auto-mode);
     ausente = tudo manual (comportamento default)."""
     politica = politica or PoliticaGates()
     workspace_base = Path(workspace_base)
+    ferramentas = ferramentas or {}
 
     def run_id_de(state: EstadoMotor) -> str:
         return state.get("run_id") or f"{datetime.now():%Y%m%d-%H%M%S}-{uuid4().hex[:6]}"
@@ -155,12 +166,14 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
     def plano_de(spec: dict[str, Any]) -> list[dict[str, Any]]:
         plano = []
         for sub in spec["subagentes"]:
-            modelo = (cliente.provedor_de(sub["papel"], sub.get("tier"), sub.get("ferramentas"),
-                                          capacidades=sub.get("capacidades_requeridas"))
-                      if hasattr(cliente, "provedor_de") else None)
+            modelo = None
+            if sub.get("tipo", "modelo") == "modelo":
+                modelo = (cliente.provedor_de(sub["papel"], sub.get("tier"), sub.get("ferramentas"),
+                                              capacidades=sub.get("capacidades_requeridas"))
+                          if hasattr(cliente, "provedor_de") else None)
             plano.append({
                 "id": sub["id"],
-                "papel": sub["papel"],
+                "papel": sub.get("papel"),
                 "tier": sub.get("tier"),
                 "modelo": modelo,
             })
@@ -220,6 +233,9 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
             deps_txt = "\nResultados das dependências:\n" + "\n".join(
                 f"- {sid}: {saida}" for sid, saida in deps.items()
             )
+        if sub.get("tipo", "modelo") == "ferramenta":
+            return executar_ferramenta(sub, payload["workspace"])
+
         # Guard de independência: o verifier deve evitar o provedor DO executor desta
         # tarefa (cross-model anti-auto-aprovação). Só quando o cliente sabe rotear.
         prov_exec = (cliente.provedor_de(sub["papel"], sub.get("tier"), sub.get("ferramentas"),
@@ -263,6 +279,89 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
             log.evento("portao.reprovado", portao=f"verifier:{sub['id']}", ciclo=tentativa, motivo=feedback)
         return {"resultados": [{"id": sub["id"], "saida": ultima or "",
                                 "tentativas": max_t, "aprovado": False, "motivo": feedback}]}
+
+    def executar_ferramenta(sub: dict[str, Any], workspace: Path) -> dict:
+        nome_ferramenta = str(sub.get("ferramenta") or "")
+        ferramenta = ferramentas.get(nome_ferramenta)
+        if ferramenta is None:
+            motivo = f"ferramenta '{nome_ferramenta}' não registrada"
+            log.evento("ferramenta.indisponivel", ferramenta=nome_ferramenta, motivo=motivo)
+            return {"resultados": [{"id": sub["id"], "saida": "", "tentativas": 1,
+                                    "aprovado": False, "motivo": motivo}]}
+
+        comando_tpl = str(ferramenta.get("comando") or "")
+        produz = ferramenta.get("produz") or []
+        if not isinstance(produz, list):
+            produz = []
+        workspace.mkdir(parents=True, exist_ok=True)
+        valores = {chave: str(valor) for chave, valor in sub.get("entradas", {}).items()}
+        saidas_por_placeholder: dict[str, dict[str, str]] = {}
+        for item in produz:
+            if not isinstance(item, dict):
+                continue
+            nome = str(item.get("nome") or "").strip()
+            tipo = str(item.get("tipo") or "").strip()
+            placeholder = str(item.get("de_placeholder") or "").strip()
+            if nome and placeholder:
+                caminho_saida = workspace / f"{sub['id']}__{nome}"
+                valores[placeholder] = str(caminho_saida)
+                saidas_por_placeholder[placeholder] = {"nome": nome, "tipo": tipo, "caminho": str(caminho_saida)}
+        try:
+            comando = comando_tpl.format_map(valores)
+        except KeyError as ex:
+            motivo = f"placeholder sem entrada: {ex.args[0]}"
+            log.evento("ferramenta.indisponivel", ferramenta=nome_ferramenta, motivo=motivo)
+            return {"resultados": [{"id": sub["id"], "saida": "", "tentativas": 1,
+                                    "aprovado": False, "motivo": motivo}]}
+
+        try:
+            partes = shlex.split(comando)
+        except ValueError as ex:
+            motivo = f"comando inválido: {ex}"
+            log.evento("ferramenta.indisponivel", ferramenta=nome_ferramenta, motivo=motivo)
+            return {"resultados": [{"id": sub["id"], "saida": "", "tentativas": 1,
+                                    "aprovado": False, "motivo": motivo}]}
+        if not partes or shutil.which(partes[0]) is None:
+            executavel = partes[0] if partes else ""
+            motivo = f"executável ausente: {executavel}"
+            log.evento("ferramenta.indisponivel", ferramenta=nome_ferramenta, motivo=motivo)
+            return {"resultados": [{"id": sub["id"], "saida": "", "tentativas": 1,
+                                    "aprovado": False, "motivo": motivo}]}
+
+        try:
+            proc = subprocess.run(partes, capture_output=True, text=True, timeout=300, stdin=subprocess.DEVNULL)
+            saida = "\n".join(p for p in [proc.stdout.strip(), proc.stderr.strip()] if p)
+            aprovado = proc.returncode == 0 if ferramenta.get("interpreta_saida") == "exit_code" else False
+            motivo = "" if aprovado else (saida or f"exit_code={proc.returncode}")
+            artefatos = []
+            if aprovado:
+                for ref in saidas_por_placeholder.values():
+                    caminho = Path(ref["caminho"])
+                    if not caminho.exists():
+                        aprovado = False
+                        motivo = f"artefato não produzido: {ref['nome']}"
+                        break
+                    artefatos.append(referenciar_artefato(caminho, ref["nome"], ref["tipo"]))
+            log.evento("ferramenta.executada", ferramenta=nome_ferramenta,
+                       subagente=sub["id"], aprovado=aprovado)
+            resultado = {"id": sub["id"], "saida": saida, "tentativas": 1,
+                         "aprovado": aprovado}
+            if motivo:
+                resultado["motivo"] = motivo
+            if artefatos:
+                resultado["artefatos"] = artefatos
+            return {"resultados": [resultado]}
+        except FileNotFoundError:
+            motivo = f"executável ausente: {partes[0]}"
+            log.evento("ferramenta.indisponivel", ferramenta=nome_ferramenta, motivo=motivo)
+            return {"resultados": [{"id": sub["id"], "saida": "", "tentativas": 1,
+                                    "aprovado": False, "motivo": motivo}]}
+        except subprocess.TimeoutExpired:
+            motivo = "timeout ao executar ferramenta"
+            log.evento("ferramenta.executada", ferramenta=nome_ferramenta,
+                       subagente=sub["id"], aprovado=False)
+            return {"resultados": [{"id": sub["id"], "saida": "", "tentativas": 1,
+                                    "aprovado": False, "motivo": motivo}]}
 
     def executar_grafo_dep(state: EstadoMotor) -> dict:
         spec = state["spec"]
