@@ -37,6 +37,7 @@ class Subagente(BaseModel):
                     "executor mais barato que cobre TODAS estas capacidades.")
     depende_de: list[str] = Field(default_factory=list, description="ids de subagentes dos quais este depende")
     produz_artefatos: list[dict[str, Any]] = Field(default_factory=list, description="artefatos textuais produzidos pelo nó")
+    produz: list[dict[str, Any]] = Field(default_factory=list, description="artefatos declarados por nó-ferramenta")
 
 
 class GateFundador(BaseModel):
@@ -86,7 +87,7 @@ class WorkflowSpec(BaseModel):
                 raise ValueError(f"subagente '{s.id}' do tipo ferramenta exige ferramenta")
             if len(s.produz_artefatos) > 1:
                 raise ValueError(f"subagente '{s.id}' declara mais de um artefato")
-            for artefato in s.produz_artefatos:
+            for artefato in [*s.produz_artefatos, *s.produz]:
                 if not str(artefato.get("nome", "")).strip():
                     raise ValueError(f"subagente '{s.id}' declara artefato sem nome")
                 if not str(artefato.get("tipo", "")).strip():
@@ -130,4 +131,36 @@ class WorkflowSpec(BaseModel):
 
         for sid in ids:
             visitar(sid)
+
+        def refs_artefato(valor: Any) -> list[dict[str, Any]]:
+            refs: list[dict[str, Any]] = []
+            if isinstance(valor, dict):
+                ref = valor.get("ref_artefato")
+                if isinstance(ref, dict):
+                    refs.append(ref)
+                for item in valor.values():
+                    refs.extend(refs_artefato(item))
+            elif isinstance(valor, list):
+                for item in valor:
+                    refs.extend(refs_artefato(item))
+            return refs
+
+        sub_por_id = {s.id: s for s in self.subagentes}
+        for s in self.subagentes:
+            deps = set(s.depende_de)
+            for ref in refs_artefato(s.entradas):
+                origem = str(ref.get("de") or "")
+                nome = str(ref.get("nome") or "")
+                if origem not in deps:
+                    raise ValueError(
+                        f"ref_artefato de '{s.id}' aponta para '{origem}', que não está em depende_de"
+                    )
+                declarados = [
+                    str(a.get("nome") or "")
+                    for a in [*sub_por_id[origem].produz_artefatos, *sub_por_id[origem].produz]
+                ]
+                if nome not in declarados:
+                    raise ValueError(
+                        f"ref_artefato de '{s.id}' aponta para artefato '{nome}' não declarado por '{origem}'"
+                    )
         return self

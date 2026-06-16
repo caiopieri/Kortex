@@ -381,7 +381,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                 break
             log.evento("onda.iniciada", ids=onda)
             for sid in onda:
-                sub = subs[sid]
+                sub = {**subs[sid], "entradas": resolver_refs_artefato(subs[sid].get("entradas", {}), concluidos)}
                 deps = {d: concluidos[d]["saida"] for d in sub.get("depende_de", [])}
                 retorno = subagente({"sub": sub, "spec": spec, "deps": deps, "workspace": workspace})
                 resultado = retorno["resultados"][0]
@@ -390,6 +390,22 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                 restantes.discard(sid)
             log.evento("onda.concluida", ids=onda)
         return {"resultados": resultados}
+
+    def resolver_refs_artefato(valor: Any, concluidos: dict[str, dict[str, Any]]) -> Any:
+        if isinstance(valor, dict):
+            ref = valor.get("ref_artefato")
+            if isinstance(ref, dict):
+                origem = str(ref.get("de") or "")
+                nome = str(ref.get("nome") or "")
+                artefatos = concluidos.get(origem, {}).get("artefatos", [])
+                for artefato in artefatos:
+                    if artefato.get("nome") == nome:
+                        return artefato["caminho"]
+                raise RuntimeError(f"artefato '{nome}' de '{origem}' não encontrado em runtime")
+            return {chave: resolver_refs_artefato(item, concluidos) for chave, item in valor.items()}
+        if isinstance(valor, list):
+            return [resolver_refs_artefato(item, concluidos) for item in valor]
+        return valor
 
     def avaliar_cobertura(spec: dict[str, Any], resultados: list[dict[str, Any]]) -> dict[str, Any]:
         reprovados = [r["id"] for r in resultados if not r["aprovado"]]
