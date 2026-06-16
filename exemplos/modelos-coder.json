@@ -1,0 +1,11 @@
+{
+  "_comentario": "Tese 'gasta menos, produz mais': EXECUÇÃO num coder barato especializado (Qwen3-Coder via OpenCode), JULGAMENTO no premium (claude/padrão). Cross-model garantido: executor='oc', juiz='claude' (provedores diferentes). Rode `opencode models` pra confirmar o id exato do coder na tua conta e ajuste o destino abaixo. Auth: `opencode auth login`.",
+  "provedores": {
+    "oc": { "tipo": "opencode", "permissao": "{\"edit\":\"deny\",\"bash\":\"deny\"}" }
+  },
+  "tiers": {
+    "simples": "oc/qwen/qwen3-coder",
+    "media":   "oc/qwen/qwen3-coder",
+    "complexa": "padrao"
+  }
+}

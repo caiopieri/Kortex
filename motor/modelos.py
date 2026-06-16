@@ -103,7 +103,8 @@ class ClienteRoteador:
         if self.log is not None:
             self.log.evento(tipo, **dados)
 
-    def _disponivel(self, cliente: "ClienteModelo", papel: Optional[str] = None) -> "ClienteModelo":
+    def _disponivel(self, cliente: "ClienteModelo", papel: Optional[str] = None,
+                    emitir: bool = True) -> "ClienteModelo":
         """Se o provedor do `cliente` está esgotado, reroteia pro 1º da cadeia (+ padrao)
         que não esteja esgotado. Tudo esgotado → devolve o original (deixa falhar e
         virar evento — nunca trava esperando um provedor que acabou)."""
@@ -111,28 +112,65 @@ class ClienteRoteador:
             return cliente
         for alt in [*self.cadeia, self.padrao]:
             if getattr(alt, "provedor", None) not in self.esgotados:
-                self._evento("modelo.reroteado_esgotado", papel=papel,
-                             de=getattr(cliente, "provedor", None),
-                             para=getattr(alt, "provedor", None))
+                if emitir:
+                    self._evento("modelo.reroteado_esgotado", papel=papel,
+                                 de=getattr(cliente, "provedor", None),
+                                 para=getattr(alt, "provedor", None))
                 return alt
         return cliente
 
-    def chamar(self, papel: str, prompt: str, ferramentas: Optional[str] = None,
-               tier: Optional[str] = None, timeout: int = 300) -> Optional[str]:
-        cliente: "ClienteModelo"
+    def _eh_pin(self, papel: str, tier: Optional[str]) -> bool:
+        return bool(self.pins.get(papel) or (self.pins.get(tier) if tier else None) or self.pins.get("*"))
+
+    def _resolver(self, papel: str, tier: Optional[str], ferramentas: Optional[str],
+                  emitir: bool = True) -> "ClienteModelo":
+        """Resolve o cliente: pin > tier > papel > padrão, depois esgotamento e desvio
+        de ferramentas. `emitir=False` para consulta sem efeitos (provedor_de)."""
         pin = self.pins.get(papel) or (self.pins.get(tier) if tier else None) or self.pins.get("*")
         if pin is not None:                          # pin manual vence tier e papel
             cliente = pin
-            self._evento("modelo.pin", papel=papel, tier=tier)
+            if emitir:
+                self._evento("modelo.pin", papel=papel, tier=tier)
         elif tier and tier in self.tiers:
             cliente = self.tiers[tier]
-            self._evento("modelo.roteado_tier", papel=papel, tier=tier)
+            if emitir:
+                self._evento("modelo.roteado_tier", papel=papel, tier=tier)
         else:
             cliente = self.mapa.get(papel, self.padrao)
-        cliente = self._disponivel(cliente, papel)   # provedor esgotado → reroteia
+        cliente = self._disponivel(cliente, papel, emitir=emitir)   # provedor esgotado → reroteia
         if cliente is not self.padrao and ferramentas and not getattr(cliente, "suporta_ferramentas", True):
-            self._evento("modelo.roteado_ferramentas", papel=papel, ferramentas=ferramentas)
-            cliente = self._disponivel(self.padrao, papel)
+            if emitir:
+                self._evento("modelo.roteado_ferramentas", papel=papel, ferramentas=ferramentas)
+            cliente = self._disponivel(self.padrao, papel, emitir=emitir)
+        return cliente
+
+    def provedor_de(self, papel: str, tier: Optional[str] = None,
+                    ferramentas: Optional[str] = None) -> Optional[str]:
+        """Qual provedor ATENDERIA esta chamada, sem executá-la nem logar. Usado pelo
+        grafo p/ o guard de independência do juiz (verifier ≠ provedor do executor)."""
+        return getattr(self._resolver(papel, tier, ferramentas, emitir=False), "provedor", None)
+
+    def _outro_provedor(self, evitar: str) -> Optional["ClienteModelo"]:
+        """Primeiro cliente disponível (cadeia + padrao) cujo provedor != `evitar`."""
+        for alt in [*self.cadeia, self.padrao]:
+            prov = getattr(alt, "provedor", None)
+            if prov != evitar and prov not in self.esgotados:
+                return alt
+        return None
+
+    def chamar(self, papel: str, prompt: str, ferramentas: Optional[str] = None,
+               tier: Optional[str] = None, evitar: Optional[str] = None,
+               timeout: int = 300) -> Optional[str]:
+        cliente = self._resolver(papel, tier, ferramentas)
+        # Guard de independência do juiz: o verifier não pode rodar no MESMO provedor
+        # do executor que ele julga (senão o modelo se auto-aprova). `evitar` = provedor
+        # do executor. Um PIN explícito do Caio vence o guard (decisão consciente).
+        if evitar and not self._eh_pin(papel, tier) and getattr(cliente, "provedor", None) == evitar:
+            alt = self._outro_provedor(evitar)
+            if alt is not None:
+                self._evento("juiz.independencia", papel=papel, evitar=evitar,
+                             para=getattr(alt, "provedor", None))
+                cliente = alt
         resposta = cliente.chamar(papel, prompt, ferramentas=ferramentas, tier=tier, timeout=timeout)
         if resposta is None and cliente is not self.padrao:
             alvo = self._disponivel(self.padrao, papel)

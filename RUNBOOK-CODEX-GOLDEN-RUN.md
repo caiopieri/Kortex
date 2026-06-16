@@ -133,6 +133,28 @@ questiona"). Chave = papel, tier ou `"*"` (tudo). Três jeitos:
 Precedência geral: **pin (papel > tier > `*`) > tier > papel > padrão**, e o
 esgotamento (Corte B) ainda reroteia se o provedor pinado cair. Log: `modelo.pin`.
 
+## Ver os dois painéis (o teu e o do LangGraph)
+
+São **dois servidores/visões separadas**, podem rodar ao mesmo tempo:
+
+- **Teu painel** (mapa orbital, lê `log.jsonl`): roda uma missão pela CLI
+  (`python3 -m motor ...` — é o que escreve o `log.jsonl`), depois
+  `python3 motor_painel/painel.py` → http://localhost:8378.
+- **LangGraph Studio**: `langgraph dev` → abre no browser; as runs tu inicia
+  DENTRO do Studio (painel Interact).
+
+Nuance importante: o `motor/studio.py` usa um log no-op (pra não travar o event
+loop do Studio), então **runs feitas no Studio NÃO aparecem no teu painel** e
+vice-versa. Teu painel = runs da CLI; Studio = runs do Studio. Se um dia quiser
+unificar, é fazer o studio.py escrever o `log.jsonl` (de forma assíncrona).
+
+## Independência do juiz (cross-model)
+
+Automático: o verifier de cada subagente nunca roda no mesmo provedor do executor
+que ele julga (senão o modelo se auto-aprova). Se o roteamento/esgotamento tentar
+colapsar os dois no mesmo provedor, o motor desvia o juiz e loga `juiz.independencia`.
+Um PIN explícito teu no verifier vence o guard (tua decisão consciente).
+
 ## Critérios de falsificação (anota o veredito)
 
 1. **Separação de papéis real**: no `log.jsonl`, subagentes saíram do Codex e os

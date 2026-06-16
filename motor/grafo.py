@@ -129,6 +129,11 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         sub, spec = payload["sub"], payload["spec"]
         missao = spec["missao"]
         max_t = spec["restricoes"]["max_tentativas"]
+        # Guard de independência: o verifier deve evitar o provedor DO executor desta
+        # tarefa (cross-model anti-auto-aprovação). Só quando o cliente sabe rotear.
+        prov_exec = (cliente.provedor_de(sub["papel"], sub.get("tier"), sub.get("ferramentas"))
+                     if hasattr(cliente, "provedor_de") else None)
+        kw_verifier = {"evitar": prov_exec} if prov_exec else {}
         feedback, ultima = "", None
         for tentativa in range(1, max_t + 1):
             log.evento("executor.chamado", executor=sub["id"], papel=sub["papel"],
@@ -148,7 +153,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
             veredito = extrai_json(cliente.chamar("verifier", PROMPT_VERIFIER.format(
                 id=sub["id"], objetivo=sub["objetivo"],
                 rubrica="\n".join(f"- {c}" for c in sub["rubrica"]), saida=ultima,
-            )) or "") or {"aprovado": False, "motivo": "verifier sem JSON"}
+            ), **kw_verifier) or "") or {"aprovado": False, "motivo": "verifier sem JSON"}
             if veredito.get("aprovado"):
                 log.evento("portao.aprovado", portao=f"verifier:{sub['id']}", ciclo=tentativa)
                 return {"resultados": [{"id": sub["id"], "saida": ultima,

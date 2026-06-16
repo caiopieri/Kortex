@@ -541,6 +541,41 @@ def test_config_pins(monkeypatch):
     assert r.pins["synthesizer"].modelo == "openai/gpt-5.5"
 
 
+# ------------------------------------ guard de independência do juiz (cross-model)
+
+def test_provedor_de_preve_roteamento():
+    codex, claude = _stub_prov("c", "codex"), _stub_prov("k", "claude")
+    r = ClienteRoteador(padrao=claude, tiers={"media": codex})
+    assert r.provedor_de("pesquisador", tier="media") == "codex"
+    assert r.provedor_de("verifier") == "claude"   # julgamento → padrão
+
+
+def test_juiz_evita_provedor_do_executor():
+    """Verifier não pode cair no mesmo provedor do executor que julga."""
+    codex, claude = _stub_prov("do-codex", "codex"), _stub_prov("do-claude", "claude")
+    log = FakeLog()
+    # verifier resolveria pro codex (via pin de tier), mas o executor é codex → desvia
+    r = ClienteRoteador(padrao=claude, tiers={"media": codex}, cadeia=[codex], log=log)
+    # simula: verifier roteado ao codex, mas evitar=codex (provedor do executor)
+    assert r.chamar("verifier", "x", tier="media", evitar="codex") == "do-claude"
+    assert "juiz.independencia" in log.tipos()
+
+
+def test_juiz_sem_conflito_nao_desvia():
+    codex, claude = _stub_prov("do-codex", "codex"), _stub_prov("do-claude", "claude")
+    r = ClienteRoteador(padrao=claude, tiers={"media": codex})
+    # verifier no claude, executor no codex → sem conflito, não desvia
+    assert r.chamar("verifier", "x", evitar="codex") == "do-claude"
+
+
+def test_pin_vence_guard_do_juiz():
+    """Pin explícito do Caio no verifier vence o guard (decisão consciente)."""
+    codex_pin, claude = _stub_prov("PIN-CODEX", "codex"), _stub_prov("do-claude", "claude")
+    r = ClienteRoteador(padrao=claude, pins={"verifier": codex_pin}, cadeia=[claude])
+    # mesmo com evitar=codex, o pin manda
+    assert r.chamar("verifier", "x", evitar="codex") == "PIN-CODEX"
+
+
 # ------------------------------------------------- cliente_de_config: tiers (Corte A)
 
 def test_config_tiers_codex_e_padrao(monkeypatch):
