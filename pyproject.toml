@@ -11,6 +11,7 @@ dependencies = [
     # com langgraph 1.x (exige checkpoint>=4.1). Só a linha 3.x do sqlite-saver
     # é compatível com langgraph 1.x — daí ">=3,<4".
     "langgraph-checkpoint-sqlite>=3,<4",
+    "mcp>=1,<2",
 ]
 
 [project.optional-dependencies]
