@@ -58,6 +58,7 @@ class GerenciadorJobs:
 
         cliente = self._obter_cliente()
         entrada = {"missao_texto": missao_texto} if missao_texto is not None else {"spec": spec}
+        entrada["run_id"] = thread_id
         with self._lock:
             self._jobs[thread_id] = {"estado": "em_execucao"}
         self._iniciar_thread(thread_id, cliente, entrada)
@@ -130,23 +131,28 @@ class GerenciadorJobs:
                 log.fechar()
 
     def _status_duravel(self, job_id: str) -> dict:
+        log = self._log_do_job(job_id, truncar=False)
         grafo = construir_grafo(
             self._obter_cliente(),
-            self._log_do_job(job_id, truncar=False),
+            log,
             checkpointer=self._checkpointer,
             politica=self.politica,
             workspace_base=self.workspace_base,
             ferramentas=self.ferramentas,
         )
-        snapshot = grafo.get_state(self._config(job_id))
-        if getattr(snapshot, "interrupts", None):
-            return {
-                "estado": "gate_pendente",
-                "gate": snapshot.interrupts[0].value,
-            }
-        if snapshot.values.get("resposta_final") or snapshot.values.get("avaliacao", {}).get("abortada"):
-            return self._resultado_concluido(job_id, snapshot.values)
-        return {"estado": "em_execucao"}
+        try:
+            snapshot = grafo.get_state(self._config(job_id))
+            if getattr(snapshot, "interrupts", None):
+                return {
+                    "estado": "gate_pendente",
+                    "gate": snapshot.interrupts[0].value,
+                }
+            if snapshot.values.get("resposta_final") or snapshot.values.get("avaliacao", {}).get("abortada"):
+                return self._resultado_concluido(job_id, snapshot.values)
+            return {"estado": "em_execucao"}
+        finally:
+            if log is not self.log:
+                log.fechar()
 
     def _registro_de_resultado(self, resultado: dict[str, Any]) -> dict[str, Any]:
         if "__interrupt__" in resultado:
@@ -173,13 +179,32 @@ class GerenciadorJobs:
 
     def _resultado_concluido(self, job_id: str, resultado: dict[str, Any]) -> dict:
         artefatos = []
+        metricas = {}
         for item in resultado.get("resultados", []):
-            artefatos.extend(item.get("artefatos", []))
-        return {
+            sid = item.get("id")
+            for artefato in item.get("artefatos", []):
+                artefatos.append({
+                    "nome": artefato.get("nome", ""),
+                    "tipo": artefato.get("tipo", ""),
+                    "caminho": artefato.get("caminho", ""),
+                    "subagente": sid,
+                })
+            if sid and item.get("metricas"):
+                metricas[sid] = item["metricas"]
+        run_id = resultado.get("run_id") or job_id
+        saida = {
             "estado": "concluido",
             "resposta_final": resultado.get("resposta_final", ""),
             "artefatos": artefatos,
+            "run": {
+                "job_id": job_id,
+                "workspace": str(self.workspace_base / run_id),
+                "log": "log.jsonl",
+            },
         }
+        if metricas:
+            saida["metricas"] = metricas
+        return saida
 
     def _log_do_job(self, job_id: str, truncar: bool = True) -> LogEventos:
         if self.log is not None:

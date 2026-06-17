@@ -1,4 +1,6 @@
 import time
+import json
+from pathlib import Path
 
 from motor.modelos import ClienteStub
 from motor.servico import GerenciadorJobs
@@ -45,6 +47,9 @@ def test_responder_gate_retoma_e_conclui(tmp_path):
 
     assert status["resposta_final"] == "SÍNTESE FINAL DA MISSÃO"
     assert status["artefatos"] == []
+    assert status["run"]["job_id"] == "t2"
+    assert status["run"]["workspace"] == str(tmp_path / "runs" / "t2")
+    assert status["run"]["log"] == "log.jsonl"
 
 
 def test_status_reconstroi_gate_do_checkpoint_em_nova_instancia(tmp_path):
@@ -79,3 +84,71 @@ def test_responder_gate_em_job_nao_pausado_vira_erro_tratavel(tmp_path):
 
     assert status["estado"] == "erro"
     assert status["erro"]["tipo"] == "EstadoInvalido"
+
+
+def _spec_com_artefato() -> dict:
+    return {
+        "versao": "0.1",
+        "padrao": "fan_out_sintese",
+        "missao": {
+            "id": "artefato-servico",
+            "objetivo": "Gerar artefato",
+            "contexto": "",
+            "criterios_cobertura": ["artefato aprovado"],
+        },
+        "restricoes": {"teto_custo": 2.0, "max_subagentes": 10, "max_tentativas": 1},
+        "subagentes": [{
+            "id": "autor",
+            "papel": "executor",
+            "objetivo": "Gerar texto",
+            "entradas": {},
+            "resultado_esperado": "Texto final",
+            "rubrica": ["tem texto"],
+            "produz_artefatos": [{"nome": "saida.txt", "tipo": "txt"}],
+        }],
+        "gates": [],
+        "sintese": {"instrucao": "Sintetize", "formato": "markdown"},
+    }
+
+
+def test_status_concluido_traz_refs_de_artefato_sem_blob(tmp_path):
+    conteudo = "CONTEUDO PRIVADO DO ARTEFATO"
+
+    def roteador(papel: str, prompt: str):
+        if papel == "executor":
+            return conteudo
+        if papel == "verifier":
+            return json.dumps({"aprovado": True, "motivo": "ok"})
+        if papel == "evaluator":
+            return json.dumps({"aprovado": True, "lacunas": []})
+        if papel == "synthesizer":
+            return "FINAL SEM BLOB"
+        raise AssertionError(f"papel inesperado: {papel}")
+
+    gerenciador = GerenciadorJobs(
+        db_path=tmp_path / "motor.db",
+        workspace_base=tmp_path / "runs",
+        cliente=ClienteStub(roteador),
+    )
+    gerenciador.iniciar(spec=_spec_com_artefato(), thread_id="artefato")
+    aguardar_estado(gerenciador, "artefato", "gate_pendente")
+    gerenciador.responder_gate("artefato", "prosseguir")
+
+    status = aguardar_estado(gerenciador, "artefato", "concluido")
+
+    assert status["resposta_final"] == "FINAL SEM BLOB"
+    assert status["run"] == {
+        "job_id": "artefato",
+        "workspace": str(tmp_path / "runs" / "artefato"),
+        "log": "log.jsonl",
+    }
+    assert status["artefatos"] == [{
+        "nome": "saida.txt",
+        "tipo": "txt",
+        "caminho": str(tmp_path / "runs" / "artefato" / "artefatos" / "autor__saida.txt"),
+        "subagente": "autor",
+    }]
+    caminho = Path(status["artefatos"][0]["caminho"])
+    assert caminho.exists()
+    assert caminho.read_text(encoding="utf-8") == conteudo
+    assert conteudo not in json.dumps(status, ensure_ascii=False)
