@@ -98,6 +98,41 @@ def test_ferramenta_com_exit_um_reprova_com_stdout_no_motivo(tmp_path):
     assert any(e["evento"] == "ferramenta.executada" and e["aprovado"] is False for e in eventos)
 
 
+def test_ferramenta_respeita_timeout_configurado(tmp_path):
+    script = _script(tmp_path, "dorme.py", "import time\ntime.sleep(0.1)\nprint('ok')\n")
+    ferramentas = {
+        "fake": {
+            "comando": f"{sys.executable} {script}",
+            "interpreta_saida": "exit_code",
+            "timeout": 1,
+        }
+    }
+
+    resultado, _ = _rodar(tmp_path, _spec(_tool_sub()), ferramentas)
+
+    item = resultado["resultados"][0]
+    assert item["aprovado"] is True
+    assert item["saida"] == "ok"
+
+
+def test_ferramenta_timeout_curto_reprova(tmp_path):
+    script = _script(tmp_path, "dorme.py", "import time\ntime.sleep(0.1)\nprint('ok')\n")
+    ferramentas = {
+        "fake": {
+            "comando": f"{sys.executable} {script}",
+            "interpreta_saida": "exit_code",
+            "timeout": 0,
+        }
+    }
+
+    resultado, eventos = _rodar(tmp_path, _spec(_tool_sub()), ferramentas)
+
+    item = resultado["resultados"][0]
+    assert item["aprovado"] is False
+    assert item["motivo"] == "timeout ao executar ferramenta"
+    assert any(e["evento"] == "ferramenta.executada" and e["aprovado"] is False for e in eventos)
+
+
 def test_ferramenta_nao_registrada_ou_executavel_ausente_falha_explicita(tmp_path):
     resultado_sem_registro, eventos_sem_registro = _rodar(tmp_path, _spec(_tool_sub("sumida")), {})
     ferramentas = {"fake": {"comando": "executavel-que-nao-existe-xyz", "interpreta_saida": "exit_code"}}

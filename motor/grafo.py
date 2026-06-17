@@ -329,7 +329,8 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                                     "aprovado": False, "motivo": motivo}]}
 
         try:
-            proc = subprocess.run(partes, capture_output=True, text=True, timeout=300, stdin=subprocess.DEVNULL)
+            timeout_s = int(ferramenta.get("timeout", 300))
+            proc = subprocess.run(partes, capture_output=True, text=True, timeout=timeout_s, stdin=subprocess.DEVNULL)
             saida = "\n".join(p for p in [proc.stdout.strip(), proc.stderr.strip()] if p)
             aprovado = proc.returncode == 0 if ferramenta.get("interpreta_saida") == "exit_code" else False
             motivo = "" if aprovado else (saida or f"exit_code={proc.returncode}")
