@@ -40,7 +40,7 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 from .caixa import CaixaFundador, rodar_com_caixa
 from .eventos import LogEventos
 from .grafo import construir_grafo
-from .modelos import ClienteClaudeCLI, ClienteModelo, cliente_de_config
+from .modelos import ClienteClaudeCLI, ClienteModelo, ProvedorIndisponivel, cliente_de_config
 from .registro import cliente_de_registro, ferramentas_de_registro
 
 
@@ -51,6 +51,24 @@ def _merge_cfg(base: dict, over: dict) -> dict:
     for k, v in over.items():
         out[k] = {**out[k], **v} if isinstance(v, dict) and isinstance(out.get(k), dict) else v
     return out
+
+
+def construir_cliente(cfg_modelos: dict | None, dir_registro: str | None,
+                      log: LogEventos | None = None) -> ClienteModelo:
+    """Monta o cliente de modelo para uso programático.
+
+    Diferente da CLI, esta fronteira levanta erro tipado quando o fallback local
+    (`claude`) não está disponível, deixando o chamador decidir como reportar.
+    """
+    if dir_registro is not None:
+        return cliente_de_registro(dir_registro, log=log)
+    if cfg_modelos and ("provedores" in cfg_modelos or "base_url" in cfg_modelos):
+        return cliente_de_config(cfg_modelos, log=log)
+    if not ClienteClaudeCLI.disponivel():
+        raise ProvedorIndisponivel(
+            "`claude` CLI não encontrado no PATH — rode no Mac do Caio ou use o ClienteStub em testes."
+        )
+    return ClienteClaudeCLI(log=log)
 
 
 def main() -> int:
@@ -88,9 +106,6 @@ def main() -> int:
     if cfg_modelos is not None and dir_registro is not None:
         print("erro: use --registro OU --modelos, não os dois.")
         return 2
-    if not ClienteClaudeCLI.disponivel():
-        print("erro: `claude` CLI não encontrado no PATH — rode no Mac do Caio ou use o ClienteStub em testes.")
-        return 1
 
     # --pin <chave>=<provedor/modelo>: pin manual (repetível). chave = papel|tier|"*".
     # Precisa de 'provedores' (via --modelos ou ~/.motor/pins.json) pra resolver.
@@ -142,17 +157,16 @@ def main() -> int:
     raiz = Path(__file__).parent.parent
     log = LogEventos(raiz / "log.jsonl")
     config = {"configurable": {"thread_id": "cli"}}
-    if dir_registro is not None:
-        cliente: ClienteModelo = cliente_de_registro(dir_registro, log=log)
-        ferramentas = ferramentas_de_registro(dir_registro)
-    elif cfg_modelos and ("provedores" in cfg_modelos or "base_url" in cfg_modelos):
-        cliente = cliente_de_config(cfg_modelos, log=log)
-        ferramentas = {}
-    else:
-        if cfg_modelos and cfg_modelos.get("pins"):
-            print("aviso: pins ignorados — precisam de 'provedores' (via --modelos ou ~/.motor/pins.json).")
-        cliente = ClienteClaudeCLI(log=log)
-        ferramentas = {}
+    ferramentas = ferramentas_de_registro(dir_registro) if dir_registro is not None else {}
+    if cfg_modelos and cfg_modelos.get("pins") and not (
+        "provedores" in cfg_modelos or "base_url" in cfg_modelos
+    ):
+        print("aviso: pins ignorados — precisam de 'provedores' (via --modelos ou ~/.motor/pins.json).")
+    try:
+        cliente = construir_cliente(cfg_modelos, dir_registro, log=log)
+    except ProvedorIndisponivel as ex:
+        print(f"erro: {ex}")
+        return 1
     if esgotados:
         if hasattr(cliente, "esgotados"):
             cliente.esgotados |= set(esgotados)

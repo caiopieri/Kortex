@@ -31,6 +31,10 @@ _SEM_CODEX = threading.Semaphore(2)
 _SEM_OPENCODE = threading.Semaphore(2)
 
 
+class ProvedorIndisponivel(RuntimeError):
+    """Nenhum provedor de modelo utilizável (ex.: `claude` CLI fora do PATH e sem config)."""
+
+
 def extrai_json(texto: str) -> Optional[dict]:
     m = re.search(r"\{.*\}", texto, re.S)
     if not m:

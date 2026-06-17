@@ -159,6 +159,38 @@ def test_tudo_esgotado_nao_trava_devolve_original():
     assert r.chamar("synthesizer", "x") == "do-claude"
 
 
+# --------------------------------------------------------- construção de cliente
+
+def test_construir_cliente_sem_config_e_sem_claude_levanta_erro_tipado(monkeypatch):
+    from motor.__main__ import construir_cliente
+    from motor.modelos import ProvedorIndisponivel
+
+    monkeypatch.setattr(modelos.ClienteClaudeCLI, "disponivel", staticmethod(lambda: False))
+
+    with pytest.raises(ProvedorIndisponivel):
+        construir_cliente(None, None)
+
+
+def test_construir_cliente_sem_config_com_claude_devolve_cliente_cli(monkeypatch):
+    from motor.__main__ import construir_cliente
+    from motor.modelos import ClienteClaudeCLI
+
+    monkeypatch.setattr(modelos.ClienteClaudeCLI, "disponivel", staticmethod(lambda: True))
+
+    assert isinstance(construir_cliente(None, None), ClienteClaudeCLI)
+
+
+def test_main_sem_claude_mantem_saida_humana(monkeypatch, capsys):
+    from motor import __main__ as cli
+
+    monkeypatch.setattr(cli.sys, "argv", ["python -m motor", "missao"])
+    monkeypatch.setattr(modelos.ClienteClaudeCLI, "disponivel", staticmethod(lambda: False))
+
+    assert cli.main() == 1
+    saida = capsys.readouterr().out
+    assert "erro: `claude` CLI não encontrado no PATH" in saida
+
+
 def test_config_esgotados_e_cadeia(monkeypatch):
     from motor.modelos import cliente_de_config
     cfg = {"provedores": {"codex": {"tipo": "codex"}},
