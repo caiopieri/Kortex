@@ -4,6 +4,7 @@ import json
 from motor.mcp_servidor import (
     DESCRICAO_DESPACHAR,
     DESCRICAO_RESPONDER_GATE,
+    DESCRICAO_RESUMO,
     DESCRICAO_STATUS,
     criar_app,
 )
@@ -36,6 +37,7 @@ def test_descricoes_mcp_sao_contrato():
         assert ferramentas["metafabrica.despachar_missao"] == DESCRICAO_DESPACHAR
         assert ferramentas["metafabrica.status_missao"] == DESCRICAO_STATUS
         assert ferramentas["metafabrica.responder_gate"] == DESCRICAO_RESPONDER_GATE
+        assert ferramentas["metafabrica.resumo_missao"] == DESCRICAO_RESUMO
 
     asyncio.run(cenario())
 
@@ -59,6 +61,9 @@ def test_mcp_despacha_status_e_responde_gate(tmp_path):
 
         gate = await aguardar_estado(app, inicio["job_id"], "gate_pendente")
         assert gate["gate"]["portao"] == "plano"
+        resumo = await chamar(app, "metafabrica.resumo_missao", {"job_id": inicio["job_id"]})
+        assert resumo["estado"] == "gate_pendente"
+        assert resumo["gate"]["portao"] == "plano"
 
         retomada = await chamar(app, "metafabrica.responder_gate", {
             "job_id": inicio["job_id"],

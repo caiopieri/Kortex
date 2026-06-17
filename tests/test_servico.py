@@ -152,3 +152,39 @@ def test_status_concluido_traz_refs_de_artefato_sem_blob(tmp_path):
     assert caminho.exists()
     assert caminho.read_text(encoding="utf-8") == conteudo
     assert conteudo not in json.dumps(status, ensure_ascii=False)
+
+
+def test_resumo_em_gate_e_concluido_e_compacto(tmp_path):
+    gerenciador = GerenciadorJobs(
+        db_path=tmp_path / "motor.db",
+        workspace_base=tmp_path / "runs",
+        cliente=ClienteStub(faz_roteador()),
+    )
+    gerenciador.iniciar(spec=SPEC, thread_id="resumo")
+    aguardar_estado(gerenciador, "resumo", "gate_pendente")
+
+    em_gate = gerenciador.resumo("resumo")
+
+    assert em_gate["estado"] == "gate_pendente"
+    assert em_gate["gate"] == {
+        "portao": "plano",
+        "pergunta": "Revise o plano. prosseguir / editar / abortar",
+        "opcoes": "prosseguir · editar · abortar",
+    }
+    assert em_gate["progresso"] == "0/2 subagentes concluídos"
+    assert any(m == "planner: spec com 2 subagentes" for m in em_gate["marcos"])
+    assert "executor.chamado" not in json.dumps(em_gate, ensure_ascii=False)
+
+    gerenciador.responder_gate("resumo", "prosseguir")
+    aguardar_estado(gerenciador, "resumo", "concluido")
+    concluido = gerenciador.resumo("resumo")
+
+    assert concluido["estado"] == "concluido"
+    assert concluido["gate"] is None
+    assert concluido["resumo_resposta"] == "SÍNTESE FINAL DA MISSÃO"
+    assert concluido["run"] == {
+        "job_id": "resumo",
+        "workspace": str(tmp_path / "runs" / "resumo"),
+        "log": "log.jsonl",
+    }
+    assert "tarefa: concluída" in concluido["marcos"]

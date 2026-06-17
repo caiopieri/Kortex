@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import sqlite3
 import threading
+import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -91,6 +93,26 @@ class GerenciadorJobs:
             self._jobs[job_id] = {"estado": "em_execucao"}
         self._iniciar_thread(job_id, cliente, Command(resume=decisao))
         return {"estado": "em_execucao"}
+
+    def resumo(self, job_id: str) -> dict:
+        """Digest compacto, derivado de state + log.jsonl. Nunca devolve log cru."""
+        status = self.status(job_id)
+        eventos = self._eventos_do_job(job_id)
+        digest = {
+            "estado": status["estado"],
+            "progresso": self._progresso(eventos),
+            "gate": self._gate_resumo(status.get("gate")) if status["estado"] == "gate_pendente" else None,
+            "marcos": self._marcos(eventos),
+            "resumo_resposta": None,
+            "artefatos": status.get("artefatos", []),
+            "run": status.get("run", self._run(job_id, job_id)),
+        }
+        if status["estado"] == "concluido":
+            digest["resumo_resposta"] = self._resumir_resposta(status.get("resposta_final", ""))
+        if status["estado"] == "erro":
+            erro = status.get("erro", {})
+            digest["marcos"] = [*digest["marcos"], f"erro: {erro.get('tipo', 'Erro')}"]
+        return digest
 
     def _obter_cliente(self) -> ClienteModelo:
         if self._cliente is not None:
@@ -196,11 +218,7 @@ class GerenciadorJobs:
             "estado": "concluido",
             "resposta_final": resultado.get("resposta_final", ""),
             "artefatos": artefatos,
-            "run": {
-                "job_id": job_id,
-                "workspace": str(self.workspace_base / run_id),
-                "log": "log.jsonl",
-            },
+            "run": self._run(job_id, run_id),
         }
         if metricas:
             saida["metricas"] = metricas
@@ -209,7 +227,93 @@ class GerenciadorJobs:
     def _log_do_job(self, job_id: str, truncar: bool = True) -> LogEventos:
         if self.log is not None:
             return self.log
-        return LogEventos(self.workspace_base / job_id / "log.jsonl", truncar=truncar)
+        return LogEventos(self._caminho_log(job_id), truncar=truncar)
+
+    def _caminho_log(self, job_id: str) -> Path:
+        if self.log is not None:
+            return self.log.path
+        return self.workspace_base / job_id / "log.jsonl"
+
+    def _eventos_do_job(self, job_id: str) -> list[dict[str, Any]]:
+        caminho = self._caminho_log(job_id)
+        if not caminho.exists():
+            return []
+        eventos = []
+        for linha in caminho.read_text(encoding="utf-8").splitlines():
+            try:
+                eventos.append(json.loads(linha))
+            except json.JSONDecodeError:
+                continue
+        return eventos
+
+    def _run(self, job_id: str, run_id: str) -> dict:
+        return {"job_id": job_id, "workspace": str(self.workspace_base / run_id), "log": "log.jsonl"}
+
+    @staticmethod
+    def _gate_resumo(gate: dict[str, Any] | None) -> dict[str, Any] | None:
+        if not gate:
+            return None
+        return {chave: gate[chave] for chave in ("portao", "pergunta", "opcoes") if chave in gate}
+
+    @staticmethod
+    def _progresso(eventos: list[dict[str, Any]]) -> str:
+        total = 0
+        concluidos: set[str] = set()
+        onda_atual: list[str] = []
+        for evento in eventos:
+            tipo = evento.get("evento")
+            if tipo in {"spec.recebida", "spec.criada"}:
+                total = int(evento.get("subagentes") or total or 0)
+            elif tipo == "portao.aprovado" and str(evento.get("portao", "")).startswith("verifier:"):
+                concluidos.add(str(evento["portao"]).split(":", 1)[1])
+            elif tipo == "ferramenta.executada" and evento.get("aprovado"):
+                concluidos.add(str(evento.get("subagente")))
+            elif tipo == "onda.iniciada":
+                onda_atual = [str(i) for i in evento.get("ids", [])]
+            elif tipo == "onda.concluida":
+                onda_atual = []
+        if not total:
+            return "progresso ainda não disponível"
+        progresso = f"{len(concluidos)}/{total} subagentes concluídos"
+        if onda_atual:
+            progresso += f"; onda atual: {onda_atual}"
+        return progresso
+
+    @staticmethod
+    def _marcos(eventos: list[dict[str, Any]]) -> list[str]:
+        marcos: list[str] = []
+        for evento in eventos:
+            tipo = evento.get("evento")
+            if tipo in {"spec.recebida", "spec.criada"}:
+                marcos.append(f"planner: spec com {evento.get('subagentes', 0)} subagentes")
+            elif tipo == "onda.iniciada":
+                marcos.append(f"onda iniciada: {evento.get('ids', [])}")
+            elif tipo == "onda.concluida":
+                marcos.append(f"onda concluída: {evento.get('ids', [])}")
+            elif tipo == "portao.reprovado" and evento.get("portao") == "cobertura":
+                marcos.append(f"cobertura: reprovada — {len(evento.get('lacunas', []))} lacuna(s)")
+            elif tipo == "portao.aprovado" and evento.get("portao") == "cobertura":
+                marcos.append("cobertura: aprovada")
+            elif tipo == "escalado":
+                marcos.append(f"gate: escalado para {evento.get('para')}")
+            elif tipo == "gate.auto":
+                marcos.append(f"gate: {evento.get('portao')} auto={evento.get('decisao')}")
+            elif tipo == "ferramenta.executada" and not evento.get("aprovado"):
+                marcos.append(f"ferramenta: {evento.get('ferramenta')} reprovada")
+            elif tipo == "tarefa.concluida":
+                marcos.append("tarefa: concluída")
+            elif tipo == "tarefa.abortada":
+                marcos.append("tarefa: abortada")
+        return marcos[-8:]
+
+    @staticmethod
+    def _resumir_resposta(resposta: str) -> str | None:
+        texto = " ".join(str(resposta or "").split())
+        if not texto:
+            return None
+        frases = re.split(r"(?<=[.!?])\s+", texto)
+        resumo = " ".join(frases[:3]).strip()
+        return resumo[:500]
 
     @staticmethod
     def _config(job_id: str) -> dict:

@@ -28,6 +28,10 @@ DESCRICAO_RESPONDER_GATE = """Responde um gate pendente de uma missão e retoma 
   fluxo de autorização do chamador (porteiro), não é ferramenta de uso livre do
   modelo. A decisão vem da escada de risco do Jarvis, nunca do julgamento de um modelo."""
 
+DESCRICAO_RESUMO = """Resumo compacto de uma missão para acompanhamento conversacional: progresso,
+  marcos, gate pendente e referências de artefato — sem despejar logs ou conteúdo.
+  Use para responder 'como está a missão X'."""
+
 
 def criar_app(gerenciador: GerenciadorJobs | None = None) -> FastMCP:
     app = FastMCP("metafabrica")
@@ -57,6 +61,13 @@ def criar_app(gerenciador: GerenciadorJobs | None = None) -> FastMCP:
     def responder_gate(job_id: str, decisao: str) -> dict:
         try:
             return jobs.responder_gate(job_id, decisao)
+        except Exception as ex:
+            return {"estado": "erro", "erro": {"tipo": type(ex).__name__, "mensagem": str(ex)}}
+
+    @app.tool(name="metafabrica.resumo_missao", description=DESCRICAO_RESUMO)
+    def resumo_missao(job_id: str) -> dict:
+        try:
+            return jobs.resumo(job_id)
         except Exception as ex:
             return {"estado": "erro", "erro": {"tipo": type(ex).__name__, "mensagem": str(ex)}}
 
