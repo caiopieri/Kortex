@@ -18,7 +18,8 @@ DESCRICAO_DESPACHAR = """Entrega uma missão complexa à meta-fábrica: pesquisa
   verificada e síntese. Use quando a tarefa exige vários passos/verificação
   adversarial e excede uma resposta direta do assistente. Não use para perguntas
   simples nem ações de sistema. Retorna um job_id para acompanhar; a execução é
-  assíncrona (consulte status_missao)."""
+  assíncrona (consulte status_missao). Passe `thread_id` para reusar/correlacionar
+  uma missão; se omitido, um id é gerado."""
 
 DESCRICAO_STATUS = """Consulta o estado de uma missão: em_execucao | gate_pendente | concluido | erro.
   Se gate_pendente, traz o payload do gate (decisão humana necessária). Se concluido,
@@ -39,14 +40,15 @@ def criar_app(gerenciador: GerenciadorJobs | None = None) -> FastMCP:
 
     @app.tool(name="metafabrica.despachar_missao", description=DESCRICAO_DESPACHAR)
     def despachar_missao(objetivo: str, contexto: str | None = None,
-                         restricoes: dict[str, Any] | None = None) -> dict:
+                         restricoes: dict[str, Any] | None = None,
+                         thread_id: str | None = None) -> dict:
         try:
             partes = [objetivo]
             if contexto:
                 partes.append(f"\n\nContexto:\n{contexto}")
             if restricoes:
                 partes.append("\n\nRestrições:\n" + json.dumps(restricoes, ensure_ascii=False))
-            return jobs.iniciar(missao_texto="".join(partes), thread_id=uuid4().hex)
+            return jobs.iniciar(missao_texto="".join(partes), thread_id=thread_id or uuid4().hex)
         except Exception as ex:
             return {"estado": "erro", "erro": {"tipo": type(ex).__name__, "mensagem": str(ex)}}
 

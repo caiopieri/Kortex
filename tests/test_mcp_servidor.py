@@ -77,6 +77,46 @@ def test_mcp_despacha_status_e_responde_gate(tmp_path):
     asyncio.run(cenario())
 
 
+def test_mcp_despachar_aceita_thread_id_explicito(tmp_path):
+    async def cenario():
+        gerenciador = GerenciadorJobs(
+            db_path=tmp_path / "motor.db",
+            workspace_base=tmp_path / "runs",
+            cliente=ClienteStub(faz_roteador()),
+        )
+        app = criar_app(gerenciador)
+
+        inicio = await chamar(app, "metafabrica.despachar_missao", {
+            "objetivo": "pesquise oportunidades",
+            "thread_id": "jarvis-abc",
+        })
+
+        assert inicio == {"job_id": "jarvis-abc", "estado": "em_execucao"}
+
+    asyncio.run(cenario())
+
+
+def test_mcp_despachar_sem_thread_id_gera_id(tmp_path):
+    async def cenario():
+        gerenciador = GerenciadorJobs(
+            db_path=tmp_path / "motor.db",
+            workspace_base=tmp_path / "runs",
+            cliente=ClienteStub(faz_roteador()),
+        )
+        app = criar_app(gerenciador)
+
+        inicio = await chamar(app, "metafabrica.despachar_missao", {
+            "objetivo": "pesquise oportunidades",
+        })
+
+        assert inicio["estado"] == "em_execucao"
+        assert isinstance(inicio["job_id"], str)
+        assert inicio["job_id"]
+        assert inicio["job_id"] != "jarvis-abc"
+
+    asyncio.run(cenario())
+
+
 def test_mcp_falha_de_provedor_vira_erro_estruturado():
     class GerenciadorFalho:
         def iniciar(self, **kwargs):
