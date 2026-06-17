@@ -332,8 +332,29 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
             timeout_s = int(ferramenta.get("timeout", 300))
             proc = subprocess.run(partes, capture_output=True, text=True, timeout=timeout_s, stdin=subprocess.DEVNULL)
             saida = "\n".join(p for p in [proc.stdout.strip(), proc.stderr.strip()] if p)
-            aprovado = proc.returncode == 0 if ferramenta.get("interpreta_saida") == "exit_code" else False
-            motivo = "" if aprovado else (saida or f"exit_code={proc.returncode}")
+            modo = ferramenta.get("interpreta_saida")
+            metricas = {}
+            motivo_json = ""
+            if modo == "exit_code":
+                aprovado = proc.returncode == 0
+            elif modo == "json":
+                try:
+                    dados = json.loads(proc.stdout)
+                    if not isinstance(dados, dict) or "aprovado" not in dados:
+                        raise ValueError("json sem 'aprovado'")
+                    aprovado = bool(dados["aprovado"])
+                    metricas = dados.get("metricas") or {}
+                    if not isinstance(metricas, dict):
+                        metricas = {}
+                    motivo_json = str(dados.get("motivo") or "")
+                except (json.JSONDecodeError, ValueError) as ex:
+                    aprovado = False
+                    motivo_json = f"saída inválida: {ex}"
+                    log.evento("ferramenta.saida_invalida", ferramenta=nome_ferramenta,
+                               subagente=sub["id"], motivo=motivo_json)
+            else:
+                aprovado = False
+            motivo = "" if aprovado else (motivo_json or saida or f"exit_code={proc.returncode}")
             artefatos = []
             if aprovado:
                 for ref in saidas_por_placeholder.values():
@@ -343,12 +364,16 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                         motivo = f"artefato não produzido: {ref['nome']}"
                         break
                     artefatos.append(referenciar_artefato(caminho, ref["nome"], ref["tipo"]))
-            log.evento("ferramenta.executada", ferramenta=nome_ferramenta,
-                       subagente=sub["id"], aprovado=aprovado)
+            dados_evento = {"ferramenta": nome_ferramenta, "subagente": sub["id"], "aprovado": aprovado}
+            if metricas:
+                dados_evento["metricas"] = metricas
+            log.evento("ferramenta.executada", **dados_evento)
             resultado = {"id": sub["id"], "saida": saida, "tentativas": 1,
                          "aprovado": aprovado}
             if motivo:
                 resultado["motivo"] = motivo
+            if metricas:
+                resultado["metricas"] = metricas
             if artefatos:
                 resultado["artefatos"] = artefatos
             return {"resultados": [resultado]}
@@ -383,7 +408,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
             log.evento("onda.iniciada", ids=onda)
             for sid in onda:
                 sub = {**subs[sid], "entradas": resolver_refs_artefato(subs[sid].get("entradas", {}), concluidos)}
-                deps = {d: concluidos[d]["saida"] for d in sub.get("depende_de", [])}
+                deps = {d: texto_dependencia(concluidos[d]) for d in sub.get("depende_de", [])}
                 retorno = subagente({"sub": sub, "spec": spec, "deps": deps, "workspace": workspace})
                 resultado = retorno["resultados"][0]
                 concluidos[sid] = resultado
@@ -391,6 +416,12 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                 restantes.discard(sid)
             log.evento("onda.concluida", ids=onda)
         return {"resultados": resultados}
+
+    def texto_dependencia(resultado: dict[str, Any]) -> str:
+        texto = str(resultado.get("saida", ""))
+        if resultado.get("metricas"):
+            texto += "\nMétricas: " + json.dumps(resultado["metricas"], ensure_ascii=False)
+        return texto
 
     def resolver_refs_artefato(valor: Any, concluidos: dict[str, dict[str, Any]]) -> Any:
         if isinstance(valor, dict):

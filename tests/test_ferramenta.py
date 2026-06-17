@@ -133,6 +133,116 @@ def test_ferramenta_timeout_curto_reprova(tmp_path):
     assert any(e["evento"] == "ferramenta.executada" and e["aprovado"] is False for e in eventos)
 
 
+def test_ferramenta_json_aprova_e_registra_metricas(tmp_path):
+    script = _script(
+        tmp_path,
+        "json_ok.py",
+        "import json, sys\n"
+        "print(json.dumps({'aprovado': True, 'metricas': {'fs_escoamento': 2.1}, 'motivo': ''}))\n"
+        "sys.stderr.write('aviso no stderr')\n",
+    )
+    ferramentas = {"fake": {"comando": f"{sys.executable} {script}", "interpreta_saida": "json"}}
+
+    resultado, eventos = _rodar(tmp_path, _spec(_tool_sub()), ferramentas)
+
+    item = resultado["resultados"][0]
+    assert item["aprovado"] is True
+    assert item["metricas"] == {"fs_escoamento": 2.1}
+    assert "aviso no stderr" in item["saida"]
+    assert any(e["evento"] == "ferramenta.executada"
+               and e["metricas"] == {"fs_escoamento": 2.1}
+               for e in eventos)
+
+
+def test_ferramenta_json_aprovado_false_usa_motivo(tmp_path):
+    script = _script(
+        tmp_path,
+        "json_reprova.py",
+        "import json\nprint(json.dumps({'aprovado': False, 'metricas': {'x': 1}, 'motivo': 'fora da tolerancia'}))\n",
+    )
+    ferramentas = {"fake": {"comando": f"{sys.executable} {script}", "interpreta_saida": "json"}}
+
+    resultado, _ = _rodar(tmp_path, _spec(_tool_sub()), ferramentas)
+
+    item = resultado["resultados"][0]
+    assert item["aprovado"] is False
+    assert item["motivo"] == "fora da tolerancia"
+    assert item["metricas"] == {"x": 1}
+
+
+def test_ferramenta_json_invalido_reprova_e_emite_evento(tmp_path):
+    script = _script(tmp_path, "json_invalido.py", "print('nao-json')\n")
+    ferramentas = {"fake": {"comando": f"{sys.executable} {script}", "interpreta_saida": "json"}}
+
+    resultado, eventos = _rodar(tmp_path, _spec(_tool_sub()), ferramentas)
+
+    item = resultado["resultados"][0]
+    assert item["aprovado"] is False
+    assert item["motivo"].startswith("saída inválida:")
+    assert any(e["evento"] == "ferramenta.saida_invalida" for e in eventos)
+
+
+def test_ferramenta_json_sem_aprovado_reprova_e_emite_evento(tmp_path):
+    script = _script(tmp_path, "json_sem_aprovado.py", "import json\nprint(json.dumps({'metricas': {'x': 1}}))\n")
+    ferramentas = {"fake": {"comando": f"{sys.executable} {script}", "interpreta_saida": "json"}}
+
+    resultado, eventos = _rodar(tmp_path, _spec(_tool_sub()), ferramentas)
+
+    item = resultado["resultados"][0]
+    assert item["aprovado"] is False
+    assert "json sem 'aprovado'" in item["motivo"]
+    assert any(e["evento"] == "ferramenta.saida_invalida" for e in eventos)
+
+
+def test_metricas_json_chegam_em_no_dependente(tmp_path):
+    script = _script(
+        tmp_path,
+        "json_ok.py",
+        "import json\nprint(json.dumps({'aprovado': True, 'metricas': {'tensao_max_mpa': 112}, 'motivo': ''}))\n",
+    )
+    spec = _spec(_tool_sub("fake"))
+    spec["padrao"] = "grafo_dependencias"
+    spec["subagentes"][0]["id"] = "simulador"
+    spec["subagentes"].append({
+        "id": "relator",
+        "papel": "executor",
+        "objetivo": "Relatar métricas",
+        "entradas": {},
+        "resultado_esperado": "Relatório",
+        "rubrica": ["usa métricas"],
+        "depende_de": ["simulador"],
+    })
+    ferramentas = {"fake": {"comando": f"{sys.executable} {script}", "interpreta_saida": "json"}}
+    prompts = {}
+
+    def roteador(papel: str, prompt: str):
+        if papel == "executor":
+            prompts["relator"] = prompt
+            return "RELATÓRIO"
+        if papel == "verifier":
+            return json.dumps({"aprovado": True, "motivo": "ok"})
+        if papel == "evaluator":
+            return json.dumps({"aprovado": True, "lacunas": []})
+        if papel == "synthesizer":
+            return "FINAL"
+        raise AssertionError(f"papel inesperado: {papel}")
+
+    log = LogEventos(tmp_path / "log.jsonl")
+    grafo = construir_grafo(
+        ClienteStub(roteador),
+        log,
+        checkpointer=InMemorySaver(),
+        politica=PoliticaGates(overrides={"plano": "prosseguir", "cobertura": "prosseguir"}),
+        workspace_base=tmp_path / "runs",
+        ferramentas=ferramentas,
+    )
+    resultado = grafo.invoke({"spec": spec}, {"configurable": {"thread_id": "metricas-dep"}})
+
+    assert resultado["resultados"][0]["metricas"] == {"tensao_max_mpa": 112}
+    assert "Métricas:" in prompts["relator"]
+    assert '"tensao_max_mpa": 112' in prompts["relator"]
+
+
 def test_ferramenta_nao_registrada_ou_executavel_ausente_falha_explicita(tmp_path):
     resultado_sem_registro, eventos_sem_registro = _rodar(tmp_path, _spec(_tool_sub("sumida")), {})
     ferramentas = {"fake": {"comando": "executavel-que-nao-existe-xyz", "interpreta_saida": "exit_code"}}
