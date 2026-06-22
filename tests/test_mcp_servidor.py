@@ -1,16 +1,40 @@
 import asyncio
 import json
 
+import pytest
+
 from motor.mcp_servidor import (
     DESCRICAO_DESPACHAR,
     DESCRICAO_RESPONDER_GATE,
     DESCRICAO_RESUMO,
     DESCRICAO_STATUS,
+    _gerenciador_de_env,
     criar_app,
 )
 from motor.modelos import ClienteStub
 from motor.servico import GerenciadorJobs
 from tests.test_grafo import faz_roteador
+
+
+def test_gerenciador_de_env_carrega_modelos(tmp_path, monkeypatch):
+    config = {"provedores": {"codex": {"tipo": "codex"}}}
+    modelos = tmp_path / "modelos.json"
+    modelos.write_text(json.dumps(config), encoding="utf-8")
+    monkeypatch.setenv("MOTOR_MODELOS", str(modelos))
+    monkeypatch.setenv("MOTOR_DB", str(tmp_path / "motor.db"))
+    monkeypatch.setenv("MOTOR_WORKSPACE", str(tmp_path / "runs"))
+
+    gerenciador = _gerenciador_de_env()
+
+    assert gerenciador.cfg_modelos == config
+
+
+def test_gerenciador_de_env_rejeita_modelos_e_registro(monkeypatch):
+    monkeypatch.setenv("MOTOR_MODELOS", "modelos.json")
+    monkeypatch.setenv("MOTOR_REGISTRO", "registro")
+
+    with pytest.raises(ValueError, match="MOTOR_MODELOS OU MOTOR_REGISTRO"):
+        _gerenciador_de_env()
 
 
 async def chamar(app, nome: str, args: dict) -> dict:

@@ -6,6 +6,8 @@ sobem crus e a decisão volta por responder_gate; não há porteiro dentro do mo
 from __future__ import annotations
 
 import json
+import os
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
@@ -34,9 +36,23 @@ DESCRICAO_RESUMO = """Resumo compacto de uma missão para acompanhamento convers
   Use para responder 'como está a missão X'."""
 
 
+def _gerenciador_de_env() -> GerenciadorJobs:
+    modelos = os.environ.get("MOTOR_MODELOS")
+    registro = os.environ.get("MOTOR_REGISTRO")
+    if modelos and registro:
+        raise ValueError("use MOTOR_MODELOS OU MOTOR_REGISTRO, não os dois")
+    cfg_modelos = json.loads(Path(modelos).read_text(encoding="utf-8")) if modelos else None
+    return GerenciadorJobs(
+        db_path=os.environ.get("MOTOR_DB", "motor.db"),
+        workspace_base=os.environ.get("MOTOR_WORKSPACE", "runs"),
+        cfg_modelos=cfg_modelos,
+        dir_registro=registro,
+    )
+
+
 def criar_app(gerenciador: GerenciadorJobs | None = None) -> FastMCP:
     app = FastMCP("metafabrica")
-    jobs = gerenciador or GerenciadorJobs()
+    jobs = gerenciador or _gerenciador_de_env()
 
     @app.tool(name="metafabrica.despachar_missao", description=DESCRICAO_DESPACHAR)
     def despachar_missao(objetivo: str, contexto: str | None = None,
