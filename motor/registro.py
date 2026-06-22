@@ -16,6 +16,7 @@ from .modelos import (
     ClienteOpenAICompat,
     ClienteOpenCode,
     ClienteRoteador,
+    _ordenar_cadeia_por_custo,
 )
 
 
@@ -112,7 +113,8 @@ def _cliente_entidade(entidade: dict[str, Any], log: Optional[Any], padrao: Clie
         "'openai-compat' ou 'claude-cli')")
 
 
-def cliente_de_registro(pasta: str | Path, log: Optional[Any] = None) -> ClienteRoteador:
+def cliente_de_registro(pasta: str | Path, log: Optional[Any] = None,
+                        auto_esgotar: bool = False) -> ClienteRoteador:
     """Monta ClienteRoteador a partir de entidades `.md` do Registry."""
     raiz = Path(pasta)
     entidades: list[tuple[Path, dict[str, Any]]] = []
@@ -132,6 +134,7 @@ def cliente_de_registro(pasta: str | Path, log: Optional[Any] = None) -> Cliente
         (caminho, _cliente_entidade(entidade, log, padrao), entidade)
         for caminho, entidade in entidades
     ]
+    auto_esgotar = auto_esgotar or any(bool(entidade.get("auto_esgotar")) for _, entidade in entidades)
 
     mapa: dict[str, Any] = {}
     tiers: dict[str, Any] = {}
@@ -154,14 +157,17 @@ def cliente_de_registro(pasta: str | Path, log: Optional[Any] = None) -> Cliente
         capacidades = _lista(entidade.get("capacidades"))
         if capacidades:
             catalogo.append((cliente, frozenset(capacidades), int(entidade.get("custo_ordem") or 0)))
+        if entidade.get("custo_ordem") is not None:
+            setattr(cliente, "custo_ordem", entidade.get("custo_ordem"))
 
     cadeia: list[Any] = []
     for _, cliente, _ in clientes:
         if cliente is not padrao and not any(cliente is existente for existente in cadeia):
             cadeia.append(cliente)
+    cadeia = _ordenar_cadeia_por_custo(cadeia)
 
     return ClienteRoteador(padrao=padrao, mapa=mapa, tiers=tiers, cadeia=cadeia,
-                           catalogo=catalogo, log=log)
+                           catalogo=catalogo, auto_esgotar=auto_esgotar, log=log)
 
 
 def ferramentas_de_registro(pasta: str | Path) -> dict[str, dict[str, Any]]:

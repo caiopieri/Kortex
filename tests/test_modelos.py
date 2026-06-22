@@ -28,8 +28,8 @@ class FakeLog:
 
 # ---------------------------------------------------------------- roteador
 
-def _stub(resposta):
-    return ClienteStub(lambda papel, prompt: resposta)
+def _stub(resposta, sempre_none: bool = False):
+    return ClienteStub(lambda papel, prompt: resposta, sempre_none=sempre_none)
 
 
 def test_roteador_papel_mapeado_vai_ao_barato():
@@ -69,6 +69,36 @@ def test_roteador_padrao_none_nao_entra_em_loop():
     r = ClienteRoteador(padrao=padrao)
     assert r.chamar("redator", "p") is None
     assert len(padrao.chamadas) == 1
+
+
+def test_roteador_auto_esgotar_percorre_cadeia_e_fica_sticky():
+    a = _stub_prov(None, "A", sempre_none=True)
+    b = _stub_prov(None, "B", sempre_none=True)
+    c = _stub_prov("do-c", "C")
+    padrao = _stub_prov("do-padrao", "padrao")
+    log = FakeLog()
+    r = ClienteRoteador(padrao=padrao, mapa={"redator": a}, cadeia=[a, b, c],
+                        auto_esgotar=True, log=log)
+
+    assert r.chamar("redator", "p") == "do-c"
+    assert r.esgotados == {"A", "B"}
+    assert log.tipos().count("provedor.auto_esgotado") == 2
+
+    assert r.chamar("redator", "p2") == "do-c"
+    assert len(a.chamadas) == 1
+    assert len(b.chamadas) == 1
+    assert len(c.chamadas) == 2
+
+
+def test_roteador_auto_esgotar_tudo_falha_devolve_none_e_esgota_todos():
+    a = _stub_prov(None, "A", sempre_none=True)
+    b = _stub_prov(None, "B", sempre_none=True)
+    padrao = _stub_prov(None, "P", sempre_none=True)
+    r = ClienteRoteador(padrao=padrao, mapa={"redator": a}, cadeia=[a, b],
+                        auto_esgotar=True)
+
+    assert r.chamar("redator", "p") is None
+    assert r.esgotados == {"A", "B", "P"}
 
 
 # ---------------------------------------------------- roteamento por tier (Corte A)
@@ -117,8 +147,8 @@ def test_roteador_tier_none_faz_fallback_ao_padrao():
 
 # --------------------------------------- disponibilidade / esgotamento (Corte B)
 
-def _stub_prov(resposta, provedor):
-    s = ClienteStub(lambda papel, prompt: resposta)
+def _stub_prov(resposta, provedor, sempre_none: bool = False):
+    s = ClienteStub(lambda papel, prompt: resposta, sempre_none=sempre_none)
     s.provedor = provedor
     return s
 
@@ -202,6 +232,45 @@ def test_config_esgotados_e_cadeia(monkeypatch):
     assert any(getattr(c, "provedor", None) == "codex" for c in r.cadeia)
     # claude esgotado → _disponivel reroteia o padrao pro codex (sem shell out)
     assert getattr(r._disponivel(r.padrao), "provedor", None) == "codex"
+
+
+def test_config_auto_esgotar_ordenacao_por_custo():
+    from motor.modelos import cliente_de_config
+    cfg = {
+        "auto_esgotar": True,
+        "provedores": {
+            "caro": {"tipo": "opencode", "custo_ordem": 30},
+            "barato": {"tipo": "opencode", "custo_ordem": 1},
+            "medio": {"tipo": "codex", "custo_ordem": 10},
+        },
+        "papeis": {"redator": "caro/openai/gpt-5.5"},
+        "tiers": {"simples": "barato/openai/gpt-5.5", "media": "medio/default"},
+    }
+    r = cliente_de_config(cfg)
+    assert r.auto_esgotar is True
+    assert [getattr(c, "provedor", None) for c in r.cadeia] == ["barato", "codex", "caro"]
+
+
+def test_registro_ordena_cadeia_por_custo(tmp_path):
+    from motor.registro import cliente_de_registro
+
+    for nome, provedor, custo in [
+        ("alto.md", "alto", 30),
+        ("baixo.md", "baixo", 1),
+        ("medio.md", "medio", 10),
+    ]:
+        (tmp_path / nome).write_text(
+            "---\n"
+            "tipo: modelo-executor\n"
+            "transporte: opencode\n"
+            f"provedor: {provedor}\n"
+            f"custo_ordem: {custo}\n"
+            "---\n",
+            encoding="utf-8",
+        )
+
+    r = cliente_de_registro(tmp_path)
+    assert [getattr(c, "provedor", None) for c in r.cadeia] == ["baixo", "medio", "alto"]
 
 
 # ------------------------------------------- contrato ClienteOpenAICompat (T5)

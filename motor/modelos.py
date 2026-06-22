@@ -45,6 +45,36 @@ def extrai_json(texto: str) -> Optional[dict]:
         return None
 
 
+def _chave_provedor(cliente: Any) -> str:
+    prov = getattr(cliente, "provedor", None)
+    return str(prov) if prov is not None else f"__sem_provedor__:{id(cliente)}"
+
+
+def _custo_ordem_cliente(cliente: Any) -> tuple[int, int]:
+    custo = getattr(cliente, "custo_ordem", None)
+    try:
+        if custo is None:
+            return (1, 0)
+        return (0, int(custo))
+    except (TypeError, ValueError):
+        return (1, 0)
+
+
+def _ordenar_cadeia_por_custo(clientes: list[Any]) -> list[Any]:
+    vistos: set[str] = set()
+    candidatos: list[tuple[tuple[int, int], int, Any]] = []
+    for indice, cliente in enumerate(clientes):
+        if cliente is None:
+            continue
+        chave = _chave_provedor(cliente)
+        if chave in vistos:
+            continue
+        vistos.add(chave)
+        candidatos.append((_custo_ordem_cliente(cliente), indice, cliente))
+    candidatos.sort()
+    return [cliente for _, _, cliente in candidatos]
+
+
 class ClienteModelo(Protocol):
     def chamar(self, papel: str, prompt: str, ferramentas: Optional[str] = None,
                tier: Optional[str] = None, timeout: int = 300,
@@ -55,8 +85,9 @@ class ClienteModelo(Protocol):
 class ClienteStub:
     """Determinístico para testes: roteador(papel, prompt) -> str | None."""
 
-    def __init__(self, roteador: Callable[[str, str], Optional[str]]):
+    def __init__(self, roteador: Callable[[str, str], Optional[str]], sempre_none: bool = False):
         self.roteador = roteador
+        self.sempre_none = sempre_none
         self.chamadas: list[tuple[str, str]] = []
 
     def chamar(self, papel: str, prompt: str, ferramentas: Optional[str] = None,
@@ -64,6 +95,8 @@ class ClienteStub:
                evitar: Optional[str] = None,
                capacidades: Optional[list[str]] = None) -> Optional[str]:
         self.chamadas.append((papel, prompt))
+        if self.sempre_none:
+            return None
         return self.roteador(papel, prompt)
 
 
@@ -93,6 +126,7 @@ class ClienteRoteador:
                  cadeia: Optional[list["ClienteModelo"]] = None,
                  pins: Optional[dict[str, "ClienteModelo"]] = None,
                  catalogo: Optional[list[tuple["ClienteModelo", frozenset[str], int]]] = None,
+                 auto_esgotar: bool = False,
                  log: Optional[Any] = None):
         self.padrao = padrao
         self.mapa = mapa or {}
@@ -108,11 +142,30 @@ class ClienteRoteador:
         self.esgotados = set(esgotados or ())
         self.cadeia = list(cadeia or ())
         self.catalogo = list(catalogo or [])
+        self.auto_esgotar = auto_esgotar
         self.log = log
 
     def _evento(self, tipo: str, **dados) -> None:
         if self.log is not None:
             self.log.evento(tipo, **dados)
+
+    def _auto_esgotar(self, cliente: "ClienteModelo", papel: str, motivo: str) -> None:
+        prov = getattr(cliente, "provedor", None)
+        if prov and prov not in self.esgotados:
+            self.esgotados.add(prov)
+            self._evento("provedor.auto_esgotado", provedor=prov, papel=papel, motivo=motivo)
+
+    def _cadeia_failover(self) -> list["ClienteModelo"]:
+        vistos: set[str] = set()
+        saida: list["ClienteModelo"] = []
+        for alt in [*self.cadeia, self.padrao]:
+            prov = getattr(alt, "provedor", None)
+            chave = _chave_provedor(alt)
+            if chave in vistos or prov in self.esgotados:
+                continue
+            vistos.add(chave)
+            saida.append(alt)
+        return saida
 
     def _disponivel(self, cliente: "ClienteModelo", papel: Optional[str] = None,
                     emitir: bool = True) -> "ClienteModelo":
@@ -215,12 +268,30 @@ class ClienteRoteador:
                 cliente = alt
         resposta = cliente.chamar(papel, prompt, ferramentas=ferramentas, tier=tier,
                                   timeout=timeout, capacidades=capacidades)
-        if resposta is None and cliente is not self.padrao:
-            alvo = self._disponivel(self.padrao, papel)
-            if alvo is not cliente:
-                self._evento("modelo.fallback", papel=papel)
-                resposta = alvo.chamar(papel, prompt, ferramentas=ferramentas, tier=tier,
-                                       timeout=timeout, capacidades=capacidades)
+        if resposta is not None:
+            return resposta
+        if not self.auto_esgotar:
+            if cliente is not self.padrao:
+                alvo = self._disponivel(self.padrao, papel)
+                if alvo is not cliente:
+                    self._evento("modelo.fallback", papel=papel)
+                    resposta = alvo.chamar(papel, prompt, ferramentas=ferramentas, tier=tier,
+                                           timeout=timeout, capacidades=capacidades)
+            return resposta
+
+        self._auto_esgotar(cliente, papel, motivo="sem resposta")
+        ja_tentados = {_chave_provedor(cliente)}
+        for alt in self._cadeia_failover():
+            chave = _chave_provedor(alt)
+            if chave in ja_tentados:
+                continue
+            ja_tentados.add(chave)
+            self._evento("modelo.fallback", papel=papel, para=getattr(alt, "provedor", None))
+            resposta = alt.chamar(papel, prompt, ferramentas=ferramentas, tier=tier,
+                                  timeout=timeout, capacidades=capacidades)
+            if resposta is not None:
+                return resposta
+            self._auto_esgotar(alt, papel, motivo="sem resposta")
         return resposta
 
 
@@ -586,18 +657,22 @@ def cliente_de_config(cfg: dict, log: Optional[Any] = None) -> "ClienteModelo":
             p = cfg["provedores"][prov]
             tipo = p.get("tipo", "openai-compat")
             if tipo == "codex":
-                return ClienteCodex(modelo=modelo, sandbox=p.get("sandbox", "read-only"),
-                                    busca_ao_vivo=p.get("search", False), log=log)
-            if tipo == "opencode":
-                return ClienteOpenCode(modelo=modelo, permissao=p.get("permissao"),
-                                       log=log, provedor=prov)
-            if tipo == "openai-compat":
-                return ClienteOpenAICompat(
+                cliente = ClienteCodex(modelo=modelo, sandbox=p.get("sandbox", "read-only"),
+                                       busca_ao_vivo=p.get("search", False), log=log)
+            elif tipo == "opencode":
+                cliente = ClienteOpenCode(modelo=modelo, permissao=p.get("permissao"),
+                                          log=log, provedor=prov)
+            elif tipo == "openai-compat":
+                cliente = ClienteOpenAICompat(
                     base_url=p["base_url"], api_key=_chave(p["api_key_env"], f"provedor {prov!r}"),
                     modelo=modelo, log=log, provedor=prov)
-            raise ValueError(
-                f"provedor {prov!r}: tipo {tipo!r} desconhecido "
-                f"(use 'codex', 'opencode' ou 'openai-compat')")
+            else:
+                raise ValueError(
+                    f"provedor {prov!r}: tipo {tipo!r} desconhecido "
+                    f"(use 'codex', 'opencode' ou 'openai-compat')")
+            if p.get("custo_ordem") is not None:
+                setattr(cliente, "custo_ordem", p.get("custo_ordem"))
+            return cliente
 
         # Rota legada papel→modelo: um cliente por provedor, compartilhado, com mapa_papeis.
         por_prov: dict[str, dict[str, str]] = {}  # provedor -> {papel: modelo}
@@ -629,6 +704,8 @@ def cliente_de_config(cfg: dict, log: Optional[Any] = None) -> "ClienteModelo":
                     f"(use 'codex', 'opencode' ou 'openai-compat')")
             for papel in papeis:
                 mapa[papel] = cliente
+            if p.get("custo_ordem") is not None:
+                setattr(cliente, "custo_ordem", p.get("custo_ordem"))
 
         # Roteamento por custo: tier→modelo. "padrao" referencia o claude.
         tiers_map: dict[str, Any] = {
@@ -646,14 +723,20 @@ def cliente_de_config(cfg: dict, log: Optional[Any] = None) -> "ClienteModelo":
         for c in [*pins_map.values(), *tiers_map.values(), *mapa.values()]:
             if c is not padrao and not any(c is x for x in cadeia):
                 cadeia.append(c)
+        cadeia = _ordenar_cadeia_por_custo(cadeia)
         return ClienteRoteador(padrao=padrao, mapa=mapa, tiers=tiers_map, pins=pins_map,
-                               esgotados=set(cfg.get("esgotados", [])), cadeia=cadeia, log=log)
+                               esgotados=set(cfg.get("esgotados", [])), cadeia=cadeia,
+                               auto_esgotar=bool(cfg.get("auto_esgotar", False)), log=log)
 
     # formato v1 — um provedor
     barato = ClienteOpenAICompat(
         base_url=cfg["base_url"], api_key=_chave(cfg["api_key_env"], "provedor único"),
         modelo=cfg["modelo"], mapa_papeis=cfg.get("mapa_papeis_modelo"), log=log,
         provedor=cfg.get("provedor", "openai-compat"))
+    if cfg.get("custo_ordem") is not None:
+        setattr(barato, "custo_ordem", cfg.get("custo_ordem"))
     return ClienteRoteador(padrao=padrao,
                            mapa={p: barato for p in cfg.get("papeis_baratos", [])},
-                           esgotados=set(cfg.get("esgotados", [])), cadeia=[barato], log=log)
+                           esgotados=set(cfg.get("esgotados", [])),
+                           cadeia=_ordenar_cadeia_por_custo([barato]),
+                           auto_esgotar=bool(cfg.get("auto_esgotar", False)), log=log)
