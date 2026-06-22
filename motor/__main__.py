@@ -117,12 +117,14 @@ def main() -> int:
         print("erro: --rota exige --registro.")
         return 2
     rota = None
-    if nome_rota is not None:
+    rotas = None
+    if dir_registro is not None:
         try:
             rotas = rotas_de_registro(dir_registro)
         except ValueError as ex:
             print(f"erro: {ex}")
             return 2
+    if nome_rota is not None:
         rota = rotas.get(nome_rota)
         if rota is None:
             print(f"erro: rota {nome_rota!r} não encontrada no Registry.")
@@ -204,7 +206,7 @@ def main() -> int:
         checkpointer.setup()
         grafo = construir_grafo(cliente, log, checkpointer=checkpointer, politica=politica,
                                 workspace_base=workspace_base, ferramentas=ferramentas,
-                                rota=rota)
+                                rota=rota, rotas=rotas)
         caixa = CaixaFundador(dir_caixa, log)
         resultado = rodar_com_caixa(grafo, entrada, config, caixa, log)
         conn.close()
@@ -212,7 +214,7 @@ def main() -> int:
         # Comportamento default intacto: input() + InMemorySaver (volátil).
         grafo = construir_grafo(cliente, log, checkpointer=InMemorySaver(), politica=politica,
                                 workspace_base=workspace_base, ferramentas=ferramentas,
-                                rota=rota)
+                                rota=rota, rotas=rotas)
         resultado = grafo.invoke(entrada, config)
         while "__interrupt__" in resultado:  # gate do fundador
             pedido = resultado["__interrupt__"][0].value

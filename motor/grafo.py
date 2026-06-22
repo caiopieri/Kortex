@@ -57,6 +57,16 @@ ROTA_DEFAULT = {
     "gabarito": GABARITO_ROTA_DEFAULT,
 }
 
+PROMPT_SELETOR_ROTA = """Escolha a rota de decomposição para a missão abaixo.
+Missão:
+\"\"\"{missao}\"\"\"
+
+Rotas disponíveis (nome e quando usar):
+{catalogo}
+
+Escolha a rota cujo campo "quando" melhor descreve a missão. Se nenhuma servir claramente,
+responda "pesquisa-sintese". Responda APENAS um JSON: {{"rota": "<nome>"}}"""
+
 PROMPT_PLANNER = """Você é o planner da meta-fábrica. Missão do usuário:
 \"\"\"{missao}\"\"\"
 
@@ -127,6 +137,34 @@ def montar_prompt_planner(*, missao: str, schema: str, max_sub: int, erro: str =
     )
 
 
+def _escolher_rota(cliente: ClienteModelo, missao: str,
+                   rotas: dict[str, dict[str, Any]], log: LogEventos) -> str | None:
+    catalogo = [
+        {"nome": nome, "quando": rota.get("quando", "")}
+        for nome, rota in rotas.items()
+    ]
+    try:
+        resposta = cliente.chamar("planner", PROMPT_SELETOR_ROTA.format(
+            missao=missao,
+            catalogo=json.dumps(catalogo, ensure_ascii=False),
+        ))
+    except Exception:
+        resposta = None
+    bruto = extrai_json(resposta or "")
+    nome = str(bruto.get("rota") or "").strip() if isinstance(bruto, dict) else ""
+    fallback = nome not in rotas
+    if fallback:
+        nome = "pesquisa-sintese" if "pesquisa-sintese" in rotas else ""
+    rota_ativa = rotas.get(nome) or ROTA_DEFAULT
+    log.evento(
+        "rota.escolhida",
+        rota=nome or "pesquisa-sintese",
+        padrao=rota_ativa["padrao"],
+        fallback=fallback,
+    )
+    return nome or None
+
+
 def registrar_artefato(workspace: str | Path, nome: str, tipo: str, conteudo: str) -> dict[str, str]:
     """Escreve conteúdo textual no workspace e devolve só a referência serializável."""
     raiz = Path(workspace)
@@ -147,7 +185,8 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                     politica: PoliticaGates | None = None,
                     workspace_base: str | Path = "runs",
                     ferramentas: dict[str, dict[str, Any]] | None = None,
-                    rota: dict[str, Any] | None = None):
+                    rota: dict[str, Any] | None = None,
+                    rotas: dict[str, dict[str, Any]] | None = None):
     """Compila o grafo. `cliente` e `log` são injetados — o grafo não conhece backends.
     `politica` decide quais gates pausam (manual) ou resolvem sozinhos (auto-mode);
     ausente = tudo manual (comportamento default)."""
@@ -167,13 +206,17 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
             spec = WorkflowSpec.model_validate(state["spec"])
             log.evento("spec.recebida", missao=spec.missao.id, subagentes=len(spec.subagentes))
             return {"spec": spec.model_dump(), "run_id": run_id}
+        rota_ativa = rota
+        if rota_ativa is None and rotas:
+            nome_rota = _escolher_rota(cliente, state["missao_texto"], rotas, log)
+            rota_ativa = rotas.get(nome_rota) or ROTA_DEFAULT
         erro = ""
         for tentativa in (1, 2, 3):
             log.evento("executor.chamado", executor="planner", tentativa=tentativa)
             resp = cliente.chamar("planner", montar_prompt_planner(
                 missao=state["missao_texto"],
                 schema=json.dumps(WorkflowSpec.model_json_schema(), ensure_ascii=False),
-                max_sub=10, erro=erro, rota=rota))
+                max_sub=10, erro=erro, rota=rota_ativa))
             bruto = extrai_json(resp or "")
             if bruto is not None:
                 try:

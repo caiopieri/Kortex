@@ -16,6 +16,7 @@ from motor.grafo import construir_grafo, montar_prompt_planner
 from motor.modelos import ClienteStub
 from motor.politica import PoliticaGates
 from motor.registro import rotas_de_registro
+from motor.servico import GerenciadorJobs
 
 
 RAIZ = Path(__file__).parent.parent
@@ -148,3 +149,165 @@ def test_rota_construcao_flui_ate_executor_de_dependencias(tmp_path):
     assert resultado["resposta_final"] == "FINAL"
     assert "depende_de sempre []" not in prompts_planner[0]
     assert any(evento["evento"] == "grafo_dep.iniciado" for evento in eventos)
+
+
+def _eventos(path: Path) -> list[dict]:
+    return [json.loads(linha) for linha in path.read_text(encoding="utf-8").splitlines()]
+
+
+def _rodar_com_selecao(tmp_path, resposta_seletor: str):
+    spec = json.loads((RAIZ / "exemplos" / "grafo-dep-minimo.json").read_text(encoding="utf-8"))
+    rotas = rotas_de_registro(RAIZ / "exemplos" / "registro-rotas")
+    chamadas_planner = 0
+
+    def roteador(papel: str, prompt: str):
+        nonlocal chamadas_planner
+        if papel == "planner":
+            chamadas_planner += 1
+            if chamadas_planner == 1:
+                return resposta_seletor
+            return json.dumps(spec, ensure_ascii=False)
+        if papel in {"raciocinador", "codificador", "validador"}:
+            return f"SAÍDA {papel}"
+        if papel == "verifier":
+            return json.dumps({"aprovado": True, "motivo": "ok"})
+        if papel == "evaluator":
+            return json.dumps({"aprovado": True, "lacunas": []})
+        if papel == "synthesizer":
+            return "FINAL"
+        raise AssertionError(f"papel inesperado: {papel}")
+
+    log_path = tmp_path / "log.jsonl"
+    log = LogEventos(log_path)
+    grafo = construir_grafo(
+        ClienteStub(roteador),
+        log,
+        checkpointer=InMemorySaver(),
+        politica=PoliticaGates(overrides={"plano": "prosseguir"}),
+        rotas=rotas,
+    )
+    resultado = grafo.invoke(
+        {"missao_texto": "construa em etapas"},
+        {"configurable": {"thread_id": "selecao-automatica"}},
+    )
+    return resultado, _eventos(log_path), chamadas_planner
+
+
+def test_planner_escolhe_rota_do_catalogo(tmp_path):
+    resultado, eventos, chamadas = _rodar_com_selecao(
+        tmp_path,
+        json.dumps({"rota": "construcao"}),
+    )
+
+    assert resultado["spec"]["padrao"] == "grafo_dependencias"
+    assert resultado["resposta_final"] == "FINAL"
+    assert chamadas == 2
+    assert any(
+        evento["evento"] == "rota.escolhida"
+        and evento["rota"] == "construcao"
+        and evento["padrao"] == "grafo_dependencias"
+        and evento["fallback"] is False
+        for evento in eventos
+    )
+    assert any(evento["evento"] == "grafo_dep.iniciado" for evento in eventos)
+
+
+@pytest.mark.parametrize("resposta_seletor", [
+    "lixo",
+    json.dumps({"rota": "rota-inventada"}),
+])
+def test_escolha_invalida_cai_na_rota_default(tmp_path, resposta_seletor):
+    spec = json.loads((RAIZ / "exemplos" / "missao-pesquisa.json").read_text(encoding="utf-8"))
+    rotas = rotas_de_registro(RAIZ / "exemplos" / "registro-rotas")
+    chamadas_planner = 0
+
+    def roteador(papel: str, prompt: str):
+        nonlocal chamadas_planner
+        if papel == "planner":
+            chamadas_planner += 1
+            return resposta_seletor if chamadas_planner == 1 else json.dumps(spec, ensure_ascii=False)
+        if papel == "pesquisador":
+            return "RESULTADO"
+        if papel == "verifier":
+            return json.dumps({"aprovado": True, "motivo": "ok"})
+        if papel == "evaluator":
+            return json.dumps({"aprovado": True, "lacunas": []})
+        if papel == "synthesizer":
+            return "FINAL"
+        raise AssertionError(f"papel inesperado: {papel}")
+
+    log_path = tmp_path / "log.jsonl"
+    grafo = construir_grafo(
+        ClienteStub(roteador),
+        LogEventos(log_path),
+        checkpointer=InMemorySaver(),
+        politica=PoliticaGates(overrides={"plano": "prosseguir"}),
+        rotas=rotas,
+    )
+
+    resultado = grafo.invoke(
+        {"missao_texto": "missão ambígua"},
+        {"configurable": {"thread_id": "fallback-rota"}},
+    )
+    eventos = _eventos(log_path)
+
+    assert resultado["spec"]["padrao"] == "fan_out_sintese"
+    assert resultado["resposta_final"] == "FINAL"
+    assert any(
+        evento["evento"] == "rota.escolhida"
+        and evento["rota"] == "pesquisa-sintese"
+        and evento["padrao"] == "fan_out_sintese"
+        and evento["fallback"] is True
+        for evento in eventos
+    )
+
+
+def test_rota_explicita_vence_catalogo_sem_chamar_seletor(tmp_path):
+    spec = json.loads((RAIZ / "exemplos" / "grafo-dep-minimo.json").read_text(encoding="utf-8"))
+    rotas = rotas_de_registro(RAIZ / "exemplos" / "registro-rotas")
+    chamadas_planner: list[str] = []
+
+    def roteador(papel: str, prompt: str):
+        if papel == "planner":
+            chamadas_planner.append(prompt)
+            return json.dumps(spec, ensure_ascii=False)
+        if papel in {"raciocinador", "codificador", "validador"}:
+            return f"SAÍDA {papel}"
+        if papel == "verifier":
+            return json.dumps({"aprovado": True, "motivo": "ok"})
+        if papel == "evaluator":
+            return json.dumps({"aprovado": True, "lacunas": []})
+        if papel == "synthesizer":
+            return "FINAL"
+        raise AssertionError(f"papel inesperado: {papel}")
+
+    log_path = tmp_path / "log.jsonl"
+    grafo = construir_grafo(
+        ClienteStub(roteador),
+        LogEventos(log_path),
+        checkpointer=InMemorySaver(),
+        politica=PoliticaGates(overrides={"plano": "prosseguir"}),
+        rota=rotas["construcao"],
+        rotas=rotas,
+    )
+
+    resultado = grafo.invoke(
+        {"missao_texto": "construa"},
+        {"configurable": {"thread_id": "rota-explicita"}},
+    )
+
+    assert resultado["spec"]["padrao"] == "grafo_dependencias"
+    assert len(chamadas_planner) == 1
+    assert '"rota": "<nome>"' not in chamadas_planner[0]
+    assert not any(evento["evento"] == "rota.escolhida" for evento in _eventos(log_path))
+
+
+def test_servico_carrega_catalogo_de_rotas_uma_vez(tmp_path):
+    gerenciador = GerenciadorJobs(
+        db_path=tmp_path / "motor.db",
+        workspace_base=tmp_path / "runs",
+        dir_registro=RAIZ / "exemplos" / "registro-rotas",
+        cliente=ClienteStub(lambda papel, prompt: None),
+    )
+
+    assert set(gerenciador.rotas) == {"pesquisa-sintese", "construcao"}

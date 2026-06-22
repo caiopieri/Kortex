@@ -20,7 +20,7 @@ from .eventos import LogEventos
 from .grafo import construir_grafo
 from .modelos import ClienteModelo
 from .politica import PoliticaGates
-from .registro import ferramentas_de_registro
+from .registro import ferramentas_de_registro, rotas_de_registro
 
 
 class GerenciadorJobs:
@@ -41,6 +41,7 @@ class GerenciadorJobs:
         self._cliente = cliente
         self.ferramentas = (ferramentas if ferramentas is not None else
                             ferramentas_de_registro(self.dir_registro) if self.dir_registro else {})
+        self.rotas = rotas_de_registro(self.dir_registro) if self.dir_registro else {}
         self._jobs: dict[str, dict[str, Any]] = {}
         self._lock = threading.RLock()
 
@@ -138,6 +139,7 @@ class GerenciadorJobs:
                 politica=self.politica,
                 workspace_base=self.workspace_base,
                 ferramentas=self.ferramentas,
+                rotas=self.rotas,
             )
             resultado = grafo.invoke(entrada, self._config(job_id))
             with self._lock:
@@ -161,6 +163,7 @@ class GerenciadorJobs:
             politica=self.politica,
             workspace_base=self.workspace_base,
             ferramentas=self.ferramentas,
+            rotas=self.rotas,
         )
         try:
             snapshot = grafo.get_state(self._config(job_id))
