@@ -13,6 +13,7 @@
                                                # numa chave (papel|tier|"*"), precedência máxima.
                                                # Pins globais (todos os projetos): ~/.motor/pins.json
   python -m motor ... --registro "4. Registry/Modelos"  # catálogo via entidades .md
+  python -m motor ... --registro Registry --rota construcao  # estratégia explícita do planner
   python -m motor ... --workspace runs  # base dos artefatos por execução
 
 Requer `claude` CLI no PATH (Mac do Caio). Gate do fundador: sem `--caixa`, a
@@ -41,7 +42,7 @@ from .caixa import CaixaFundador, rodar_com_caixa
 from .eventos import LogEventos
 from .grafo import construir_grafo
 from .modelos import ClienteClaudeCLI, ClienteModelo, ProvedorIndisponivel, cliente_de_config
-from .registro import cliente_de_registro, ferramentas_de_registro
+from .registro import cliente_de_registro, ferramentas_de_registro, rotas_de_registro
 
 
 def _merge_cfg(base: dict, over: dict) -> dict:
@@ -106,6 +107,26 @@ def main() -> int:
     if cfg_modelos is not None and dir_registro is not None:
         print("erro: use --registro OU --modelos, não os dois.")
         return 2
+
+    nome_rota = None
+    if "--rota" in args:
+        i = args.index("--rota")
+        nome_rota = args[i + 1]
+        args = args[:i] + args[i + 2:]
+    if nome_rota is not None and dir_registro is None:
+        print("erro: --rota exige --registro.")
+        return 2
+    rota = None
+    if nome_rota is not None:
+        try:
+            rotas = rotas_de_registro(dir_registro)
+        except ValueError as ex:
+            print(f"erro: {ex}")
+            return 2
+        rota = rotas.get(nome_rota)
+        if rota is None:
+            print(f"erro: rota {nome_rota!r} não encontrada no Registry.")
+            return 2
 
     # --pin <chave>=<provedor/modelo>: pin manual (repetível). chave = papel|tier|"*".
     # Precisa de 'provedores' (via --modelos ou ~/.motor/pins.json) pra resolver.
@@ -182,14 +203,16 @@ def main() -> int:
         checkpointer = SqliteSaver(conn)
         checkpointer.setup()
         grafo = construir_grafo(cliente, log, checkpointer=checkpointer, politica=politica,
-                                workspace_base=workspace_base, ferramentas=ferramentas)
+                                workspace_base=workspace_base, ferramentas=ferramentas,
+                                rota=rota)
         caixa = CaixaFundador(dir_caixa, log)
         resultado = rodar_com_caixa(grafo, entrada, config, caixa, log)
         conn.close()
     else:
         # Comportamento default intacto: input() + InMemorySaver (volátil).
         grafo = construir_grafo(cliente, log, checkpointer=InMemorySaver(), politica=politica,
-                                workspace_base=workspace_base, ferramentas=ferramentas)
+                                workspace_base=workspace_base, ferramentas=ferramentas,
+                                rota=rota)
         resultado = grafo.invoke(entrada, config)
         while "__interrupt__" in resultado:  # gate do fundador
             pedido = resultado["__interrupt__"][0].value

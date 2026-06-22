@@ -49,15 +49,23 @@ class EstadoMotor(TypedDict, total=False):
     resposta_final: str
 
 
+GABARITO_ROTA_DEFAULT = (
+    "entre 2 e {max_sub} subagentes focados e INDEPENDENTES (depende_de sempre []);"
+)
+ROTA_DEFAULT = {
+    "padrao": "fan_out_sintese",
+    "gabarito": GABARITO_ROTA_DEFAULT,
+}
+
 PROMPT_PLANNER = """Você é o planner da meta-fábrica. Missão do usuário:
 \"\"\"{missao}\"\"\"
 
 Produza uma WorkflowSpec versão 0.1 em JSON (responda APENAS o JSON), conforme o schema:
 {schema}
 
-Regras: entre 2 e {max_sub} subagentes focados e INDEPENDENTES (depende_de sempre []);
+Regras: {gabarito}
 cada subagente com rubrica objetiva e verificável; criterios_cobertura checáveis contra a missão;
-padrao = "fan_out_sintese".
+padrao = "{padrao}".
 Subagentes podem ser executados por modelos de capacidade limitada: escreva cada objetivo sem
 ambiguidade nem decisão de design implícita, e rubricas checáveis MECANICAMENTE (formato exigido,
 números/evidências presentes, seções obrigatórias) — nunca critérios que dependem de bom gosto.
@@ -106,6 +114,19 @@ Resultados verificados dos subagentes:
 Produza a resposta final da missão."""
 
 
+def montar_prompt_planner(*, missao: str, schema: str, max_sub: int, erro: str = "",
+                           rota: dict[str, Any] | None = None) -> str:
+    rota_ativa = rota or ROTA_DEFAULT
+    gabarito = str(rota_ativa.get("gabarito") or "").replace("{max_sub}", str(max_sub))
+    return PROMPT_PLANNER.format(
+        missao=missao,
+        schema=schema,
+        gabarito=gabarito,
+        padrao=rota_ativa["padrao"],
+        erro=erro,
+    )
+
+
 def registrar_artefato(workspace: str | Path, nome: str, tipo: str, conteudo: str) -> dict[str, str]:
     """Escreve conteúdo textual no workspace e devolve só a referência serializável."""
     raiz = Path(workspace)
@@ -125,7 +146,8 @@ def referenciar_artefato(caminho: str | Path, nome: str, tipo: str) -> dict[str,
 def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                     politica: PoliticaGates | None = None,
                     workspace_base: str | Path = "runs",
-                    ferramentas: dict[str, dict[str, Any]] | None = None):
+                    ferramentas: dict[str, dict[str, Any]] | None = None,
+                    rota: dict[str, Any] | None = None):
     """Compila o grafo. `cliente` e `log` são injetados — o grafo não conhece backends.
     `politica` decide quais gates pausam (manual) ou resolvem sozinhos (auto-mode);
     ausente = tudo manual (comportamento default)."""
@@ -148,10 +170,10 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         erro = ""
         for tentativa in (1, 2, 3):
             log.evento("executor.chamado", executor="planner", tentativa=tentativa)
-            resp = cliente.chamar("planner", PROMPT_PLANNER.format(
+            resp = cliente.chamar("planner", montar_prompt_planner(
                 missao=state["missao_texto"],
                 schema=json.dumps(WorkflowSpec.model_json_schema(), ensure_ascii=False),
-                max_sub=10, erro=erro))
+                max_sub=10, erro=erro, rota=rota))
             bruto = extrai_json(resp or "")
             if bruto is not None:
                 try:

@@ -181,3 +181,32 @@ def ferramentas_de_registro(pasta: str | Path) -> dict[str, dict[str, Any]]:
         ferramentas[nome] = dados
         dono[nome] = caminho.name
     return ferramentas
+
+
+def rotas_de_registro(pasta: str | Path) -> dict[str, dict[str, Any]]:
+    """Carrega entidades `tipo: rota` do Registry, indexadas pelo nome."""
+    raiz = Path(pasta)
+    rotas: dict[str, dict[str, Any]] = {}
+    dono: dict[str, str] = {}
+    for caminho in sorted(raiz.glob("*.md"), key=lambda p: p.name):
+        dados = _frontmatter(caminho)
+        if dados.get("tipo") != "rota":
+            continue
+        nome_bruto = dados.get("nome")
+        if not isinstance(nome_bruto, str) or not nome_bruto.strip():
+            raise ValueError(f"rota sem nome em {caminho.name}")
+        nome = nome_bruto.strip()
+        if nome in rotas:
+            raise ValueError(f"rota {nome!r} duplicada em {dono[nome]} e {caminho.name}")
+        padrao = dados.get("padrao")
+        if padrao not in {"fan_out_sintese", "grafo_dependencias"}:
+            raise ValueError(
+                f"rota {nome!r} em {caminho.name} exige padrao "
+                "'fan_out_sintese' ou 'grafo_dependencias'"
+            )
+        for campo in ("quando", "gabarito"):
+            if campo in dados and not isinstance(dados[campo], str):
+                raise ValueError(f"rota {nome!r} em {caminho.name}: {campo} deve ser string")
+        rotas[nome] = {**dados, "nome": nome, "padrao": padrao}
+        dono[nome] = caminho.name
+    return rotas
