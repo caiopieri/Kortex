@@ -79,6 +79,11 @@ padrao = "{padrao}".
 Subagentes podem ser executados por modelos de capacidade limitada: escreva cada objetivo sem
 ambiguidade nem decisão de design implícita, e rubricas checáveis MECANICAMENTE (formato exigido,
 números/evidências presentes, seções obrigatórias) — nunca critérios que dependem de bom gosto.
+Cada rubrica deve ter NO MÁXIMO 5 critérios, e cada critério testa a PRESENÇA ou o FORMATO de algo
+verificável na própria saída (uma seção, um campo, um número, um exemplo) — não a correção de minúcia
+de domínio. NÃO exija versão exata de biblioteca, nomes internos de parâmetros de API, valores-padrão
+de funções de terceiros, nem conhecimento factual profundo que um executor de capacidade limitada não
+garante: a rubrica é o CONTRATO MÍNIMO do objetivo, não uma prova de erudição.
 Para cada subagente, classifique o campo "tier" pela complexidade da tarefa (roteamento por custo):
 "simples" (extração/formatação/lookup direto), "media" (pesquisa ou redação com algum raciocínio),
 "complexa" (design, trade-offs, modelagem ou síntese que exige um modelo forte).
@@ -101,8 +106,11 @@ Rubrica (TODOS os critérios precisam passar):
 Saída a avaliar:
 \"\"\"{saida}\"\"\"
 
-Seja cético: procure o que falta, não o que agrada. Responda APENAS um JSON:
-{{"aprovado": true/false, "motivo": "específico e acionável"}}"""
+Julgue ESTRITAMENTE contra os critérios da rubrica acima: NÃO invente critérios novos nem exija nada
+além do que a rubrica lista (sem trazer conhecimento de domínio que não está na rubrica). Se TODOS os
+critérios da rubrica forem atendidos, APROVE — mesmo que você imagine melhorias possíveis. Seja cético
+quanto ao que a rubrica pede, não quanto ao que você gostaria. Responda APENAS um JSON:
+{{"aprovado": true/false, "motivo": "cite QUAL critério da rubrica falhou, específico e acionável"}}"""
 
 PROMPT_EVALUATOR = """Você é o avaliador global de cobertura de um workflow.
 Missão: {missao_objetivo}

@@ -1,0 +1,17 @@
+{
+  "_comentario": "Smoke test barato: tudo no Codex gpt-5.4-mini (limite resetado, mais barato que 5.5). Um modelo só pra cortar variáveis. Quando validar, dá pra separar juiz pra independência cross-model. Se 'gpt-5.4-mini' não for o id exato do codex, troque pelo que aparece em 'codex --help'/no banner.",
+  "provedores": {
+    "codex": { "tipo": "codex" }
+  },
+  "tiers": {
+    "simples":  "codex/gpt-5.4-mini",
+    "media":    "codex/gpt-5.4-mini",
+    "complexa": "codex/gpt-5.4-mini"
+  },
+  "pins": {
+    "planner":     "codex/gpt-5.4-mini",
+    "verifier":    "codex/gpt-5.4-mini",
+    "evaluator":   "codex/gpt-5.4-mini",
+    "synthesizer": "codex/gpt-5.4-mini"
+  }
+}

@@ -32,6 +32,11 @@ padrao = "fan_out_sintese".
 Subagentes podem ser executados por modelos de capacidade limitada: escreva cada objetivo sem
 ambiguidade nem decisão de design implícita, e rubricas checáveis MECANICAMENTE (formato exigido,
 números/evidências presentes, seções obrigatórias) — nunca critérios que dependem de bom gosto.
+Cada rubrica deve ter NO MÁXIMO 5 critérios, e cada critério testa a PRESENÇA ou o FORMATO de algo
+verificável na própria saída (uma seção, um campo, um número, um exemplo) — não a correção de minúcia
+de domínio. NÃO exija versão exata de biblioteca, nomes internos de parâmetros de API, valores-padrão
+de funções de terceiros, nem conhecimento factual profundo que um executor de capacidade limitada não
+garante: a rubrica é o CONTRATO MÍNIMO do objetivo, não uma prova de erudição.
 Para cada subagente, classifique o campo "tier" pela complexidade da tarefa (roteamento por custo):
 "simples" (extração/formatação/lookup direto), "media" (pesquisa ou redação com algum raciocínio),
 "complexa" (design, trade-offs, modelagem ou síntese que exige um modelo forte).

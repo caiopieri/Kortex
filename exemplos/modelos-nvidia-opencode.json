@@ -1,0 +1,17 @@
+{
+  "_comentario": "Tudo nos modelos FREE da NVIDIA via opencode (sem claude, sem codex). Executores por tier = llama-3.3-70b; julgamento (planner/verifier/evaluator/synthesizer) PINADO no qwen3-next-80b (família diferente = independência cross-model, e pin fura o guard do juiz pra não cair no claude). permissao deny = nó texto-entra/texto-sai, opencode não edita nada. Se um modelo bater rate limit, troque o id por outro da lista (ex.: deepseek-ai/deepseek-v4-flash, moonshotai/kimi-k2.6).",
+  "provedores": {
+    "oc": { "tipo": "opencode", "permissao": "{\"edit\":\"deny\",\"bash\":\"deny\"}" }
+  },
+  "tiers": {
+    "simples":  "oc/nvidia/meta/llama-3.3-70b-instruct",
+    "media":    "oc/nvidia/meta/llama-3.3-70b-instruct",
+    "complexa": "oc/nvidia/qwen/qwen3-next-80b-a3b-instruct"
+  },
+  "pins": {
+    "planner":     "oc/nvidia/qwen/qwen3-next-80b-a3b-instruct",
+    "verifier":    "oc/nvidia/qwen/qwen3-next-80b-a3b-instruct",
+    "evaluator":   "oc/nvidia/qwen/qwen3-next-80b-a3b-instruct",
+    "synthesizer": "oc/nvidia/qwen/qwen3-next-80b-a3b-instruct"
+  }
+}

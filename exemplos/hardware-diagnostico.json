@@ -1,0 +1,87 @@
+{
+  "_comentario": "Degrau D0/D1 do harness de hardware (diagnóstico de reparo) rodando no motor de HOJE: padrao fan_out_sintese v0.1, zero dos REQ-1..5 da v0.2. 4 subagentes independentes (extrair sintoma / hipóteses de causa / plano de teste / componentes candidatos) → gate de cobertura → laudo. Caso self-contained e SEM fonte proprietária (sem boardview vazada — evita a parede legal do blueprint). Rode: python3 -m motor --spec exemplos/hardware-diagnostico.json --modelos exemplos/modelos-codex.json  (ou --registro exemplos/registro-modelos).",
+  "versao": "0.1",
+  "padrao": "fan_out_sintese",
+  "missao": {
+    "id": "diag-buck-5v",
+    "objetivo": "Diagnosticar a causa-raiz provável de um módulo regulador buck 12V→5V que passou a entregar 3,2 V sob carga, e produzir um plano de teste priorizado para confirmar.",
+    "contexto": "Módulo buck síncrono genérico (controlador classe MP2307/AOZ1280), entrada 12 V de bancada, saída nominal 5,0 V / até 2 A. Sintoma: em vazio a saída fica ~4,8 V; ao puxar ~1 A a saída cai pra 3,2 V e o indutor esquenta rápido (>80 °C em segundos). Ripple de saída subjetivamente alto no osciloscópio. Não há curto franco (entrada não desarma a fonte). Ferramentas disponíveis na bancada: multímetro, osciloscópio, fonte ajustável com limite de corrente, estação de ar quente, capacímetro/ESR meter. NÃO há boardview nem esquemático do fabricante — raciocine pela topologia padrão de um buck síncrono.",
+    "criterios_cobertura": [
+      "Há ao menos 3 hipóteses de causa-raiz ranqueadas, cada uma com o mecanismo de falha que explica a queda sob carga + aquecimento do indutor",
+      "Há um plano de medição ORDENADO (do mais seguro/barato ao mais invasivo) com ponto de teste, instrumento e valor esperado por passo",
+      "Os componentes suspeitos vêm com valor nominal esperado, tolerância e critério objetivo de 'trocar ou não'",
+      "Cada conclusão é rastreável ao sintoma relatado ou a uma medição proposta — nenhum chute sem teste que o confirme"
+    ]
+  },
+  "restricoes": {
+    "teto_custo": 1.0,
+    "max_subagentes": 10,
+    "max_tentativas": 3
+  },
+  "subagentes": [
+    {
+      "id": "extrair-sintomas",
+      "papel": "extrator",
+      "objetivo": "Converter o relato em uma ficha estruturada de falha (condições, medições conhecidas, o que falta medir), sem inventar dados ausentes.",
+      "entradas": {},
+      "resultado_esperado": "JSON com campos: sintoma, condicoes (carga, tensao_entrada), medicoes_conhecidas, lacunas_de_medicao.",
+      "rubrica": [
+        "A saída é um JSON válido com os 4 campos exigidos",
+        "Toda medição listada vem do contexto — nada inventado",
+        "lacunas_de_medicao lista pelo menos 3 medições ainda NÃO feitas"
+      ],
+      "tier": "simples",
+      "capacidades_requeridas": ["redacao"]
+    },
+    {
+      "id": "hipoteses-causa",
+      "papel": "diagnosticador",
+      "objetivo": "Levantar e ranquear hipóteses de causa-raiz que expliquem JUNTAS a queda de tensão sob carga e o aquecimento do indutor num buck síncrono.",
+      "entradas": {},
+      "resultado_esperado": "Lista ranqueada de >=3 hipóteses; cada uma com mecanismo físico e qual medição a confirma ou descarta.",
+      "rubrica": [
+        "Pelo menos 3 hipóteses, cada uma com mecanismo de falha coerente com a topologia buck síncrono",
+        "Cada hipótese diz explicitamente qual medição a confirmaria E qual a descartaria",
+        "O ranking tem justificativa (por que a #1 é mais provável que a #3), não é arbitrário",
+        "As hipóteses cobrem famílias distintas (ex.: chaveamento/MOSFET, indutor saturando, realimentação, capacitor de saída/ESR) — não 3 variações da mesma"
+      ],
+      "tier": "complexa",
+      "capacidades_requeridas": ["raciocinio-longo"]
+    },
+    {
+      "id": "plano-teste",
+      "papel": "planejador-teste",
+      "objetivo": "Montar a sequência de medições para isolar a causa, do teste mais seguro/barato ao mais invasivo, com valor esperado e a decisão que cada passo destrava.",
+      "entradas": {},
+      "resultado_esperado": "Passos numerados: ponto de teste, instrumento, condição (carga), valor/forma esperada, e 'se medir X então conclui Y'.",
+      "rubrica": [
+        "Cada passo tem ponto de teste, instrumento e valor (ou forma de onda) esperado",
+        "A ordem vai do não-invasivo/sem-energia ao invasivo — e avisa quando há risco (sondar com carga, calor)",
+        "Cada passo declara a decisão que destrava (confirma/descarta qual hipótese)",
+        "O plano permite distinguir as hipóteses do subagente de causa, não só confirmar uma"
+      ],
+      "tier": "media",
+      "capacidades_requeridas": ["raciocinio-longo", "calculo"]
+    },
+    {
+      "id": "componentes-candidatos",
+      "papel": "consultor-componente",
+      "objetivo": "Listar os componentes mais suspeitos com o valor nominal esperado pela topologia, tolerância e critério objetivo de substituição.",
+      "entradas": {},
+      "resultado_esperado": "Tabela: componente (tipo/ref típica), valor nominal esperado, tolerância, por que é suspeito, critério de troca.",
+      "rubrica": [
+        "Cada componente traz valor nominal plausível para um buck 12V→5V/2A (ex.: faixa do indutor, do capacitor de saída, do diodo/MOSFET)",
+        "Há um critério objetivo de troca (ex.: ESR acima de N, indutância fora de ±X%), não 'troque e veja'",
+        "Os suspeitos são consistentes com pelo menos uma hipótese de causa-raiz",
+        "Distingue medição in-circuit de medição com o componente removido quando relevante"
+      ],
+      "tier": "media",
+      "capacidades_requeridas": ["pesquisa", "calculo"]
+    }
+  ],
+  "gates": [],
+  "sintese": {
+    "instrucao": "Consolide um laudo de diagnóstico priorizado: comece pela hipótese mais provável e pelo teste mais seguro/barato que a confirma ou descarta, encadeando até o diagnóstico. Para cada teste, diga o valor esperado e o que cada resultado conclui. Termine com os componentes a verificar, em ordem de suspeita, com valor nominal e critério de troca.",
+    "formato": "markdown"
+  }
+}

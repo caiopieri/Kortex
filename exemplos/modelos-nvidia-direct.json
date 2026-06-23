@@ -1,0 +1,20 @@
+{
+  "_comentario": "NVIDIA via API HTTP DIRETA (sem opencode). Exige NVIDIA_API_KEY no ambiente (free em build.nvidia.com). UM modelo só (llama-3.3-70b instruct) pra cortar variáveis no shakedown: executor por tier + julgamento pinado. Parser divide no 1o '/': 'nvidia/meta/llama-3.3-70b-instruct' => provedor 'nvidia', modelo 'meta/llama-3.3-70b-instruct' (id real da API). Quando estabilizar, dá pra voltar a separar juiz (ex.: qwen3-next-80b) pra independência cross-model.",
+  "provedores": {
+    "nvidia": {
+      "base_url": "https://integrate.api.nvidia.com/v1",
+      "api_key_env": "NVIDIA_API_KEY"
+    }
+  },
+  "tiers": {
+    "simples":  "nvidia/meta/llama-3.3-70b-instruct",
+    "media":    "nvidia/meta/llama-3.3-70b-instruct",
+    "complexa": "nvidia/meta/llama-3.3-70b-instruct"
+  },
+  "pins": {
+    "planner":     "nvidia/meta/llama-3.3-70b-instruct",
+    "verifier":    "nvidia/meta/llama-3.3-70b-instruct",
+    "evaluator":   "nvidia/meta/llama-3.3-70b-instruct",
+    "synthesizer": "nvidia/meta/llama-3.3-70b-instruct"
+  }
+}
