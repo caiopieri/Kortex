@@ -9,6 +9,7 @@
                                                # reroteia pro fallback (Corte B). Repetível.
   python -m motor ... --auto                   # auto-mode: gates resolvem sozinhos (Corte C)
   python -m motor ... --auto --gate cobertura=manual  # tudo auto, MENOS o gate de cobertura
+  python -m motor ... --escalar                # verifier reprovou → retry sobe um tier
   python -m motor ... --modelos cfg.json --pin synthesizer=oc/openai/gpt-5.5  # fixa modelo
                                                # numa chave (papel|tier|"*"), precedência máxima.
                                                # Pins globais (todos os projetos): ~/.motor/pins.json
@@ -171,6 +172,10 @@ def main() -> int:
         politica.overrides[gid] = modo or "manual"
         args = args[:i] + args[i + 2:]
 
+    escalar_em_retry = "--escalar" in args
+    if escalar_em_retry:
+        args.remove("--escalar")
+
     entrada: dict
     if args[0] == "--spec":
         entrada = {"spec": json.loads(Path(args[1]).read_text(encoding="utf-8"))}
@@ -206,7 +211,8 @@ def main() -> int:
         checkpointer.setup()
         grafo = construir_grafo(cliente, log, checkpointer=checkpointer, politica=politica,
                                 workspace_base=workspace_base, ferramentas=ferramentas,
-                                rota=rota, rotas=rotas)
+                                rota=rota, rotas=rotas,
+                                escalar_em_retry=escalar_em_retry)
         caixa = CaixaFundador(dir_caixa, log)
         resultado = rodar_com_caixa(grafo, entrada, config, caixa, log)
         conn.close()
@@ -214,7 +220,8 @@ def main() -> int:
         # Comportamento default intacto: input() + InMemorySaver (volátil).
         grafo = construir_grafo(cliente, log, checkpointer=InMemorySaver(), politica=politica,
                                 workspace_base=workspace_base, ferramentas=ferramentas,
-                                rota=rota, rotas=rotas)
+                                rota=rota, rotas=rotas,
+                                escalar_em_retry=escalar_em_retry)
         resultado = grafo.invoke(entrada, config)
         while "__interrupt__" in resultado:  # gate do fundador
             pedido = resultado["__interrupt__"][0].value

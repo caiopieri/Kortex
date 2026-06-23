@@ -132,6 +132,16 @@ Resultados verificados dos subagentes:
 Produza a resposta final da missão."""
 
 
+ORDEM_TIER = ["simples", "media", "complexa"]
+
+
+def _proximo_tier(t: str | None) -> str:
+    """Próximo degrau acima na escada de dificuldade. Teto = 'complexa'."""
+    if t in ORDEM_TIER and ORDEM_TIER.index(t) < len(ORDEM_TIER) - 1:
+        return ORDEM_TIER[ORDEM_TIER.index(t) + 1]
+    return "complexa"
+
+
 def montar_prompt_planner(*, missao: str, schema: str, max_sub: int, erro: str = "",
                            rota: dict[str, Any] | None = None) -> str:
     rota_ativa = rota or ROTA_DEFAULT
@@ -194,7 +204,8 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                     workspace_base: str | Path = "runs",
                     ferramentas: dict[str, dict[str, Any]] | None = None,
                     rota: dict[str, Any] | None = None,
-                    rotas: dict[str, dict[str, Any]] | None = None):
+                    rotas: dict[str, dict[str, Any]] | None = None,
+                    escalar_em_retry: bool = False):
     """Compila o grafo. `cliente` e `log` são injetados — o grafo não conhece backends.
     `politica` decide quais gates pausam (manual) ou resolvem sozinhos (auto-mode);
     ausente = tudo manual (comportamento default)."""
@@ -315,10 +326,11 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                                          capacidades=sub.get("capacidades_requeridas"))
                      if hasattr(cliente, "provedor_de") else None)
         kw_verifier = {"evitar": prov_exec} if prov_exec else {}
+        tier_atual = sub.get("tier")
         feedback, ultima = payload.get("feedback", ""), None
         for tentativa in range(1, max_t + 1):
             log.evento("executor.chamado", executor=sub["id"], papel=sub["papel"],
-                       tier=sub.get("tier"), tentativa=tentativa)
+                       tier=tier_atual, tentativa=tentativa)
             ultima = cliente.chamar(sub["papel"], PROMPT_SUBAGENTE.format(
                 id=sub["id"], papel=sub["papel"],
                 missao_objetivo=missao["objetivo"], missao_contexto=missao["contexto"],
@@ -326,7 +338,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                 resultado_esperado=sub["resultado_esperado"],
                 deps_txt=deps_txt,
                 feedback=f"\nNa tentativa anterior o verificador reprovou: \"{feedback}\". Corrija." if feedback else "",
-            ), ferramentas=sub.get("ferramentas"), tier=sub.get("tier"),
+            ), ferramentas=sub.get("ferramentas"), tier=tier_atual,
                 capacidades=sub.get("capacidades_requeridas"))
             if not ultima:
                 feedback = "modelo não respondeu"
@@ -350,6 +362,12 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                 return {"resultados": [resultado]}
             feedback = veredito.get("motivo", "sem motivo")
             log.evento("portao.reprovado", portao=f"verifier:{sub['id']}", ciclo=tentativa, motivo=feedback)
+            if escalar_em_retry:
+                novo = _proximo_tier(tier_atual)
+                if novo != tier_atual:
+                    log.evento("executor.escalado", executor=sub["id"],
+                               de=tier_atual, para=novo, tentativa=tentativa)
+                tier_atual = novo
         return {"resultados": [{"id": sub["id"], "saida": ultima or "",
                                 "tentativas": max_t, "aprovado": False, "motivo": feedback}]}
 

@@ -3,6 +3,7 @@ o gate do fundador (interrupt/resume) e a missão dirigida por spec serializada.
 import json
 from pathlib import Path
 
+import pytest
 from langgraph.types import Command
 
 try:
@@ -11,7 +12,8 @@ except ImportError:
     from langgraph.checkpoint.memory import MemorySaver as InMemorySaver
 
 from motor.eventos import LogEventos
-from motor.grafo import construir_grafo
+from motor import __main__ as cli
+from motor.grafo import _proximo_tier, construir_grafo
 from motor.modelos import ClienteRoteador, ClienteStub
 from motor.politica import PoliticaGates
 
@@ -280,3 +282,113 @@ def test_subagente_usa_catalogo_por_capacidade(tmp_path):
     assert resultado["resultados"][0]["saida"] == "RESULTADO capacidade"
     assert len(capaz.chamadas) == 1
     assert "modelo.roteado_capacidade" in [e["evento"] for e in eventos_de(tmp_path)]
+
+
+@pytest.mark.parametrize(
+    ("tier", "esperado"),
+    [
+        ("simples", "media"),
+        ("media", "complexa"),
+        ("complexa", "complexa"),
+        (None, "complexa"),
+        ("xpto", "complexa"),
+    ],
+)
+def test_proximo_tier(tier, esperado):
+    assert _proximo_tier(tier) == esperado
+
+
+class ClienteTierFake:
+    def __init__(self, aprovar_na_tentativa: int = 3):
+        self.aprovar_na_tentativa = aprovar_na_tentativa
+        self.chamadas: list[tuple[str, str | None]] = []
+        self.verificacoes = 0
+
+    def chamar(self, papel: str, prompt: str, ferramentas=None, tier=None, timeout=300,
+               evitar=None, capacidades=None):
+        self.chamadas.append((papel, tier))
+        if papel == "pesquisador":
+            return f"SAÍDA tentativa {sum(1 for p, _ in self.chamadas if p == 'pesquisador')}"
+        if papel == "verifier":
+            self.verificacoes += 1
+            aprovado = self.verificacoes >= self.aprovar_na_tentativa
+            return json.dumps({"aprovado": aprovado, "motivo": "faltou evidência"})
+        if papel == "evaluator":
+            return json.dumps({"aprovado": True, "lacunas": []})
+        if papel == "synthesizer":
+            return "FINAL"
+        raise AssertionError(f"papel inesperado: {papel}")
+
+
+def _spec_um_subagente(tier="simples", max_tentativas=3):
+    return {
+        **SPEC,
+        "restricoes": {**SPEC["restricoes"], "max_tentativas": max_tentativas},
+        "subagentes": [{**SPEC["subagentes"][0], "tier": tier}],
+    }
+
+
+def test_retry_sem_flag_mantem_tier_declarado_em_todas_as_tentativas(tmp_path):
+    cliente = ClienteTierFake(aprovar_na_tentativa=3)
+    log = LogEventos(tmp_path / "log.jsonl")
+    grafo = construir_grafo(cliente, log, checkpointer=InMemorySaver(),
+                            politica=PoliticaGates(overrides={"plano": "prosseguir"}))
+
+    resultado = grafo.invoke({"spec": _spec_um_subagente()}, {"configurable": {"thread_id": "tier-inerte"}})
+
+    assert resultado["resultados"][0]["aprovado"] is True
+    assert [tier for papel, tier in cliente.chamadas if papel == "pesquisador"] == ["simples", "simples", "simples"]
+    assert not any(e["evento"] == "executor.escalado" for e in eventos_de(tmp_path))
+
+
+def test_retry_com_flag_escala_tier_ate_complexa(tmp_path):
+    cliente = ClienteTierFake(aprovar_na_tentativa=3)
+    log = LogEventos(tmp_path / "log.jsonl")
+    grafo = construir_grafo(cliente, log, checkpointer=InMemorySaver(),
+                            politica=PoliticaGates(overrides={"plano": "prosseguir"}),
+                            escalar_em_retry=True)
+
+    resultado = grafo.invoke({"spec": _spec_um_subagente()}, {"configurable": {"thread_id": "tier-escalado"}})
+
+    assert resultado["resultados"][0]["aprovado"] is True
+    assert [tier for papel, tier in cliente.chamadas if papel == "pesquisador"] == ["simples", "media", "complexa"]
+    escalados = [e for e in eventos_de(tmp_path) if e["evento"] == "executor.escalado"]
+    assert [(e["de"], e["para"]) for e in escalados] == [("simples", "media"), ("media", "complexa")]
+
+
+def test_retry_com_flag_nao_escala_quando_aprova_na_primeira(tmp_path):
+    cliente = ClienteTierFake(aprovar_na_tentativa=1)
+    log = LogEventos(tmp_path / "log.jsonl")
+    grafo = construir_grafo(cliente, log, checkpointer=InMemorySaver(),
+                            politica=PoliticaGates(overrides={"plano": "prosseguir"}),
+                            escalar_em_retry=True)
+
+    resultado = grafo.invoke({"spec": _spec_um_subagente()}, {"configurable": {"thread_id": "tier-aprovado"}})
+
+    assert resultado["resultados"][0]["tentativas"] == 1
+    assert [tier for papel, tier in cliente.chamadas if papel == "pesquisador"] == ["simples"]
+    assert not any(e["evento"] == "executor.escalado" for e in eventos_de(tmp_path))
+
+
+def test_cli_escalar_liga_flag_e_default_mantem_inerte(monkeypatch, capsys):
+    flags: list[bool] = []
+
+    class GrafoFake:
+        def invoke(self, entrada, config):
+            return {"resposta_final": "ok"}
+
+    monkeypatch.setattr(cli, "construir_cliente", lambda cfg_modelos, dir_registro, log=None: ClienteStub(faz_roteador()))
+
+    def construir_fake(*args, **kwargs):
+        flags.append(kwargs["escalar_em_retry"])
+        return GrafoFake()
+
+    monkeypatch.setattr(cli, "construir_grafo", construir_fake)
+
+    monkeypatch.setattr(cli.sys, "argv", ["python -m motor", "missão"])
+    assert cli.main() == 0
+    monkeypatch.setattr(cli.sys, "argv", ["python -m motor", "missão", "--escalar"])
+    assert cli.main() == 0
+
+    assert flags == [False, True]
+    assert capsys.readouterr().out.count("=== RESPOSTA FINAL ===") == 2
