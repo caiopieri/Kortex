@@ -1,0 +1,9 @@
+{"t": 0.024, "evento": "executor.chamado", "executor": "planner", "tentativa": 1}
+{"t": 0.028, "evento": "modelo.pin", "papel": "planner", "tier": null}
+{"t": 58.56, "evento": "executor.erro", "executor": "planner", "motivo": "spec inválida ou sem JSON", "tentativa": 1}
+{"t": 58.56, "evento": "executor.chamado", "executor": "planner", "tentativa": 2}
+{"t": 58.564, "evento": "modelo.pin", "papel": "planner", "tier": null}
+{"t": 162.708, "evento": "executor.erro", "executor": "planner", "motivo": "spec inválida ou sem JSON", "tentativa": 2}
+{"t": 162.708, "evento": "executor.chamado", "executor": "planner", "tentativa": 3}
+{"t": 162.713, "evento": "modelo.pin", "papel": "planner", "tier": null}
+{"t": 212.783, "evento": "executor.erro", "executor": "planner", "motivo": "spec inválida ou sem JSON", "tentativa": 3}
