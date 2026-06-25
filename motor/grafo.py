@@ -252,6 +252,9 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                     return {"spec": spec.model_dump(), "run_id": run_id}
                 except Exception as ex:  # validação pydantic reprovada → reinjeta o erro
                     erro = f"\n\nSua tentativa anterior falhou na validação: {ex}\nCorrija e reenvie só o JSON."
+            else:  # sem JSON parseável → reinjeta instrução (senão a retentativa repete às cegas)
+                erro = ("\n\nSua resposta anterior NÃO continha um objeto JSON válido. Responda APENAS o "
+                        "objeto JSON da WorkflowSpec, sem nenhum texto antes ou depois e sem cercas de código (```).")
             log.evento("executor.erro", executor="planner", motivo="spec inválida ou sem JSON", tentativa=tentativa)
         raise RuntimeError("planner não produziu WorkflowSpec válida em 3 tentativas")
 

@@ -36,13 +36,49 @@ class ProvedorIndisponivel(RuntimeError):
 
 
 def extrai_json(texto: str) -> Optional[dict]:
-    m = re.search(r"\{.*\}", texto, re.S)
-    if not m:
+    if not texto:
         return None
+    s = texto.strip()
+    # 1) tira cercas de código markdown (```json ... ``` ou ``` ... ```)
+    fence = re.search(r"```(?:json)?\s*(.*?)```", s, re.S | re.I)
+    if fence:
+        s = fence.group(1).strip()
+    # 2) tenta o texto inteiro
     try:
-        return json.loads(m.group(0))
+        obj = json.loads(s)
+        return obj if isinstance(obj, dict) else None
     except json.JSONDecodeError:
-        return None
+        pass
+    # 3) varre o primeiro objeto {...} BALANCEADO (respeita strings/escapes),
+    #    robusto a prosa ou chaves soltas antes/depois do JSON.
+    inicio = s.find("{")
+    while inicio != -1:
+        profundidade = 0
+        em_string = False
+        escape = False
+        for i in range(inicio, len(s)):
+            c = s[i]
+            if em_string:
+                if escape:
+                    escape = False
+                elif c == "\\":
+                    escape = True
+                elif c == '"':
+                    em_string = False
+            elif c == '"':
+                em_string = True
+            elif c == "{":
+                profundidade += 1
+            elif c == "}":
+                profundidade -= 1
+                if profundidade == 0:
+                    try:
+                        obj = json.loads(s[inicio:i + 1])
+                        return obj if isinstance(obj, dict) else None
+                    except json.JSONDecodeError:
+                        break  # bloco inválido → tenta o próximo '{'
+        inicio = s.find("{", inicio + 1)
+    return None
 
 
 def _chave_provedor(cliente: Any) -> str:

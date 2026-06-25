@@ -12,7 +12,27 @@ import types
 import pytest
 
 from motor import modelos
-from motor.modelos import ClienteRoteador, ClienteStub
+from motor.modelos import ClienteRoteador, ClienteStub, extrai_json
+
+
+# ---------------------------------------------------------------- extrai_json
+
+@pytest.mark.parametrize("texto, esperado", [
+    ('{"a": 1}', {"a": 1}),
+    ('```json\n{"a": 1}\n```', {"a": 1}),
+    ('```\n{"a": 1}\n```', {"a": 1}),
+    ('Aqui está o JSON:\n{"a": 1}', {"a": 1}),
+    ('{"a": 1}\nNota: use {x} com cuidado.', {"a": 1}),       # chave solta DEPOIS
+    ('Veja o objeto { resultado }: {"a": 1}', {"a": 1}),       # chave solta ANTES
+    ('{"a": {"b": 2}, "c": [1, 2]}', {"a": {"b": 2}, "c": [1, 2]}),
+    ('{"t": "use {chaves} e } aqui"}', {"t": "use {chaves} e } aqui"}),  # chaves em string
+    ('[1, 2, 3]', None),         # topo não-objeto
+    ('nenhum json aqui', None),
+    ('', None),
+    ('{"a": ', None),            # quebrado
+])
+def test_extrai_json_robusto(texto, esperado):
+    assert extrai_json(texto) == esperado
 
 
 class FakeLog:
