@@ -77,13 +77,15 @@ Regras: {gabarito}
 cada subagente com rubrica objetiva e verificável; criterios_cobertura checáveis contra a missão;
 padrao = "{padrao}".
 Subagentes podem ser executados por modelos de capacidade limitada: escreva cada objetivo sem
-ambiguidade nem decisão de design implícita, e rubricas checáveis MECANICAMENTE (formato exigido,
-números/evidências presentes, seções obrigatórias) — nunca critérios que dependem de bom gosto.
-Cada rubrica deve ter NO MÁXIMO 5 critérios, e cada critério testa a PRESENÇA ou o FORMATO de algo
-verificável na própria saída (uma seção, um campo, um número, um exemplo) — não a correção de minúcia
-de domínio. NÃO exija versão exata de biblioteca, nomes internos de parâmetros de API, valores-padrão
+ambiguidade nem decisão de design implícita, e rubricas que checam a PRESENÇA de conteúdo
+verificável (um tópico abordado, um número, um exemplo, um caso) — nunca critérios que dependem de
+bom gosto. Cada rubrica deve ter NO MÁXIMO 5 critérios, e cada critério julga a SUBSTÂNCIA pelo
+SIGNIFICADO, não por caracteres exatos: descreva o que a saída deve CONTER ("aborda tratamento de
+erros", "lista pelo menos 2 casos de teste"), e NUNCA exija título de seção exato, nível de heading,
+formato de ID, prefixo de linha ou estilo de lista (marcador vs numerado) — formatação cosmética não
+é critério. NÃO exija versão exata de biblioteca, nomes internos de parâmetros de API, valores-padrão
 de funções de terceiros, nem conhecimento factual profundo que um executor de capacidade limitada não
-garante: a rubrica é o CONTRATO MÍNIMO do objetivo, não uma prova de erudição.
+garante: a rubrica é o CONTRATO MÍNIMO do objetivo, não uma prova de erudição nem de formatação.
 Para cada subagente, classifique o campo "tier" pela complexidade da tarefa (roteamento por custo):
 "simples" (extração/formatação/lookup direto), "media" (pesquisa ou redação com algum raciocínio),
 "complexa" (design, trade-offs, modelagem ou síntese que exige um modelo forte).
@@ -94,7 +96,9 @@ Missão global: {missao_objetivo}
 Contexto: {missao_contexto}
 Seu objetivo: {objetivo}
 Entradas: {entradas}
-Resultado esperado: {resultado_esperado}{deps_txt}{feedback}
+Resultado esperado: {resultado_esperado}{deps_txt}
+Sua saída será avaliada contra esta rubrica — atenda TODOS os critérios:
+{rubrica_txt}{feedback}
 
 Entregue diretamente o resultado, específico e fundamentado."""
 
@@ -327,8 +331,23 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                      if hasattr(cliente, "provedor_de") else None)
         kw_verifier = {"evitar": prov_exec} if prov_exec else {}
         tier_atual = sub.get("tier")
+        rubrica_txt = "\n".join(f"- {c}" for c in sub["rubrica"])
         feedback, ultima = payload.get("feedback", ""), None
         for tentativa in range(1, max_t + 1):
+            # Revisão > regeneração: se já há um rascunho, mandamos corrigir SÓ o que o
+            # verificador apontou em vez de reescrever do zero (não joga trabalho bom fora
+            # e converge mais rápido em falhas pequenas/cosméticas).
+            if feedback and ultima:
+                bloco_feedback = (
+                    "\n\nSUA TENTATIVA ANTERIOR (o conteúdo já está bom — NÃO reescreva do zero):\n"
+                    f"\"\"\"\n{ultima}\n\"\"\"\n"
+                    f"O verificador reprovou por: \"{feedback}\". Corrija APENAS o que foi apontado "
+                    "e devolva o texto inteiro corrigido, preservando todo o resto como está."
+                )
+            elif feedback:
+                bloco_feedback = f"\nNa tentativa anterior o verificador reprovou: \"{feedback}\". Corrija."
+            else:
+                bloco_feedback = ""
             log.evento("executor.chamado", executor=sub["id"], papel=sub["papel"],
                        tier=tier_atual, tentativa=tentativa)
             ultima = cliente.chamar(sub["papel"], PROMPT_SUBAGENTE.format(
@@ -336,8 +355,8 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                 missao_objetivo=missao["objetivo"], missao_contexto=missao["contexto"],
                 objetivo=sub["objetivo"], entradas=json.dumps(sub["entradas"], ensure_ascii=False),
                 resultado_esperado=sub["resultado_esperado"],
-                deps_txt=deps_txt,
-                feedback=f"\nNa tentativa anterior o verificador reprovou: \"{feedback}\". Corrija." if feedback else "",
+                deps_txt=deps_txt, rubrica_txt=rubrica_txt,
+                feedback=bloco_feedback,
             ), ferramentas=sub.get("ferramentas"), tier=tier_atual,
                 capacidades=sub.get("capacidades_requeridas"))
             if not ultima:
