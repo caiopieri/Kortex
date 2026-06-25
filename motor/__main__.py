@@ -105,9 +105,6 @@ def main() -> int:
         i = args.index("--registro")
         dir_registro = args[i + 1]
         args = args[:i] + args[i + 2:]
-    if cfg_modelos is not None and dir_registro is not None:
-        print("erro: use --registro OU --modelos, não os dois.")
-        return 2
 
     nome_rota = None
     if "--rota" in args:
@@ -190,8 +187,11 @@ def main() -> int:
         "provedores" in cfg_modelos or "base_url" in cfg_modelos
     ):
         print("aviso: pins ignorados — precisam de 'provedores' (via --modelos ou ~/.motor/pins.json).")
+    cliente_por_config = bool(
+        cfg_modelos and ("provedores" in cfg_modelos or "base_url" in cfg_modelos)
+    )
     try:
-        cliente = construir_cliente(cfg_modelos, dir_registro, log=log)
+        cliente = construir_cliente(cfg_modelos, None if cliente_por_config else dir_registro, log=log)
     except ProvedorIndisponivel as ex:
         print(f"erro: {ex}")
         return 1

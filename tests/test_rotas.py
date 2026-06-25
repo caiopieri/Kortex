@@ -59,6 +59,62 @@ def _entidade(path: Path, nome: str, padrao: str | None) -> None:
     )
 
 
+class _GrafoCliFake:
+    def invoke(self, entrada, config):
+        return {"resposta_final": "ok"}
+
+
+class _LogCliFake:
+    def __init__(self, path):
+        self.path = path
+
+    def evento(self, tipo: str, **dados):
+        pass
+
+    def fechar(self):
+        pass
+
+
+def _registro_cli(path: Path) -> None:
+    _entidade(path / "rota.md", "construcao", "grafo_dependencias")
+    (path / "ferramenta.md").write_text(
+        "---\n"
+        "tipo: ferramenta\n"
+        "nome: busca\n"
+        "descricao: teste\n"
+        "---\n",
+        encoding="utf-8",
+    )
+
+
+def _cfg_modelos(path: Path) -> None:
+    path.write_text(
+        json.dumps({"provedores": {"codex": {"tipo": "codex"}}}),
+        encoding="utf-8",
+    )
+
+
+def _preparar_cli(monkeypatch, tmp_path):
+    home = tmp_path / "home"
+    home.mkdir()
+    chamadas: dict[str, list] = {"cliente": [], "grafo": []}
+
+    monkeypatch.setattr(cli.Path, "home", staticmethod(lambda: home))
+    monkeypatch.setattr(cli, "LogEventos", _LogCliFake)
+
+    def construir_cliente_fake(cfg_modelos, dir_registro, log=None):
+        chamadas["cliente"].append((cfg_modelos, dir_registro))
+        return ClienteStub(lambda papel, prompt: "ok")
+
+    def construir_grafo_fake(cliente, log, **kwargs):
+        chamadas["grafo"].append(kwargs)
+        return _GrafoCliFake()
+
+    monkeypatch.setattr(cli, "construir_cliente", construir_cliente_fake)
+    monkeypatch.setattr(cli, "construir_grafo", construir_grafo_fake)
+    return home, chamadas
+
+
 def test_prompt_default_permanece_byte_identico():
     valores = {"missao": "missão", "schema": '{"type":"object"}', "max_sub": 10, "erro": ""}
 
@@ -114,6 +170,75 @@ def test_cli_rejeita_rota_inexistente(tmp_path, monkeypatch, capsys):
 
     assert cli.main() == 2
     assert "rota 'ausente' não encontrada" in capsys.readouterr().out
+
+
+def test_cli_combina_modelos_para_cliente_e_registro_para_rotas_ferramentas(
+    tmp_path, monkeypatch, capsys
+):
+    _, chamadas = _preparar_cli(monkeypatch, tmp_path)
+    registro = tmp_path / "registro"
+    registro.mkdir()
+    _registro_cli(registro)
+    cfg_path = tmp_path / "modelos.json"
+    _cfg_modelos(cfg_path)
+
+    monkeypatch.setattr(
+        cli.sys,
+        "argv",
+        ["python -m motor", "missão", "--registro", str(registro), "--modelos", str(cfg_path)],
+    )
+
+    assert cli.main() == 0
+    saida = capsys.readouterr().out
+    assert "use --registro OU --modelos" not in saida
+    assert chamadas["cliente"] == [(json.loads(cfg_path.read_text(encoding="utf-8")), None)]
+    assert set(chamadas["grafo"][0]["rotas"]) == {"construcao"}
+    assert set(chamadas["grafo"][0]["ferramentas"]) == {"busca"}
+
+
+def test_cli_registro_sozinho_continua_usando_cliente_do_registro(tmp_path, monkeypatch, capsys):
+    _, chamadas = _preparar_cli(monkeypatch, tmp_path)
+    registro = tmp_path / "registro"
+    registro.mkdir()
+    _registro_cli(registro)
+
+    monkeypatch.setattr(cli.sys, "argv", ["python -m motor", "missão", "--registro", str(registro)])
+
+    assert cli.main() == 0
+    capsys.readouterr()
+    assert chamadas["cliente"] == [(None, str(registro))]
+
+
+def test_cli_modelos_sozinho_continua_usando_cliente_da_config(tmp_path, monkeypatch, capsys):
+    _, chamadas = _preparar_cli(monkeypatch, tmp_path)
+    cfg_path = tmp_path / "modelos.json"
+    _cfg_modelos(cfg_path)
+
+    monkeypatch.setattr(cli.sys, "argv", ["python -m motor", "missão", "--modelos", str(cfg_path)])
+
+    assert cli.main() == 0
+    capsys.readouterr()
+    assert chamadas["cliente"] == [(json.loads(cfg_path.read_text(encoding="utf-8")), None)]
+    assert chamadas["grafo"][0]["rotas"] is None
+    assert chamadas["grafo"][0]["ferramentas"] == {}
+
+
+def test_cli_pins_globais_sem_provedores_nao_sequestram_registro(tmp_path, monkeypatch, capsys):
+    home, chamadas = _preparar_cli(monkeypatch, tmp_path)
+    (home / ".motor").mkdir()
+    (home / ".motor" / "pins.json").write_text(
+        json.dumps({"pins": {"synthesizer": "codex/default"}}),
+        encoding="utf-8",
+    )
+    registro = tmp_path / "registro"
+    registro.mkdir()
+    _registro_cli(registro)
+
+    monkeypatch.setattr(cli.sys, "argv", ["python -m motor", "missão", "--registro", str(registro)])
+
+    assert cli.main() == 0
+    assert "pins ignorados" in capsys.readouterr().out
+    assert chamadas["cliente"] == [({"pins": {"synthesizer": "codex/default"}}, str(registro))]
 
 
 def test_rota_construcao_flui_ate_executor_de_dependencias(tmp_path):
