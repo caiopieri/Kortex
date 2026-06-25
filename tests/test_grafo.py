@@ -263,6 +263,95 @@ def test_gate_cobertura_preencher_refaz_fonte_e_dependentes_em_ordem(tmp_path):
     assert [e["subagente"] for e in eventos if e["evento"] == "lacuna.preenchida"] == ["B", "C"]
 
 
+def test_gate_cobertura_preencher_loop_converge_com_teto_dois(tmp_path):
+    spec = spec_dependencias()
+    estado = {"evaluator": 0, "execucoes": {"A": 0, "B": 0, "C": 0}}
+
+    def roteador(papel, prompt):
+        if papel == "executor":
+            sid = next(s for s in ["A", "B", "C"] if f"subagente '{s}'" in prompt)
+            estado["execucoes"][sid] += 1
+            return f"{sid} v{estado['execucoes'][sid]}"
+        if papel == "verifier":
+            return json.dumps({"aprovado": True, "motivo": "ok"})
+        if papel == "evaluator":
+            estado["evaluator"] += 1
+            if estado["evaluator"] <= 2:
+                return json.dumps({
+                    "aprovado": False,
+                    "lacunas": [f"B ainda inconsistente rodada {estado['evaluator']}"],
+                    "nos_a_refazer": ["B"],
+                })
+            return json.dumps({"aprovado": True, "lacunas": [], "nos_a_refazer": []})
+        if papel == "synthesizer":
+            return "FINAL"
+        raise AssertionError(f"papel inesperado: {papel}")
+
+    log = LogEventos(tmp_path / "log.jsonl")
+    pol = PoliticaGates(overrides={"plano": "prosseguir", "cobertura": "preencher"})
+    grafo = construir_grafo(
+        ClienteStub(roteador),
+        log,
+        checkpointer=InMemorySaver(),
+        politica=pol,
+        max_rodadas_reconciliacao=2,
+    )
+
+    resultado = grafo.invoke({"spec": spec}, {"configurable": {"thread_id": "loop-converge"}})
+
+    assert resultado["avaliacao"]["aprovado"] is True
+    assert estado["evaluator"] == 3
+    assert estado["execucoes"] == {"A": 1, "B": 3, "C": 3}
+    eventos = eventos_de(tmp_path)
+    assert sum(1 for e in eventos if e["evento"] == "reconciliacao.iniciada") == 2
+    assert [e["subagente"] for e in eventos if e["evento"] == "lacuna.preenchida"] == ["B", "C", "B", "C"]
+    assert not any(e["evento"] == "reconciliacao.esgotada" for e in eventos)
+
+
+def test_gate_cobertura_preencher_teto_dois_prossegue_parcial(tmp_path):
+    spec = spec_dependencias()
+    estado = {"evaluator": 0, "execucoes": {"A": 0, "B": 0, "C": 0}}
+
+    def roteador(papel, prompt):
+        if papel == "executor":
+            sid = next(s for s in ["A", "B", "C"] if f"subagente '{s}'" in prompt)
+            estado["execucoes"][sid] += 1
+            return f"{sid} v{estado['execucoes'][sid]}"
+        if papel == "verifier":
+            return json.dumps({"aprovado": True, "motivo": "ok"})
+        if papel == "evaluator":
+            estado["evaluator"] += 1
+            return json.dumps({
+                "aprovado": False,
+                "lacunas": [f"B ainda inconsistente rodada {estado['evaluator']}"],
+                "nos_a_refazer": ["B"],
+            })
+        if papel == "synthesizer":
+            return "FINAL"
+        raise AssertionError(f"papel inesperado: {papel}")
+
+    log = LogEventos(tmp_path / "log.jsonl")
+    pol = PoliticaGates(overrides={"plano": "prosseguir", "cobertura": "preencher"})
+    grafo = construir_grafo(
+        ClienteStub(roteador),
+        log,
+        checkpointer=InMemorySaver(),
+        politica=pol,
+        max_rodadas_reconciliacao=2,
+    )
+
+    resultado = grafo.invoke({"spec": spec}, {"configurable": {"thread_id": "loop-teto"}})
+
+    assert resultado["avaliacao"]["aprovado"] is False
+    assert resultado["avaliacao"]["prosseguir_parcial"] is True
+    assert resultado["resposta_final"] == "FINAL"
+    assert estado["evaluator"] == 3
+    assert estado["execucoes"] == {"A": 1, "B": 3, "C": 3}
+    eventos = eventos_de(tmp_path)
+    assert sum(1 for e in eventos if e["evento"] == "reconciliacao.iniciada") == 2
+    assert [e["rodadas"] for e in eventos if e["evento"] == "reconciliacao.esgotada"] == [2]
+
+
 def test_gate_cobertura_preencher_revisao_usa_rascunho_anterior(tmp_path):
     spec = spec_dependencias()
     estado = {"evaluator": 0, "execucoes": {"A": 0, "B": 0, "C": 0}}

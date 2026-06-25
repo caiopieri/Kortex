@@ -173,6 +173,12 @@ def main() -> int:
     if escalar_em_retry:
         args.remove("--escalar")
 
+    max_rodadas_reconciliacao = 1
+    if "--reconciliar" in args:
+        i = args.index("--reconciliar")
+        max_rodadas_reconciliacao = int(args[i + 1])
+        args = args[:i] + args[i + 2:]
+
     entrada: dict
     if args[0] == "--spec":
         entrada = {"spec": json.loads(Path(args[1]).read_text(encoding="utf-8"))}
@@ -212,7 +218,8 @@ def main() -> int:
         grafo = construir_grafo(cliente, log, checkpointer=checkpointer, politica=politica,
                                 workspace_base=workspace_base, ferramentas=ferramentas,
                                 rota=rota, rotas=rotas,
-                                escalar_em_retry=escalar_em_retry)
+                                escalar_em_retry=escalar_em_retry,
+                                max_rodadas_reconciliacao=max_rodadas_reconciliacao)
         caixa = CaixaFundador(dir_caixa, log)
         resultado = rodar_com_caixa(grafo, entrada, config, caixa, log)
         conn.close()
@@ -221,7 +228,8 @@ def main() -> int:
         grafo = construir_grafo(cliente, log, checkpointer=InMemorySaver(), politica=politica,
                                 workspace_base=workspace_base, ferramentas=ferramentas,
                                 rota=rota, rotas=rotas,
-                                escalar_em_retry=escalar_em_retry)
+                                escalar_em_retry=escalar_em_retry,
+                                max_rodadas_reconciliacao=max_rodadas_reconciliacao)
         resultado = grafo.invoke(entrada, config)
         while "__interrupt__" in resultado:  # gate do fundador
             pedido = resultado["__interrupt__"][0].value

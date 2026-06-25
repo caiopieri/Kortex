@@ -223,6 +223,16 @@ def test_cli_modelos_sozinho_continua_usando_cliente_da_config(tmp_path, monkeyp
     assert chamadas["grafo"][0]["ferramentas"] == {}
 
 
+def test_cli_reconciliar_repassa_teto_para_grafo(tmp_path, monkeypatch, capsys):
+    _, chamadas = _preparar_cli(monkeypatch, tmp_path)
+
+    monkeypatch.setattr(cli.sys, "argv", ["python -m motor", "missão", "--reconciliar", "3"])
+
+    assert cli.main() == 0
+    capsys.readouterr()
+    assert chamadas["grafo"][0]["max_rodadas_reconciliacao"] == 3
+
+
 def test_cli_pins_globais_sem_provedores_nao_sequestram_registro(tmp_path, monkeypatch, capsys):
     home, chamadas = _preparar_cli(monkeypatch, tmp_path)
     (home / ".motor").mkdir()

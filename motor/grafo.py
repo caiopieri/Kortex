@@ -213,10 +213,13 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                     ferramentas: dict[str, dict[str, Any]] | None = None,
                     rota: dict[str, Any] | None = None,
                     rotas: dict[str, dict[str, Any]] | None = None,
-                    escalar_em_retry: bool = False):
+                    escalar_em_retry: bool = False,
+                    max_rodadas_reconciliacao: int = 1):
     """Compila o grafo. `cliente` e `log` são injetados — o grafo não conhece backends.
     `politica` decide quais gates pausam (manual) ou resolvem sozinhos (auto-mode);
-    ausente = tudo manual (comportamento default)."""
+    ausente = tudo manual (comportamento default).
+    `max_rodadas_reconciliacao` limita quantas rodadas de preenchimento de cobertura
+    podem rodar antes de seguir parcial."""
     politica = politica or PoliticaGates()
     workspace_base = Path(workspace_base)
     ferramentas = ferramentas or {}
@@ -666,24 +669,33 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         spec, resultados = state["spec"], state["resultados"]
         log.evento("paralelo.concluido", commitados=len(resultados))
         veredito = avaliar_cobertura(spec, resultados)
-        if veredito.get("aprovado"):
-            log.evento("portao.aprovado", portao="cobertura")
-            return {"avaliacao": veredito}
-        log.evento("portao.reprovado", portao="cobertura", lacunas=veredito.get("lacunas", []))
-        decisao = decidir_cobertura(veredito, permitir_preencher=True)
+        acumulados: list[dict[str, Any]] = []
+        rodada = 0
 
-        if str(decisao).strip().lower().startswith("preench"):
+        while not veredito.get("aprovado"):
+            log.evento("portao.reprovado", portao="cobertura", lacunas=veredito.get("lacunas", []))
+            permitir = rodada < max_rodadas_reconciliacao
+            if not permitir:
+                log.evento("reconciliacao.esgotada", rodadas=rodada)
+            decisao = decidir_cobertura(veredito, permitir_preencher=permitir)
+            if not (permitir and str(decisao).strip().lower().startswith("preench")):
+                base = {"resultados": acumulados} if acumulados else {}
+                return {**base, "avaliacao": finalizar_cobertura(veredito, decisao)}
+
             resultados, novos = preencher_lacunas(spec, resultados, workspace_de(state), veredito)
-            if novos:
-                veredito = avaliar_cobertura(spec, resultados)
-                if veredito.get("aprovado"):
-                    log.evento("portao.aprovado", portao="cobertura")
-                    return {"resultados": novos, "avaliacao": veredito}
-                log.evento("portao.reprovado", portao="cobertura", lacunas=veredito.get("lacunas", []))
-            decisao = decidir_cobertura(veredito, permitir_preencher=False)
-            return {"resultados": novos, "avaliacao": finalizar_cobertura(veredito, decisao)}
+            if not novos:
+                decisao = decidir_cobertura(veredito, permitir_preencher=False)
+                base = {"resultados": acumulados} if acumulados else {}
+                return {**base, "avaliacao": finalizar_cobertura(veredito, decisao)}
 
-        return {"avaliacao": finalizar_cobertura(veredito, decisao)}
+            acumulados = mesclar_resultados(acumulados, novos)
+            rodada += 1
+            veredito = avaliar_cobertura(spec, resultados)
+
+        log.evento("portao.aprovado", portao="cobertura")
+        if acumulados:
+            return {"resultados": acumulados, "avaliacao": veredito}
+        return {"avaliacao": veredito}
 
     def rota_pos_avaliacao(state: EstadoMotor):
         return END if state["avaliacao"].get("abortada") else "sintetizar"
