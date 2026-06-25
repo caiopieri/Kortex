@@ -22,6 +22,37 @@ SPEC = json.loads(
 )
 
 
+def spec_dependencias():
+    sub_base = {
+        "tipo": "modelo",
+        "papel": "executor",
+        "objetivo": "produzir parte coerente",
+        "entradas": {},
+        "resultado_esperado": "texto",
+        "rubrica": ["entrega texto"],
+        "tier": "simples",
+        "capacidades_requeridas": ["redacao"],
+    }
+    return {
+        "versao": "0.1",
+        "padrao": "grafo_dependencias",
+        "missao": {
+            "id": "dep",
+            "objetivo": "validar recomputação em cadeia",
+            "contexto": "",
+            "criterios_cobertura": ["resultados consistentes"],
+        },
+        "restricoes": {"teto_custo": 2.0, "max_subagentes": 3, "max_tentativas": 1},
+        "subagentes": [
+            {**sub_base, "id": "A"},
+            {**sub_base, "id": "B", "depende_de": ["A"]},
+            {**sub_base, "id": "C", "depende_de": ["B"]},
+        ],
+        "gates": [],
+        "sintese": {"instrucao": "sintetize", "formato": "markdown"},
+    }
+
+
 def faz_roteador(reprovar_beta_uma_vez=False, evaluator_aprova=True):
     """Stub determinístico por papel; identifica o subagente pelo conteúdo do prompt."""
     estado = {"beta_reprovado": False}
@@ -189,6 +220,112 @@ def test_gate_cobertura_preencher_reexecuta_reprovado_uma_vez(tmp_path):
     assert len(chamados_beta) == 1
     assert len([e for e in eventos if e["evento"] == "executor.chamado"
                 and e.get("executor") == "global_evaluator"]) == 2
+
+
+def test_gate_cobertura_preencher_refaz_fonte_e_dependentes_em_ordem(tmp_path):
+    spec = spec_dependencias()
+    estado = {"evaluator": 0, "execucoes": {"A": 0, "B": 0, "C": 0}}
+    prompts: dict[str, list[str]] = {"A": [], "B": [], "C": []}
+
+    def roteador(papel, prompt):
+        if papel == "executor":
+            sid = next(s for s in ["A", "B", "C"] if f"subagente '{s}'" in prompt)
+            estado["execucoes"][sid] += 1
+            prompts[sid].append(prompt)
+            return f"{sid} v{estado['execucoes'][sid]}"
+        if papel == "verifier":
+            return json.dumps({"aprovado": True, "motivo": "ok"})
+        if papel == "evaluator":
+            estado["evaluator"] += 1
+            if estado["evaluator"] == 1:
+                return json.dumps({
+                    "aprovado": False,
+                    "lacunas": ["B diverge da arquitetura e C herdou a divergência"],
+                    "nos_a_refazer": ["B"],
+                })
+            return json.dumps({"aprovado": True, "lacunas": [], "nos_a_refazer": []})
+        if papel == "synthesizer":
+            return "FINAL"
+        raise AssertionError(f"papel inesperado: {papel}")
+
+    log = LogEventos(tmp_path / "log.jsonl")
+    pol = PoliticaGates(overrides={"plano": "prosseguir", "cobertura": "preencher"})
+    grafo = construir_grafo(ClienteStub(roteador), log, checkpointer=InMemorySaver(), politica=pol)
+
+    resultado = grafo.invoke({"spec": spec}, {"configurable": {"thread_id": "dep-chain"}})
+
+    assert resultado["avaliacao"]["aprovado"] is True
+    assert {r["id"]: r["saida"] for r in resultado["resultados"]} == {"A": "A v1", "B": "B v2", "C": "C v2"}
+    assert estado["execucoes"] == {"A": 1, "B": 2, "C": 2}
+    assert "B v2" in prompts["C"][1]
+    eventos = eventos_de(tmp_path)
+    assert any(e["evento"] == "reconciliacao.iniciada" and set(e["nos"]) == {"B", "C"} for e in eventos)
+    assert [e["subagente"] for e in eventos if e["evento"] == "lacuna.preenchida"] == ["B", "C"]
+
+
+def test_gate_cobertura_preencher_revisao_usa_rascunho_anterior(tmp_path):
+    spec = spec_dependencias()
+    estado = {"evaluator": 0, "execucoes": {"A": 0, "B": 0, "C": 0}}
+    prompts: dict[str, list[str]] = {"A": [], "B": [], "C": []}
+
+    def roteador(papel, prompt):
+        if papel == "executor":
+            sid = next(s for s in ["A", "B", "C"] if f"subagente '{s}'" in prompt)
+            estado["execucoes"][sid] += 1
+            prompts[sid].append(prompt)
+            return f"{sid} rascunho {estado['execucoes'][sid]}"
+        if papel == "verifier":
+            return json.dumps({"aprovado": True, "motivo": "ok"})
+        if papel == "evaluator":
+            estado["evaluator"] += 1
+            if estado["evaluator"] == 1:
+                return json.dumps({
+                    "aprovado": False,
+                    "lacunas": ["B precisa ser alinhado"],
+                    "nos_a_refazer": ["B"],
+                })
+            return json.dumps({"aprovado": True, "lacunas": [], "nos_a_refazer": []})
+        if papel == "synthesizer":
+            return "FINAL"
+        raise AssertionError(f"papel inesperado: {papel}")
+
+    log = LogEventos(tmp_path / "log.jsonl")
+    pol = PoliticaGates(overrides={"plano": "prosseguir", "cobertura": "preencher"})
+    grafo = construir_grafo(ClienteStub(roteador), log, checkpointer=InMemorySaver(), politica=pol)
+
+    grafo.invoke({"spec": spec}, {"configurable": {"thread_id": "dep-revisao"}})
+
+    assert "NÃO reescreva do zero" in prompts["B"][1]
+    assert "B rascunho 1" in prompts["B"][1]
+
+
+def test_gate_cobertura_preencher_sem_no_nomeado_eh_inerte(tmp_path):
+    estado = {"executor": 0, "evaluator": 0}
+
+    def roteador(papel, prompt):
+        if papel == "pesquisador":
+            estado["executor"] += 1
+            return "RESULTADO"
+        if papel == "verifier":
+            return json.dumps({"aprovado": True, "motivo": "ok"})
+        if papel == "evaluator":
+            estado["evaluator"] += 1
+            return json.dumps({"aprovado": False, "lacunas": ["lacuna global"], "nos_a_refazer": []})
+        if papel == "synthesizer":
+            return "FINAL"
+        raise AssertionError(f"papel inesperado: {papel}")
+
+    log = LogEventos(tmp_path / "log.jsonl")
+    pol = PoliticaGates(overrides={"plano": "prosseguir", "cobertura": "preencher"})
+    grafo = construir_grafo(ClienteStub(roteador), log, checkpointer=InMemorySaver(), politica=pol)
+
+    resultado = grafo.invoke({"spec": SPEC}, {"configurable": {"thread_id": "inerte"}})
+
+    assert resultado["resposta_final"] == "FINAL"
+    assert estado == {"executor": len(SPEC["subagentes"]), "evaluator": 1}
+    eventos = eventos_de(tmp_path)
+    assert not any(e["evento"].startswith("reconciliacao.") for e in eventos)
+    assert not any(e["evento"] == "lacuna.preenchida" for e in eventos)
 
 
 def _cliente_roteador(roteador):

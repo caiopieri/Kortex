@@ -124,7 +124,11 @@ Critérios de cobertura (TODOS precisam estar cobertos pelos resultados):
 Resultados commitados:
 {resultados}
 
-Responda APENAS um JSON: {{"aprovado": true/false, "lacunas": ["o que falta", ...]}}"""
+Em "nos_a_refazer", liste os ids (EXATAMENTE como aparecem nos resultados) dos subagentes que são a
+ORIGEM de cada lacuna/inconsistência — prefira o nó MAIS A MONTANTE responsável (ex.: se a
+especificação contradiz a arquitetura, nomeie o nó da especificação), pois refazê-lo re-deriva os que
+dependem dele. Se nada precisa refazer, use [].
+Responda APENAS um JSON: {{"aprovado": true/false, "lacunas": ["o que falta", ...], "nos_a_refazer": ["id", ...]}}"""
 
 PROMPT_SYNTHESIZER = """Você é o sintetizador final de um workflow.
 Missão: {missao_objetivo}
@@ -332,7 +336,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         kw_verifier = {"evitar": prov_exec} if prov_exec else {}
         tier_atual = sub.get("tier")
         rubrica_txt = "\n".join(f"- {c}" for c in sub["rubrica"])
-        feedback, ultima = payload.get("feedback", ""), None
+        feedback, ultima = payload.get("feedback", ""), payload.get("rascunho_anterior")
         for tentativa in range(1, max_t + 1):
             # Revisão > regeneração: se já há um rascunho, mandamos corrigir SÓ o que o
             # verificador apontou em vez de reescrever do zero (não joga trabalho bom fora
@@ -560,6 +564,11 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         if reprovados:
             veredito = {"aprovado": False,
                         "lacunas": list(veredito.get("lacunas", [])) + [f"subagente reprovado: {i}" for i in reprovados]}
+        nomes = veredito.get("nos_a_refazer", [])
+        if not isinstance(nomes, list):
+            nomes = []
+        nos = list(dict.fromkeys([str(n) for n in nomes] + reprovados))
+        veredito = {**veredito, "nos_a_refazer": nos}
         return veredito
 
     def decidir_cobertura(veredito: dict[str, Any], permitir_preencher: bool) -> Any:
@@ -587,19 +596,61 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
     def preencher_lacunas(spec: dict[str, Any], resultados: list[dict[str, Any]],
                           workspace: Path,
                           veredito: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-        reprovados = {r["id"] for r in resultados if not r["aprovado"]}
-        lacunas = [str(l) for l in veredito.get("lacunas", [])]
-        ids = [sid for sid in reprovados if any(sid in lacuna for lacuna in lacunas)]
-        if not ids:
+        por_id = {s["id"]: s for s in spec["subagentes"]}
+        alvo = [
+            sid for sid in dict.fromkeys(str(s) for s in veredito.get("nos_a_refazer", []))
+            if sid in por_id
+        ]
+        if not alvo:
             return resultados, []
 
-        por_id = {s["id"]: s for s in spec["subagentes"]}
+        alvo_set = set(alvo)
+        closure_set = set(alvo)
+        mudou = True
+        while mudou:
+            mudou = False
+            for sid, sub in por_id.items():
+                if sid not in closure_set and any(dep in closure_set for dep in sub.get("depende_de", [])):
+                    closure_set.add(sid)
+                    mudou = True
+
+        restantes = set(closure_set)
+        concluidos = {r["id"]: r for r in resultados if r["id"] not in closure_set}
+        por_id_resultado = {r["id"]: r for r in resultados}
+        lacunas = [str(l) for l in veredito.get("lacunas", [])]
         novos: list[dict[str, Any]] = []
-        for sid in ids:
-            feedback = "; ".join(l for l in lacunas if sid in l)
-            retorno = subagente({"sub": por_id[sid], "spec": spec, "feedback": feedback, "workspace": workspace})
-            novos.extend(retorno["resultados"])
-            log.evento("lacuna.preenchida", subagente=sid)
+        ordem_recomputada: list[str] = []
+        log.evento("reconciliacao.iniciada", nos=sorted(closure_set))
+        while restantes:
+            onda = sorted(
+                sid for sid in restantes
+                if set(por_id[sid].get("depende_de", [])) <= set(concluidos)
+            )
+            if not onda:
+                log.evento("grafo_dep.travado", restantes=sorted(restantes))
+                break
+            for sid in onda:
+                sub = {**por_id[sid], "entradas": resolver_refs_artefato(por_id[sid].get("entradas", {}), concluidos)}
+                deps = {d: texto_dependencia(concluidos[d]) for d in sub.get("depende_de", [])}
+                feedback_lacunas = [l for l in lacunas if sid in l] or lacunas[:]
+                if sid not in alvo_set:
+                    feedback_lacunas.append("uma dependência foi revista; realinhe-se a ela")
+                feedback = "; ".join(feedback_lacunas)
+                retorno = subagente({
+                    "sub": sub,
+                    "spec": spec,
+                    "deps": deps,
+                    "feedback": feedback,
+                    "rascunho_anterior": por_id_resultado.get(sid, {}).get("saida"),
+                    "workspace": workspace,
+                })
+                resultado = retorno["resultados"][0]
+                concluidos[sid] = resultado
+                novos.append(resultado)
+                ordem_recomputada.append(sid)
+                restantes.discard(sid)
+                log.evento("lacuna.preenchida", subagente=sid)
+        log.evento("reconciliacao.concluida", nos=ordem_recomputada)
         return mesclar_resultados(resultados, novos), novos
 
     def finalizar_cobertura(veredito: dict[str, Any], decisao: Any) -> dict[str, Any]:
