@@ -337,6 +337,13 @@ def _resposta_ok(conteudo="olá"):
     return {"choices": [{"message": {"role": "assistant", "content": conteudo}}]}
 
 
+def _resposta_ok_com_uso(conteudo="olá"):
+    return {
+        **_resposta_ok(conteudo),
+        "usage": {"prompt_tokens": 11, "completion_tokens": 7, "total_tokens": 18},
+    }
+
+
 def _cliente(monkeypatch, respostas, **kw):
     """Cliente com transporte mockado: `respostas` é lista de dict (sucesso)
     ou Exception (falha transiente). Captura payloads enviados."""
@@ -398,6 +405,43 @@ def test_compat_resposta_vazia_e_transiente(monkeypatch):
     c, enviados = _cliente(monkeypatch, [_resposta_ok("   "), _resposta_ok("ok")])
     assert c.chamar("redator", "p") == "ok"
     assert len(enviados) == 2
+
+
+@t5
+def test_compat_emite_modelo_uso_quando_resposta_tem_usage(monkeypatch):
+    log = FakeLog()
+    c, _ = _cliente(
+        monkeypatch,
+        [_resposta_ok_com_uso("ok")],
+        log=log,
+        provedor="nvidia",
+        mapa_papeis={"redator": "moonshotai/kimi-k2.6"},
+    )
+
+    assert c.chamar("redator", "p") == "ok"
+
+    assert log.eventos == [
+        (
+            "modelo.uso",
+            {
+                "papel": "redator",
+                "provedor": "nvidia",
+                "modelo": "moonshotai/kimi-k2.6",
+                "prompt_tokens": 11,
+                "completion_tokens": 7,
+                "total_tokens": 18,
+            },
+        )
+    ]
+
+
+@t5
+def test_compat_sem_usage_nao_emite_modelo_uso(monkeypatch):
+    log = FakeLog()
+    c, _ = _cliente(monkeypatch, [_resposta_ok("ok")], log=log)
+
+    assert c.chamar("redator", "p") == "ok"
+    assert "modelo.uso" not in log.tipos()
 
 
 @t5

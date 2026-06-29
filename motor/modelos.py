@@ -645,6 +645,17 @@ class ClienteOpenAICompat:
                 resp = self._post(payload, timeout)
                 conteudo = resp["choices"][0]["message"]["content"].strip()
                 if conteudo:
+                    uso = resp.get("usage") or {}
+                    if self.log is not None and uso:
+                        self.log.evento(
+                            "modelo.uso",
+                            papel=papel,
+                            provedor=self.provedor,
+                            modelo=self.mapa_papeis.get(papel, self.modelo),
+                            prompt_tokens=uso.get("prompt_tokens"),
+                            completion_tokens=uso.get("completion_tokens"),
+                            total_tokens=uso.get("total_tokens"),
+                        )
                     return conteudo
                 motivo = "conteúdo vazio"
             except Exception as ex:
@@ -714,6 +725,7 @@ def cliente_de_config(cfg: dict, log: Optional[Any] = None) -> "ClienteModelo":
                     f"provedores declarados: {list(cfg['provedores'])}")
             p = cfg["provedores"][prov]
             tipo = p.get("tipo", "openai-compat")
+            cliente: Any
             if tipo == "codex":
                 cliente = ClienteCodex(modelo=modelo, sandbox=p.get("sandbox", "read-only"),
                                        busca_ao_vivo=p.get("search", False), log=log)
