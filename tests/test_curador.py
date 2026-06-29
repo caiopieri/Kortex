@@ -2,7 +2,7 @@ import json
 import subprocess
 import sys
 
-from motor.curador import analisar, carregar_runs, formatar_markdown
+from motor.curador import analisar, carregar_runs, formatar_markdown, propor
 
 
 def _jsonl(tmp_path, nome, eventos, corrompida=False):
@@ -73,6 +73,39 @@ def _eventos_observador():
     ]
 
 
+def _eventos_modelo(papel, tier, modelo, aprovados, total, latencia=5.0, inicio=0.0, prefixo="exec"):
+    eventos = []
+    t = inicio
+    for i in range(total):
+        executor = f"{prefixo}-{i}"
+        eventos.append(
+            {
+                "t": t,
+                "evento": "executor.chamado",
+                "executor": executor,
+                "papel": papel,
+                "tier": tier,
+                "tentativa": 1,
+                "modelo": modelo,
+            }
+        )
+        eventos.append({"t": t + latencia, "evento": "executor.respondeu", "executor": executor, "tentativa": 1})
+        if i < aprovados:
+            eventos.append({"t": t + latencia + 0.1, "evento": "portao.aprovado", "portao": f"verifier:{executor}", "ciclo": 1})
+        else:
+            eventos.append(
+                {
+                    "t": t + latencia + 0.1,
+                    "evento": "portao.reprovado",
+                    "portao": f"verifier:{executor}",
+                    "ciclo": 1,
+                    "motivo": "insuficiente",
+                }
+            )
+        t += latencia + 1.0
+    return eventos
+
+
 def test_analisar_metricas_sinteticas_do_observador(tmp_path):
     log = _jsonl(tmp_path, "run.jsonl", _eventos_observador(), corrompida=True)
 
@@ -105,6 +138,7 @@ def test_analisar_metricas_sinteticas_do_observador(tmp_path):
 
     assert perfil["por_papel_tier"]["verifier"]["sem-tier"]["falhas_internas"] == 1
     assert perfil["por_modelo"]["desconhecido"]["falhas_internas"] == 1
+    assert perfil["por_slot_modelo"]["executor/simples"]["desconhecido"]["chamadas"] == 2
 
     run = perfil["runs"][0]
     assert run["planner"]["tentativas_ate_spec_criada"] == 2
@@ -179,6 +213,74 @@ def test_analisar_agrega_e_ranqueia_por_modelo(tmp_path):
     markdown = formatar_markdown(perfil)
     assert "## Aptidao por modelo" in markdown
     assert markdown.index("- zzz-bom:") < markdown.index("- aaa-ruim:")
+
+
+def test_analisar_agrega_por_slot_modelo(tmp_path):
+    log = _jsonl(
+        tmp_path,
+        "slots.jsonl",
+        [
+            *_eventos_modelo("especificador", "media", "kimi", 1, 1, inicio=0.0, prefixo="esp"),
+            *_eventos_modelo("arquiteto", "complexa", "codex", 1, 1, inicio=20.0, prefixo="arq"),
+        ],
+    )
+
+    perfil = analisar([log])
+
+    assert set(perfil["por_slot_modelo"]) == {"arquiteto/complexa", "especificador/media"}
+    assert perfil["por_slot_modelo"]["especificador/media"]["kimi"]["verifier_julgados"] == 1
+    assert perfil["por_slot_modelo"]["arquiteto/complexa"]["codex"]["verifier_aprovados_primeira"] == 1
+
+
+def test_propor_ranqueia_desempata_e_respeita_amostras(tmp_path):
+    qualidade = _jsonl(
+        tmp_path,
+        "qualidade.jsonl",
+        [
+            *_eventos_modelo("executor", "media", "bom", 3, 3, inicio=0.0, prefixo="bom"),
+            *_eventos_modelo("executor", "media", "ruim", 1, 3, inicio=50.0, prefixo="ruim"),
+            *_eventos_modelo("executor", "media", "zero", 0, 3, inicio=100.0, prefixo="zero"),
+        ],
+    )
+    slot = propor(analisar([qualidade]), min_amostras=3)["slots"]["executor/media"]
+    assert slot["status"] == "proposto"
+    assert [item["modelo"] for item in slot["ranking"]] == ["bom", "ruim", "zero"]
+    assert slot["recomendado"] == "bom"
+    assert slot["evitar"] == ["zero"]
+
+    latencia = _jsonl(
+        tmp_path,
+        "latencia.jsonl",
+        [
+            *_eventos_modelo("executor", "simples", "lento", 3, 3, latencia=8.0, inicio=0.0, prefixo="lento"),
+            *_eventos_modelo("executor", "simples", "rapido", 3, 3, latencia=2.0, inicio=50.0, prefixo="rapido"),
+        ],
+    )
+    slot = propor(analisar([latencia]), min_amostras=3)["slots"]["executor/simples"]
+    assert [item["modelo"] for item in slot["ranking"]] == ["rapido", "lento"]
+
+    custo = _jsonl(
+        tmp_path,
+        "custo.jsonl",
+        [
+            *_eventos_modelo("executor", "complexa", "modelo-a", 3, 3, latencia=5.0, inicio=0.0, prefixo="a"),
+            *_eventos_modelo("executor", "complexa", "modelo-b", 3, 3, latencia=5.0, inicio=50.0, prefixo="b"),
+        ],
+    )
+    slot = propor(analisar([custo]), min_amostras=3, custo={"modelo-a": 2, "modelo-b": 1})["slots"]["executor/complexa"]
+    assert [item["modelo"] for item in slot["ranking"]] == ["modelo-b", "modelo-a"]
+    assert slot["recomendado"] == "modelo-b"
+    assert "_custo" not in slot["ranking"][0]
+
+    insuficiente = _jsonl(
+        tmp_path,
+        "insuficiente.jsonl",
+        _eventos_modelo("especificador", "media", "kimi", 2, 2, inicio=0.0, prefixo="kimi"),
+    )
+    assert propor(analisar([insuficiente]), min_amostras=3)["slots"]["especificador/media"] == {
+        "status": "evidencia_insuficiente",
+        "amostras": 2,
+    }
 
 
 def test_modelo_falha_conta_como_falha_interna_sem_inflar_taxa_erro(tmp_path):
@@ -266,7 +368,17 @@ def test_markdown_e_cli_json(tmp_path):
 
     assert "# Perfil do Curador" in resultado.stdout
     assert "## Aptidao por modelo" in resultado.stdout
+    assert resultado.stdout == formatar_markdown(analisar([log]))
     perfil = json.loads(saida_json.read_text(encoding="utf-8"))
     assert perfil["por_papel_tier"]["executor"]["simples"]["chamadas"] == 2
     assert "por_modelo" in perfil
     assert "executor/simples" in formatar_markdown(perfil)
+
+    proposta = subprocess.run(
+        [sys.executable, "-m", "motor.curador", str(log), "--propor", "--min-amostras", "1"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert "# Proposta do Curador" in proposta.stdout
+    assert "## executor/simples" in proposta.stdout

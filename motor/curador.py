@@ -15,9 +15,12 @@ DESCONHECIDO = "desconhecido"
 
 
 def carregar_runs(caminhos: list[str | Path]) -> tuple[list[dict[str, Any]], int]:
-    runs, malformadas = [], 0
+    runs: list[dict[str, Any]] = []
+    malformadas = 0
     for arquivo in _expandir(caminhos):
-        eventos, indice, ultimo_t = [], 1, None
+        eventos: list[dict[str, Any]] = []
+        indice = 1
+        ultimo_t: float | None = None
         with arquivo.open(encoding="utf-8") as f:
             for linha in f:
                 linha = linha.strip()
@@ -45,13 +48,14 @@ def carregar_runs(caminhos: list[str | Path]) -> tuple[list[dict[str, Any]], int
 def analisar(caminhos: list[str | Path]) -> dict[str, Any]:
     runs, malformadas = carregar_runs(caminhos)
     agregador = _Agregador()
-    por_papel_tier, por_modelo = agregador.consumir_runs(runs)
+    por_papel_tier, por_modelo, por_slot_modelo = agregador.consumir_runs(runs)
     return {
         "versao": 1,
         "fontes": sorted({run["fonte"] for run in runs}),
         "linhas_malformadas": malformadas,
         "por_papel_tier": por_papel_tier,
         "por_modelo": por_modelo,
+        "por_slot_modelo": por_slot_modelo,
         "runs": [_analisar_run(run) for run in runs],
     }
 
@@ -116,6 +120,84 @@ def formatar_markdown(perfil: dict[str, Any]) -> str:
     return "\n".join(linhas) + "\n"
 
 
+def propor(perfil: dict[str, Any], min_amostras: int = 3, custo: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Ranqueia modelos por slot sem aplicar mudancas.
+
+    Score de qualidade = aprovacao_1a - taxa_erro - penalidade de escalada nao convergida.
+    A penalidade de escalada so entra quando houve escalada no slot/modelo. O score decide
+    qualidade; empates sao resolvidos por menor latencia mediana e, se informado, menor custo.
+    """
+    custo_ordem = _normalizar_custo(custo)
+    slots: dict[str, Any] = {}
+    for slot in sorted(perfil.get("por_slot_modelo", {})):
+        modelos = perfil["por_slot_modelo"][slot]
+        candidatos = [
+            (modelo, metricas)
+            for modelo, metricas in modelos.items()
+            if metricas["verifier_julgados"] >= min_amostras
+        ]
+        if not candidatos:
+            maior = max((m["verifier_julgados"] for m in modelos.values()), default=0)
+            slots[slot] = {"status": "evidencia_insuficiente", "amostras": maior}
+            continue
+
+        ranking = []
+        for modelo, metricas in candidatos:
+            ranking.append(_item_ranking(modelo, metricas, custo_ordem))
+        ranking.sort(key=_chave_ranking)
+        for item in ranking:
+            item.pop("_custo", None)
+        evitar = [
+            item["modelo"]
+            for item in ranking
+            if item["aprov_1a"] == 0.0 or item["taxa_erro"] >= 0.5
+        ]
+        slots[slot] = {
+            "status": "proposto",
+            "recomendado": ranking[0]["modelo"],
+            "ranking": ranking,
+            "evitar": evitar,
+        }
+
+    return {"versao": 1, "min_amostras": min_amostras, "slots": slots}
+
+
+def formatar_proposta_markdown(proposta: dict[str, Any]) -> str:
+    linhas = [
+        "# Proposta do Curador",
+        "",
+        f"- min_amostras: {proposta['min_amostras']}",
+        "- modo: read-only",
+        "",
+    ]
+    slots = proposta["slots"]
+    if not slots:
+        linhas.append("- sem slots agregaveis")
+        return "\n".join(linhas) + "\n"
+
+    for slot in sorted(slots):
+        info = slots[slot]
+        linhas += [f"## {slot}"]
+        if info["status"] == "evidencia_insuficiente":
+            linhas.append(f"- evidencia insuficiente: maior amostra {info['amostras']}")
+            linhas.append("")
+            continue
+
+        linhas.append(f"- recomendado: {info['recomendado']}")
+        linhas.append("")
+        linhas.append("| modelo | score | aprov_1a | taxa_erro | latencia_mediana | amostras |")
+        linhas.append("| --- | ---: | ---: | ---: | ---: | ---: |")
+        for item in info["ranking"]:
+            linhas.append(
+                f"| {item['modelo']} | {item['score']:.4f} | {_pct(item['aprov_1a'])} | "
+                f"{_pct(item['taxa_erro'])} | {_seg(item['latencia_mediana'])} | {item['amostras']} |"
+            )
+        if info["evitar"]:
+            linhas.append(f"- evitar: {', '.join(info['evitar'])}")
+        linhas.append("")
+    return "\n".join(linhas).rstrip() + "\n"
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python3 -m motor.curador",
@@ -123,6 +205,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("caminhos", nargs="+")
     parser.add_argument("--json", dest="json_path", type=Path)
+    parser.add_argument("--propor", action="store_true", help="imprime proposta read-only por slot/modelo")
+    parser.add_argument("--min-amostras", type=int, default=3)
+    parser.add_argument("--custo", help="JSON com ordem de custo por modelo/provedor, menor e melhor")
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
 
     perfil = analisar(args.caminhos)
@@ -131,7 +216,10 @@ def main(argv: list[str] | None = None) -> int:
             json.dumps(perfil, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
-    print(formatar_markdown(perfil), end="")
+    if args.propor:
+        print(formatar_proposta_markdown(propor(perfil, min_amostras=args.min_amostras, custo=_parse_custo(args.custo))), end="")
+    else:
+        print(formatar_markdown(perfil), end="")
     return 0
 
 
@@ -139,14 +227,15 @@ class _Agregador:
     def __init__(self) -> None:
         self.por_papel_tier: dict[str, dict[str, dict[str, Any]]] = defaultdict(lambda: defaultdict(_metricas))
         self.por_modelo: dict[str, dict[str, Any]] = defaultdict(_metricas)
+        self.por_slot_modelo: dict[tuple[str, str, str], dict[str, Any]] = defaultdict(_metricas)
 
     def consumir_runs(
         self,
         runs: list[dict[str, Any]],
-    ) -> tuple[dict[str, dict[str, dict[str, Any]]], dict[str, dict[str, Any]]]:
+    ) -> tuple[dict[str, dict[str, dict[str, Any]]], dict[str, dict[str, Any]], dict[str, dict[str, dict[str, Any]]]]:
         for run in runs:
             self._consumir_run(run["eventos"])
-        return self._finalizar_papel_tier(), self._finalizar_modelos()
+        return self._finalizar_papel_tier(), self._finalizar_modelos(), self._finalizar_slot_modelo()
 
     def _consumir_run(self, eventos: list[dict[str, Any]]) -> None:
         chamadas: dict[tuple[str, int | None], dict[str, Any]] = {}
@@ -166,25 +255,28 @@ class _Agregador:
                     tier_por_papel[papel] = _tier(ev.get("tier"))
             elif tipo == "executor.chamado":
                 executor = _str(ev.get("executor")) or "desconhecido"
-                info = {
+                tentativa = _int(ev.get("tentativa"))
+                papel = _str(ev.get("papel")) or executor
+                tier = _tier(ev.get("tier"))
+                modelo = _str(ev.get("modelo")) or DESCONHECIDO
+                info: dict[str, Any] = {
                     "executor": executor,
-                    "tentativa": _int(ev.get("tentativa")),
-                    "papel": _str(ev.get("papel")) or executor,
-                    "tier": _tier(ev.get("tier")),
-                    "modelo": _str(ev.get("modelo")) or DESCONHECIDO,
+                    "tentativa": tentativa,
+                    "papel": papel,
+                    "tier": tier,
+                    "modelo": modelo,
                     "t": tempo,
                 }
-                chamadas[(executor, info["tentativa"])] = ultimo_executor[executor] = info
-                tier_por_papel[info["papel"]] = info["tier"]
-                modelo_por_papel[info["papel"]] = info["modelo"]
+                chamadas[(executor, tentativa)] = info
+                ultimo_executor[executor] = info
+                tier_por_papel[papel] = tier
+                modelo_por_papel[papel] = modelo
                 self._inc(info, "chamadas")
             elif tipo in {"executor.respondeu", "executor.erro"}:
-                info = chamada(ev)
-                if not info:
-                    info = self._desconhecido()
-                self._inc(info, "respostas" if tipo == "executor.respondeu" else "erros")
-                if info["t"] is not None and tempo is not None:
-                    self._append(info, "_latencias", round(max(0.0, tempo - info["t"]), 3))
+                info_metricas = chamada(ev) or self._desconhecido()
+                self._inc(info_metricas, "respostas" if tipo == "executor.respondeu" else "erros")
+                if info_metricas["t"] is not None and tempo is not None:
+                    self._append(info_metricas, "_latencias", round(max(0.0, tempo - info_metricas["t"]), 3))
             elif tipo == "modelo.falha":
                 papel = _str(ev.get("papel")) or "desconhecido"
                 info = {
@@ -241,10 +333,20 @@ class _Agregador:
     def _finalizar_modelos(self) -> dict[str, dict[str, Any]]:
         return {modelo: _finalizar_metricas(self.por_modelo[modelo]) for modelo in sorted(self.por_modelo)}
 
-    def _metricas(self, info: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    def _finalizar_slot_modelo(self) -> dict[str, dict[str, dict[str, Any]]]:
+        saida: dict[str, dict[str, dict[str, Any]]] = {}
+        for papel, tier, modelo in sorted(self.por_slot_modelo):
+            slot = f"{papel}/{tier}"
+            saida.setdefault(slot, {})
+            saida[slot][modelo] = _finalizar_metricas(self.por_slot_modelo[(papel, tier, modelo)])
+        return saida
+
+    def _metricas(self, info: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+        modelo = info.get("modelo") or DESCONHECIDO
         return (
             self.por_papel_tier[info["papel"]][info["tier"]],
-            self.por_modelo[info.get("modelo") or DESCONHECIDO],
+            self.por_modelo[modelo],
+            self.por_slot_modelo[(info["papel"], info["tier"], modelo)],
         )
 
     def _inc(self, info: dict[str, Any], campo: str) -> None:
@@ -336,6 +438,50 @@ def _resiliencia(alvo: dict[str, Any], ev: dict[str, Any]) -> None:
         alvo["motivos_429"].append(
             {"evento": tipo, "papel": ev.get("papel"), "provedor": ev.get("provedor"), "motivo": ev.get("motivo")}
         )
+
+
+def _parse_custo(valor: str | None) -> dict[str, Any] | None:
+    if valor is None:
+        return None
+    try:
+        parsed = json.loads(valor)
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"--custo precisa ser JSON valido: {exc}") from exc
+    if not isinstance(parsed, dict):
+        raise SystemExit("--custo precisa ser um objeto JSON")
+    return parsed
+
+
+def _normalizar_custo(custo: dict[str, Any] | None) -> dict[str, int]:
+    if not custo:
+        return {}
+    saida = {}
+    for modelo, ordem in custo.items():
+        try:
+            saida[str(modelo)] = int(ordem)
+        except (TypeError, ValueError):
+            continue
+    return saida
+
+
+def _item_ranking(modelo: str, metricas: dict[str, Any], custo: dict[str, int]) -> dict[str, Any]:
+    convergencia = metricas["taxa_convergencia_pos_escalada"] if metricas["escaladas"] else 1.0
+    score = round(metricas["taxa_aprovacao_primeira"] - metricas["taxa_erro"] - (1.0 - convergencia), 4)
+    return {
+        "modelo": modelo,
+        "score": score,
+        "aprov_1a": metricas["taxa_aprovacao_primeira"],
+        "taxa_erro": metricas["taxa_erro"],
+        "latencia_mediana": metricas["latencia"]["mediana"],
+        "amostras": metricas["verifier_julgados"],
+        "_custo": custo.get(modelo),
+    }
+
+
+def _chave_ranking(item: dict[str, Any]) -> tuple[float, float, float, str]:
+    latencia = float("inf") if item["latencia_mediana"] is None else item["latencia_mediana"]
+    custo = float("inf") if item["_custo"] is None else item["_custo"]
+    return (-item["score"], latencia, custo, item["modelo"])
 
 
 def _expandir(caminhos: list[str | Path]) -> list[Path]:
