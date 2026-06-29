@@ -2,7 +2,7 @@ import json
 import subprocess
 import sys
 
-from motor.curador import analisar, carregar_runs, formatar_markdown, propor
+from motor.curador import analisar, carregar_runs, formatar_custo_markdown, formatar_markdown, propor
 
 
 def _jsonl(tmp_path, nome, eventos, corrompida=False):
@@ -103,6 +103,43 @@ def _eventos_modelo(papel, tier, modelo, aprovados, total, latencia=5.0, inicio=
                 }
             )
         t += latencia + 1.0
+    return eventos
+
+
+def _eventos_custo(executor, papel, tier, modelo, inicio, fim, uso=None, erro=False):
+    eventos = [
+        {
+            "t": inicio,
+            "evento": "executor.chamado",
+            "executor": executor,
+            "papel": papel,
+            "tier": tier,
+            "tentativa": 1,
+            "modelo": modelo,
+        }
+    ]
+    if uso:
+        provedor, modelo_uso, prompt, completion, total = uso
+        eventos.append(
+            {
+                "t": inicio + 0.5,
+                "evento": "modelo.uso",
+                "papel": papel,
+                "provedor": provedor,
+                "modelo": modelo_uso,
+                "prompt_tokens": prompt,
+                "completion_tokens": completion,
+                "total_tokens": total,
+            }
+        )
+    eventos.append(
+        {
+            "t": fim,
+            "evento": "executor.erro" if erro else "executor.respondeu",
+            "executor": executor,
+            "tentativa": 1,
+        }
+    )
     return eventos
 
 
@@ -409,6 +446,79 @@ def test_modelo_falha_conta_como_falha_interna_sem_inflar_taxa_erro(tmp_path):
     assert papel["taxa_erro"] == 1.0
 
 
+def test_custo_agrega_tokens_por_modelo_run_e_slot(tmp_path):
+    log = _jsonl(
+        tmp_path,
+        "custo.jsonl",
+        [
+            *_eventos_custo("a", "executor", "simples", "nvidia/modelo-a", 0.0, 2.0,
+                            ("nvidia", "modelo-a", 100, 50, 150)),
+            *_eventos_custo("b", "executor", "media", "openrouter/modelo-b", 3.0, 5.0,
+                            ("openrouter", "modelo-b", 200, 25, 225), erro=True),
+        ],
+    )
+
+    perfil = analisar(
+        [log],
+        precos={
+            "nvidia/modelo-a": {"in_por_1k": 0.01, "out_por_1k": 0.03},
+            "openrouter/modelo-b": {"in_por_1k": 0.02, "out_por_1k": 0.04},
+        },
+    )
+
+    custo = perfil["custo"]
+    assert custo["total"]["tokens_prompt"] == 300
+    assert custo["total"]["tokens_completion"] == 75
+    assert custo["total"]["tokens_total"] == 375
+    assert custo["total"]["tempo_total_s"] == 4.0
+    assert custo["total"]["custo_usd"] == 0.0075
+
+    modelo_a = custo["por_modelo"]["nvidia/modelo-a"]
+    assert modelo_a["tokens_prompt"] == 100
+    assert modelo_a["tokens_completion"] == 50
+    assert modelo_a["tempo_total_s"] == 2.0
+    assert modelo_a["chamadas_com_uso"] == 1
+    assert modelo_a["custo_usd"] == 0.0025
+
+    slot_a = custo["por_slot_modelo"]["executor/simples"]["nvidia/modelo-a"]
+    assert slot_a["tokens_total"] == 150
+    assert slot_a["tempo_total_s"] == 2.0
+    assert custo["por_run"][0]["id"] == "custo.jsonl"
+    assert custo["por_run"][0]["tokens_total"] == 375
+
+
+def test_custo_sem_precos_mantem_tokens_e_custo_usd_none(tmp_path):
+    log = _jsonl(
+        tmp_path,
+        "sem-preco.jsonl",
+        _eventos_custo("a", "executor", "simples", "nvidia/modelo-a", 0.0, 2.0,
+                       ("nvidia", "modelo-a", 10, 5, 15)),
+    )
+
+    custo = analisar([log])["custo"]
+
+    assert custo["total"]["tokens_total"] == 15
+    assert custo["total"]["tempo_total_s"] == 2.0
+    assert custo["total"]["custo_usd"] is None
+    assert custo["por_modelo"]["nvidia/modelo-a"]["custo_usd"] is None
+    assert "| nvidia/modelo-a | 1 | 10 | 5 | 15 | 2.000s |  |" in formatar_custo_markdown(custo)
+
+
+def test_custo_modelo_cli_sem_usage_aparece_por_tempo(tmp_path):
+    log = _jsonl(
+        tmp_path,
+        "cli.jsonl",
+        _eventos_custo("pesquisa", "pesquisador", "complexa", "codex/default", 10.0, 14.5),
+    )
+
+    cli = analisar([log])["custo"]["por_modelo"]["codex/default"]
+
+    assert cli["tokens_total"] == 0
+    assert cli["tempo_total_s"] == 4.5
+    assert cli["chamadas_com_uso"] == 0
+    assert cli["custo_usd"] is None
+
+
 def test_eventos_orfaos_caem_em_desconhecido_sem_papel_fantasma(tmp_path):
     log = _jsonl(
         tmp_path,
@@ -488,3 +598,23 @@ def test_markdown_e_cli_json(tmp_path):
     assert "## executor/simples" in proposta.stdout
     assert "- status: melhor_disponivel_abaixo_do_piso" in proposta.stdout
     assert "| modelo | score | aprov_1a | taxa_erro | incompletas | taxa_incompletas |" in proposta.stdout
+
+    log_custo = _jsonl(
+        tmp_path,
+        "ledger.jsonl",
+        _eventos_custo("a", "executor", "simples", "nvidia/modelo-a", 0.0, 1.0,
+                       ("nvidia", "modelo-a", 100, 50, 150)),
+    )
+    precos = tmp_path / "precos.json"
+    precos.write_text(
+        json.dumps({"nvidia/modelo-a": {"in_por_1k": 0.01, "out_por_1k": 0.03}}),
+        encoding="utf-8",
+    )
+    ledger = subprocess.run(
+        [sys.executable, "-m", "motor.curador", str(log_custo), "--custo", str(precos)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert "# Livro-razão de Custo" in ledger.stdout
+    assert "| nvidia/modelo-a | 1 | 100 | 50 | 150 | 1.000s | 0.002500 |" in ledger.stdout

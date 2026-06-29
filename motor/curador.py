@@ -45,7 +45,7 @@ def carregar_runs(caminhos: list[str | Path]) -> tuple[list[dict[str, Any]], int
     return runs, malformadas
 
 
-def analisar(caminhos: list[str | Path]) -> dict[str, Any]:
+def analisar(caminhos: list[str | Path], precos: dict[str, Any] | None = None) -> dict[str, Any]:
     runs, malformadas = carregar_runs(caminhos)
     agregador = _Agregador()
     por_papel_tier, por_modelo, por_slot_modelo = agregador.consumir_runs(runs)
@@ -56,6 +56,7 @@ def analisar(caminhos: list[str | Path]) -> dict[str, Any]:
         "por_papel_tier": por_papel_tier,
         "por_modelo": por_modelo,
         "por_slot_modelo": por_slot_modelo,
+        "custo": _LedgerCusto(precos).consumir_runs(runs),
         "runs": [_analisar_run(run) for run in runs],
     }
 
@@ -234,6 +235,69 @@ def formatar_proposta_markdown(proposta: dict[str, Any]) -> str:
     return "\n".join(linhas).rstrip() + "\n"
 
 
+def formatar_custo_markdown(custo: dict[str, Any]) -> str:
+    linhas = [
+        "# Livro-razão de Custo",
+        "",
+        "## Total",
+        _linha_custo_total(custo["total"]),
+        "",
+        "## Por modelo",
+    ]
+    modelos = custo["por_modelo"]
+    if not modelos:
+        linhas.append("- sem eventos agregaveis")
+    else:
+        linhas.append(
+            "| modelo | chamadas_com_uso | tokens_prompt | tokens_completion | tokens_total | "
+            "tempo_total_s | custo_usd |"
+        )
+        linhas.append("| --- | ---: | ---: | ---: | ---: | ---: | ---: |")
+        for modelo in sorted(modelos):
+            m = modelos[modelo]
+            linhas.append(
+                f"| {modelo} | {m['chamadas_com_uso']} | {_int_md(m['tokens_prompt'])} | "
+                f"{_int_md(m['tokens_completion'])} | {_int_md(m['tokens_total'])} | "
+                f"{_seg(m['tempo_total_s'])} | {_usd(m['custo_usd'])} |"
+            )
+
+    linhas += ["", "## Por slot/modelo"]
+    slots = custo.get("por_slot_modelo", {})
+    if not slots:
+        linhas.append("- sem eventos agregaveis")
+    else:
+        linhas.append(
+            "| slot | modelo | chamadas_com_uso | tokens_prompt | tokens_completion | tokens_total | "
+            "tempo_total_s | custo_usd |"
+        )
+        linhas.append("| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |")
+        for slot in sorted(slots):
+            for modelo in sorted(slots[slot]):
+                m = slots[slot][modelo]
+                linhas.append(
+                    f"| {slot} | {modelo} | {m['chamadas_com_uso']} | {_int_md(m['tokens_prompt'])} | "
+                    f"{_int_md(m['tokens_completion'])} | {_int_md(m['tokens_total'])} | "
+                    f"{_seg(m['tempo_total_s'])} | {_usd(m['custo_usd'])} |"
+                )
+
+    linhas += ["", "## Por run"]
+    runs = custo["por_run"]
+    if not runs:
+        linhas.append("- nenhum run encontrado")
+    else:
+        linhas.append(
+            "| run | fonte | tokens_prompt | tokens_completion | tokens_total | tempo_total_s | custo_usd |"
+        )
+        linhas.append("| --- | --- | ---: | ---: | ---: | ---: | ---: |")
+        for run in runs:
+            linhas.append(
+                f"| {run['id']} | {run['fonte']} | {_int_md(run['tokens_prompt'])} | "
+                f"{_int_md(run['tokens_completion'])} | {_int_md(run['tokens_total'])} | "
+                f"{_seg(run['tempo_total_s'])} | {_usd(run['custo_usd'])} |"
+            )
+    return "\n".join(linhas).rstrip() + "\n"
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python3 -m motor.curador",
@@ -243,12 +307,20 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--json", dest="json_path", type=Path)
     parser.add_argument("--propor", action="store_true", help="imprime proposta read-only por slot/modelo")
     parser.add_argument("--min-amostras", type=int, default=3)
-    parser.add_argument("--custo", help="JSON com ordem de custo por modelo/provedor, menor e melhor")
+    parser.add_argument(
+        "--custo",
+        nargs="?",
+        const="",
+        help="sem --propor: imprime ledger de custo e aceita precos.json opcional; com --propor: JSON de ordem de custo",
+    )
     parser.add_argument("--piso", type=float, default=0.6, help="piso de aprovacao 1a tentativa para proposta limpa")
     parser.add_argument("--limiar-falha", type=float, default=0.5, help="limiar de erro+incompleta para evitar modelo")
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
 
-    perfil = analisar(args.caminhos)
+    perfil = analisar(
+        args.caminhos,
+        precos=_parse_precos(args.custo) if args.custo is not None and not args.propor else None,
+    )
     if args.json_path:
         args.json_path.write_text(
             json.dumps(perfil, ensure_ascii=False, indent=2) + "\n",
@@ -267,6 +339,8 @@ def main(argv: list[str] | None = None) -> int:
             ),
             end="",
         )
+    elif args.custo is not None:
+        print(formatar_custo_markdown(perfil["custo"]), end="")
     else:
         print(formatar_markdown(perfil), end="")
     return 0
@@ -426,6 +500,117 @@ class _Agregador:
         return {"papel": DESCONHECIDO, "tier": SEM_TIER, "modelo": DESCONHECIDO, "t": None}
 
 
+class _LedgerCusto:
+    def __init__(self, precos: dict[str, Any] | None = None) -> None:
+        self.precos = _normalizar_precos(precos)
+        self.por_modelo: dict[str, dict[str, Any]] = defaultdict(_metricas_custo)
+        self.por_slot_modelo: dict[tuple[str, str, str], dict[str, Any]] = defaultdict(_metricas_custo)
+
+    def consumir_runs(self, runs: list[dict[str, Any]]) -> dict[str, Any]:
+        por_run = []
+        total = _metricas_custo()
+        for run in runs:
+            metricas_run = self._consumir_run(run)
+            _somar_custo(total, metricas_run)
+            por_run.append({
+                "id": run["id"],
+                "fonte": run["fonte"],
+                **_finalizar_custo(metricas_run),
+            })
+        return {
+            "por_run": por_run,
+            "por_modelo": self._finalizar_modelos(),
+            "por_slot_modelo": self._finalizar_slots(),
+            "total": _finalizar_custo(total),
+        }
+
+    def _consumir_run(self, run: dict[str, Any]) -> dict[str, Any]:
+        metricas_run = _metricas_custo()
+        chamadas: dict[tuple[str, int | None], dict[str, Any]] = {}
+        ultimo_executor: dict[str, dict[str, Any]] = {}
+        ultimo_por_papel: dict[str, dict[str, Any]] = {}
+
+        def chamada(ev: dict[str, Any]) -> dict[str, Any] | None:
+            executor = _str(ev.get("executor")) or DESCONHECIDO
+            return chamadas.get((executor, _int(ev.get("tentativa")))) or ultimo_executor.get(executor)
+
+        for ev in run["eventos"]:
+            tipo, tempo = ev.get("evento"), _num(ev.get("t"))
+            if tipo == "executor.chamado":
+                executor = _str(ev.get("executor")) or DESCONHECIDO
+                tentativa = _int(ev.get("tentativa"))
+                papel = _str(ev.get("papel")) or executor
+                info: dict[str, Any] = {
+                    "executor": executor,
+                    "tentativa": tentativa,
+                    "papel": papel,
+                    "tier": _tier(ev.get("tier")),
+                    "modelo": _modelo_custo(ev),
+                    "t": tempo,
+                }
+                chamadas[(executor, tentativa)] = info
+                ultimo_executor[executor] = info
+                ultimo_por_papel[papel] = info
+            elif tipo in {"executor.respondeu", "executor.erro"}:
+                info_exec = chamada(ev)
+                if info_exec and info_exec["t"] is not None and tempo is not None:
+                    self._somar_tempo(metricas_run, info_exec, round(max(0.0, tempo - info_exec["t"]), 3))
+            elif tipo == "modelo.uso":
+                papel = _str(ev.get("papel")) or DESCONHECIDO
+                modelo = _modelo_uso(ev)
+                info_chamada = ultimo_por_papel.get(papel)
+                info = {
+                    "papel": papel,
+                    "tier": info_chamada["tier"] if info_chamada else SEM_TIER,
+                    "modelo": modelo,
+                }
+                self._somar_uso(metricas_run, info, ev)
+        return metricas_run
+
+    def _somar_tempo(self, metricas_run: dict[str, Any], info: dict[str, Any], segundos: float) -> None:
+        for metricas in [metricas_run, *self._metricas(info)]:
+            metricas["tempo_total_s"] += segundos
+
+    def _somar_uso(self, metricas_run: dict[str, Any], info: dict[str, Any], ev: dict[str, Any]) -> None:
+        prompt = _token(ev.get("prompt_tokens"))
+        completion = _token(ev.get("completion_tokens"))
+        total = _token(ev.get("total_tokens"))
+        if total == 0 and (prompt or completion):
+            total = prompt + completion
+        custo_usd = self._calcular_usd(info["modelo"], prompt, completion)
+        for metricas in [metricas_run, *self._metricas(info)]:
+            metricas["chamadas_com_uso"] += 1
+            metricas["tokens_prompt"] += prompt
+            metricas["tokens_completion"] += completion
+            metricas["tokens_total"] += total
+            if custo_usd is not None:
+                metricas["_custos_usd"].append(custo_usd)
+
+    def _calcular_usd(self, modelo: str, prompt: int, completion: int) -> float | None:
+        preco = self.precos.get(modelo)
+        if preco is None:
+            return None
+        return prompt / 1000 * preco["in_por_1k"] + completion / 1000 * preco["out_por_1k"]
+
+    def _metricas(self, info: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+        modelo = info.get("modelo") or DESCONHECIDO
+        return (
+            self.por_modelo[modelo],
+            self.por_slot_modelo[(info["papel"], info["tier"], modelo)],
+        )
+
+    def _finalizar_modelos(self) -> dict[str, dict[str, Any]]:
+        return {modelo: _finalizar_custo(self.por_modelo[modelo]) for modelo in sorted(self.por_modelo)}
+
+    def _finalizar_slots(self) -> dict[str, dict[str, dict[str, Any]]]:
+        saida: dict[str, dict[str, dict[str, Any]]] = {}
+        for papel, tier, modelo in sorted(self.por_slot_modelo):
+            slot = f"{papel}/{tier}"
+            saida.setdefault(slot, {})
+            saida[slot][modelo] = _finalizar_custo(self.por_slot_modelo[(papel, tier, modelo)])
+        return saida
+
+
 def _analisar_run(run: dict[str, Any]) -> dict[str, Any]:
     first_planner_t = spec_t = None
     planner_attempts = 0
@@ -500,9 +685,25 @@ def _resiliencia(alvo: dict[str, Any], ev: dict[str, Any]) -> None:
         )
 
 
+def _parse_precos(valor: str | None) -> dict[str, Any] | None:
+    if not valor:
+        return None
+    path = Path(valor)
+    try:
+        texto = path.read_text(encoding="utf-8") if path.is_file() else valor
+        parsed = json.loads(texto)
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"--custo precisa ser um precos.json valido: {exc}") from exc
+    if not isinstance(parsed, dict):
+        raise SystemExit("--custo precisa ser um objeto JSON de precos")
+    return parsed
+
+
 def _parse_custo(valor: str | None) -> dict[str, Any] | None:
     if valor is None:
         return None
+    if valor == "":
+        raise SystemExit("--propor --custo exige JSON com ordem de custo")
     try:
         parsed = json.loads(valor)
     except json.JSONDecodeError as exc:
@@ -520,6 +721,23 @@ def _normalizar_custo(custo: dict[str, Any] | None) -> dict[str, int]:
         try:
             saida[str(modelo)] = int(ordem)
         except (TypeError, ValueError):
+            continue
+    return saida
+
+
+def _normalizar_precos(precos: dict[str, Any] | None) -> dict[str, dict[str, float]]:
+    if not precos:
+        return {}
+    saida = {}
+    for modelo, valores in precos.items():
+        if not isinstance(valores, dict):
+            continue
+        try:
+            saida[str(modelo)] = {
+                "in_por_1k": float(valores["in_por_1k"]),
+                "out_por_1k": float(valores["out_por_1k"]),
+            }
+        except (KeyError, TypeError, ValueError):
             continue
     return saida
 
@@ -598,6 +816,17 @@ def _metricas() -> dict[str, Any]:
     }
 
 
+def _metricas_custo() -> dict[str, Any]:
+    return {
+        "tokens_prompt": 0,
+        "tokens_completion": 0,
+        "tokens_total": 0,
+        "tempo_total_s": 0.0,
+        "chamadas_com_uso": 0,
+        "_custos_usd": [],
+    }
+
+
 def _finalizar_metricas(metricas: dict[str, Any]) -> dict[str, Any]:
     m = dict(metricas)
     lat = m.pop("_latencias")
@@ -607,6 +836,27 @@ def _finalizar_metricas(metricas: dict[str, Any]) -> dict[str, Any]:
     m["taxa_convergencia_pos_escalada"] = _ratio(m["escaladas_convergidas"], m["escaladas"])
     m["latencia"] = {"amostras": len(lat), "mediana": _median(lat), "p90": _p90(lat)}
     return m
+
+
+def _somar_custo(destino: dict[str, Any], origem: dict[str, Any]) -> None:
+    destino["tokens_prompt"] += origem["tokens_prompt"]
+    destino["tokens_completion"] += origem["tokens_completion"]
+    destino["tokens_total"] += origem["tokens_total"]
+    destino["tempo_total_s"] += origem["tempo_total_s"]
+    destino["chamadas_com_uso"] += origem["chamadas_com_uso"]
+    destino["_custos_usd"].extend(origem["_custos_usd"])
+
+
+def _finalizar_custo(metricas: dict[str, Any]) -> dict[str, Any]:
+    custos = metricas.get("_custos_usd", [])
+    return {
+        "tokens_prompt": int(metricas["tokens_prompt"]),
+        "tokens_completion": int(metricas["tokens_completion"]),
+        "tokens_total": int(metricas["tokens_total"]),
+        "tempo_total_s": round(float(metricas["tempo_total_s"]), 3),
+        "chamadas_com_uso": int(metricas["chamadas_com_uso"]),
+        "custo_usd": None if not custos else round(float(sum(custos)), 6),
+    }
 
 
 def _verifier(ev: dict[str, Any]) -> bool:
@@ -633,12 +883,32 @@ def _str(valor: Any) -> str | None:
     return None if valor is None or str(valor) == "" else str(valor)
 
 
+def _modelo_custo(ev: dict[str, Any]) -> str:
+    return _str(ev.get("modelo")) or DESCONHECIDO
+
+
+def _modelo_uso(ev: dict[str, Any]) -> str:
+    modelo = _str(ev.get("modelo")) or DESCONHECIDO
+    provedor = _str(ev.get("provedor"))
+    if provedor and modelo != DESCONHECIDO and not modelo.startswith(f"{provedor}/"):
+        return f"{provedor}/{modelo}"
+    return modelo
+
+
 def _tier(valor: Any) -> str:
     return _str(valor) or SEM_TIER
 
 
 def _num(valor: Any) -> float | None:
     return float(valor) if isinstance(valor, (int, float)) else None
+
+
+def _token(valor: Any) -> int:
+    try:
+        token = int(valor)
+    except (TypeError, ValueError):
+        return 0
+    return max(0, token)
 
 
 def _int(valor: Any) -> int | None:
@@ -688,8 +958,24 @@ def _pct(valor: float) -> str:
     return f"{valor * 100:.1f}%"
 
 
+def _int_md(valor: Any) -> str:
+    return str(int(valor or 0))
+
+
 def _seg(valor: float | None) -> str:
     return "n/d" if valor is None else f"{valor:.3f}s"
+
+
+def _usd(valor: float | None) -> str:
+    return "" if valor is None else f"{valor:.6f}"
+
+
+def _linha_custo_total(total: dict[str, Any]) -> str:
+    return (
+        f"- tokens prompt {_int_md(total['tokens_prompt'])}, completion {_int_md(total['tokens_completion'])}, "
+        f"total {_int_md(total['tokens_total'])}; tempo total {_seg(total['tempo_total_s'])}; "
+        f"custo_usd {_usd(total['custo_usd']) or 'n/d'}"
+    )
 
 
 if __name__ == "__main__":
