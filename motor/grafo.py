@@ -230,6 +230,18 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
     def workspace_de(state: EstadoMotor) -> Path:
         return workspace_base / state["run_id"] / "artefatos"
 
+    def _descricao_modelo(papel: str, tier: str | None = None,
+                          ferramentas: str | None = None,
+                          capacidades: list[str] | None = None) -> str | None:
+        if hasattr(cliente, "descricao_de"):
+            return cliente.descricao_de(papel, tier, ferramentas, capacidades=capacidades)
+        prov = getattr(cliente, "provedor", None)
+        mapa = getattr(cliente, "mapa_papeis", None)
+        modelo = mapa.get(papel) if isinstance(mapa, dict) and papel in mapa else getattr(cliente, "modelo", None)
+        if prov and modelo:
+            return f"{prov}/{modelo}"
+        return str(prov) if prov else (str(modelo) if modelo else None)
+
     def planner(state: EstadoMotor) -> dict:
         run_id = run_id_de(state)
         if state.get("spec"):  # spec fornecida pelo usuário: valida e segue (missão dirigida por dado)
@@ -242,7 +254,8 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
             rota_ativa = rotas.get(nome_rota) or ROTA_DEFAULT
         erro = ""
         for tentativa in (1, 2, 3):
-            log.evento("executor.chamado", executor="planner", tentativa=tentativa)
+            log.evento("executor.chamado", executor="planner", tentativa=tentativa,
+                       modelo=_descricao_modelo("planner"))
             resp = cliente.chamar("planner", montar_prompt_planner(
                 missao=state["missao_texto"],
                 schema=json.dumps(WorkflowSpec.model_json_schema(), ensure_ascii=False),
@@ -359,7 +372,11 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
             else:
                 bloco_feedback = ""
             log.evento("executor.chamado", executor=sub["id"], papel=sub["papel"],
-                       tier=tier_atual, tentativa=tentativa)
+                       tier=tier_atual, tentativa=tentativa,
+                       modelo=_descricao_modelo(
+                           sub["papel"], tier_atual, sub.get("ferramentas"),
+                           capacidades=sub.get("capacidades_requeridas"),
+                       ))
             ultima = cliente.chamar(sub["papel"], PROMPT_SUBAGENTE.format(
                 id=sub["id"], papel=sub["papel"],
                 missao_objetivo=missao["objetivo"], missao_contexto=missao["contexto"],
@@ -561,7 +578,8 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
 
     def avaliar_cobertura(spec: dict[str, Any], resultados: list[dict[str, Any]]) -> dict[str, Any]:
         reprovados = [r["id"] for r in resultados if not r["aprovado"]]
-        log.evento("executor.chamado", executor="global_evaluator")
+        log.evento("executor.chamado", executor="global_evaluator",
+                   modelo=_descricao_modelo("evaluator"))
         veredito = extrai_json(cliente.chamar("evaluator", PROMPT_EVALUATOR.format(
             missao_objetivo=spec["missao"]["objetivo"],
             criterios="\n".join(f"- {c}" for c in spec["missao"]["criterios_cobertura"]),
@@ -702,7 +720,8 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
 
     def sintetizar(state: EstadoMotor) -> dict:
         spec = state["spec"]
-        log.evento("executor.chamado", executor="synthesizer")
+        log.evento("executor.chamado", executor="synthesizer",
+                   modelo=_descricao_modelo("synthesizer"))
         resposta = cliente.chamar("synthesizer", PROMPT_SYNTHESIZER.format(
             missao_objetivo=spec["missao"]["objetivo"],
             instrucao=spec["sintese"]["instrucao"], formato=spec["sintese"]["formato"],

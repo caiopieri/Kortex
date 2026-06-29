@@ -554,6 +554,58 @@ def _spec_um_subagente(tier="simples", max_tentativas=3):
     }
 
 
+def test_executor_chamado_loga_modelo_resolvido_com_roteador(tmp_path):
+    spec = _spec_um_subagente()
+
+    def stub_modelo(resposta, provedor, modelo):
+        stub = ClienteStub(lambda papel, prompt: resposta)
+        stub.provedor = provedor
+        stub.modelo = modelo
+        return stub
+
+    executor = stub_modelo("RESULTADO executor", "nv-llama", "meta/llama-3.3-70b-instruct")
+    synthesizer = stub_modelo("FINAL PINADO", "nv-qwen", "qwen/qwen3-coder")
+
+    def juiz(papel: str, prompt: str):
+        if papel == "planner":
+            return json.dumps(spec, ensure_ascii=False)
+        if papel == "verifier":
+            return json.dumps({"aprovado": True, "motivo": "ok"})
+        if papel == "evaluator":
+            return json.dumps({"aprovado": True, "lacunas": []})
+        raise AssertionError(f"papel inesperado no juiz: {papel}")
+
+    padrao = ClienteStub(juiz)
+    padrao.provedor = "juiz"
+    padrao.modelo = "sonnet"
+    cliente = ClienteRoteador(
+        padrao=padrao,
+        tiers={"simples": executor},
+        pins={"synthesizer": synthesizer},
+    )
+    log = LogEventos(tmp_path / "log.jsonl")
+    grafo = construir_grafo(cliente, log, checkpointer=InMemorySaver(),
+                            politica=PoliticaGates(overrides={"plano": "prosseguir"}))
+
+    grafo.invoke({"missao_texto": "produza algo"}, {"configurable": {"thread_id": "modelo-log"}})
+
+    chamados = [e for e in eventos_de(tmp_path) if e["evento"] == "executor.chamado"]
+    assert next(e for e in chamados if e["executor"] == "planner")["modelo"] == "juiz/sonnet"
+    assert next(e for e in chamados if e["executor"] == spec["subagentes"][0]["id"])["modelo"] == (
+        "nv-llama/meta/llama-3.3-70b-instruct"
+    )
+    assert next(e for e in chamados if e["executor"] == "global_evaluator")["modelo"] == "juiz/sonnet"
+    assert next(e for e in chamados if e["executor"] == "synthesizer")["modelo"] == "nv-qwen/qwen/qwen3-coder"
+
+
+def test_executor_chamado_modelo_none_com_cliente_single_sem_identidade(tmp_path):
+    _, _, _, _ = roda(tmp_path, faz_roteador(), {"spec": _spec_um_subagente(max_tentativas=1)})
+
+    chamados = [e for e in eventos_de(tmp_path) if e["evento"] == "executor.chamado"]
+    assert chamados
+    assert all("modelo" in e and e["modelo"] is None for e in chamados)
+
+
 def test_retry_sem_flag_mantem_tier_declarado_em_todas_as_tentativas(tmp_path):
     cliente = ClienteTierFake(aprovar_na_tentativa=3)
     log = LogEventos(tmp_path / "log.jsonl")

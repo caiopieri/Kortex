@@ -173,6 +173,39 @@ def _stub_prov(resposta, provedor, sempre_none: bool = False):
     return s
 
 
+def _stub_modelo(resposta, provedor, modelo, sempre_none: bool = False):
+    s = _stub_prov(resposta, provedor, sempre_none=sempre_none)
+    s.modelo = modelo
+    return s
+
+
+def test_roteador_descricao_de_resolve_modelo_concreto_sem_emitir_evento():
+    simples = _stub_modelo("do-tier", "nv-llama", "meta/llama-3.3-70b-instruct")
+    pin = _stub_modelo("do-pin", "nv-qwen", "qwen/qwen3-coder")
+    padrao = _stub_modelo("do-claude", "claude", "sonnet")
+    log = FakeLog()
+    r = ClienteRoteador(
+        padrao=padrao,
+        tiers={"simples": simples},
+        pins={"synthesizer": pin},
+        log=log,
+    )
+
+    assert r.descricao_de("pesquisador", tier="simples") == "nv-llama/meta/llama-3.3-70b-instruct"
+    assert r.descricao_de("synthesizer") == "nv-qwen/qwen/qwen3-coder"
+    assert log.eventos == []
+
+
+def test_roteador_descricao_de_usa_mapa_papeis_do_cliente_compartilhado():
+    cliente = _stub_prov("ok", "nvidia")
+    cliente.modelo = "modelo-default"
+    cliente.mapa_papeis = {"redator": "deepseek-v4", "analista": "kimi-k2.6"}
+    r = ClienteRoteador(padrao=_stub("padrao"), mapa={"redator": cliente, "analista": cliente})
+
+    assert r.descricao_de("redator") == "nvidia/deepseek-v4"
+    assert r.descricao_de("analista") == "nvidia/kimi-k2.6"
+
+
 def test_esgotar_claude_reroteia_julgamento_ao_codex():
     """O cenário que travou o Caio: synthesizer (papel sem tier → padrao=claude)
     com claude esgotado deve cair no Codex, não pendurar."""

@@ -86,6 +86,21 @@ def _chave_provedor(cliente: Any) -> str:
     return str(prov) if prov is not None else f"__sem_provedor__:{id(cliente)}"
 
 
+def _modelo_de(cliente: Any, papel: str) -> Any:
+    mapa = getattr(cliente, "mapa_papeis", None)
+    if isinstance(mapa, dict) and papel in mapa:
+        return mapa[papel]
+    return getattr(cliente, "modelo", None)
+
+
+def _descricao_cliente(cliente: Any, papel: str) -> Optional[str]:
+    prov = getattr(cliente, "provedor", None)
+    modelo = _modelo_de(cliente, papel)
+    if prov and modelo:
+        return f"{prov}/{modelo}"
+    return str(prov) if prov else (str(modelo) if modelo else None)
+
+
 def _custo_ordem_cliente(cliente: Any) -> tuple[int, int]:
     custo = getattr(cliente, "custo_ordem", None)
     try:
@@ -279,6 +294,13 @@ class ClienteRoteador:
         grafo p/ o guard de independência do juiz (verifier ≠ provedor do executor)."""
         return getattr(self._resolver(papel, tier, ferramentas, capacidades=capacidades,
                                       emitir=False), "provedor", None)
+
+    def descricao_de(self, papel: str, tier: Optional[str] = None,
+                     ferramentas: Optional[str] = None,
+                     capacidades: Optional[list[str]] = None) -> Optional[str]:
+        """Identidade concreta que atenderia a chamada, sem executar nem emitir eventos."""
+        cliente = self._resolver(papel, tier, ferramentas, capacidades=capacidades, emitir=False)
+        return _descricao_cliente(cliente, papel)
 
     def _outro_provedor(self, evitar: str) -> Optional["ClienteModelo"]:
         """Primeiro cliente disponível (cadeia + padrao) cujo provedor != `evitar`."""
