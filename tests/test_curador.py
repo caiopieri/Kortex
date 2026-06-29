@@ -100,7 +100,11 @@ def test_analisar_metricas_sinteticas_do_observador(tmp_path):
     planner = perfil["por_papel_tier"]["planner"]["sem-tier"]
     assert planner["chamadas"] == 2
     assert planner["erros"] == 1
+    assert planner["falhas_internas"] == 0
     assert planner["taxa_erro"] == 0.5
+
+    assert perfil["por_papel_tier"]["verifier"]["sem-tier"]["falhas_internas"] == 1
+    assert perfil["por_modelo"]["desconhecido"]["falhas_internas"] == 1
 
     run = perfil["runs"][0]
     assert run["planner"]["tentativas_ate_spec_criada"] == 2
@@ -115,6 +119,120 @@ def test_analisar_metricas_sinteticas_do_observador(tmp_path):
     assert run["resiliencia"]["provedor_auto_esgotado"] == {"nv-kimi": {"verifier": 1}}
     assert run["resiliencia"]["modelo_reroteado_esgotado"] == {"nv-kimi->nv-llama": {"verifier": 1}}
     assert len(run["resiliencia"]["motivos_429"]) == 2
+
+
+def test_analisar_agrega_e_ranqueia_por_modelo(tmp_path):
+    log = _jsonl(
+        tmp_path,
+        "modelos.jsonl",
+        [
+            {
+                "t": 0.0,
+                "evento": "executor.chamado",
+                "executor": "sub-a",
+                "papel": "executor",
+                "tier": "simples",
+                "tentativa": 1,
+                "modelo": "zzz-bom",
+            },
+            {"t": 8.0, "evento": "executor.respondeu", "executor": "sub-a", "tentativa": 1},
+            {"t": 9.0, "evento": "portao.aprovado", "portao": "verifier:sub-a", "ciclo": 1},
+            {
+                "t": 10.0,
+                "evento": "executor.chamado",
+                "executor": "sub-b",
+                "papel": "executor",
+                "tier": "simples",
+                "tentativa": 1,
+                "modelo": "aaa-ruim",
+            },
+            {"t": 13.0, "evento": "executor.respondeu", "executor": "sub-b", "tentativa": 1},
+            {"t": 14.0, "evento": "portao.reprovado", "portao": "verifier:sub-b", "ciclo": 1, "motivo": "raso"},
+            {"t": 15.0, "evento": "executor.escalado", "executor": "sub-b", "de": "simples", "para": "media"},
+            {
+                "t": 16.0,
+                "evento": "executor.chamado",
+                "executor": "sub-b",
+                "papel": "executor",
+                "tier": "media",
+                "tentativa": 2,
+                "modelo": "modelo-medio",
+            },
+            {"t": 21.0, "evento": "executor.respondeu", "executor": "sub-b", "tentativa": 2},
+            {"t": 22.0, "evento": "portao.aprovado", "portao": "verifier:sub-b", "ciclo": 2},
+        ],
+    )
+
+    perfil = analisar([log])
+
+    bom = perfil["por_modelo"]["zzz-bom"]
+    assert bom["chamadas"] == 1
+    assert bom["taxa_aprovacao_primeira"] == 1.0
+    assert bom["latencia"]["mediana"] == 8.0
+
+    ruim = perfil["por_modelo"]["aaa-ruim"]
+    assert ruim["chamadas"] == 1
+    assert ruim["reprovacoes"] == 1
+    assert ruim["escaladas"] == 1
+    assert ruim["escaladas_convergidas"] == 1
+
+    markdown = formatar_markdown(perfil)
+    assert "## Aptidao por modelo" in markdown
+    assert markdown.index("- zzz-bom:") < markdown.index("- aaa-ruim:")
+
+
+def test_modelo_falha_conta_como_falha_interna_sem_inflar_taxa_erro(tmp_path):
+    log = _jsonl(
+        tmp_path,
+        "falhas.jsonl",
+        [
+            {
+                "t": 0.0,
+                "evento": "executor.chamado",
+                "executor": "sub-a",
+                "papel": "executor",
+                "tier": "simples",
+                "tentativa": 1,
+                "modelo": "modelo-x",
+            },
+            {"t": 1.0, "evento": "modelo.falha", "papel": "executor", "tentativa": 1, "motivo": "429"},
+            {"t": 2.0, "evento": "modelo.falha", "papel": "executor", "tentativa": 2, "motivo": "429"},
+            {"t": 3.0, "evento": "modelo.falha", "papel": "executor", "tentativa": 3, "motivo": "429"},
+            {"t": 4.0, "evento": "executor.erro", "executor": "sub-a", "tentativa": 1, "motivo": "sem resposta"},
+        ],
+    )
+
+    perfil = analisar([log])
+
+    modelo = perfil["por_modelo"]["modelo-x"]
+    assert modelo["chamadas"] == 1
+    assert modelo["erros"] == 1
+    assert modelo["falhas_internas"] == 3
+    assert modelo["taxa_erro"] == 1.0
+
+    papel = perfil["por_papel_tier"]["executor"]["simples"]
+    assert papel["falhas_internas"] == 3
+    assert papel["taxa_erro"] == 1.0
+
+
+def test_eventos_orfaos_caem_em_desconhecido_sem_papel_fantasma(tmp_path):
+    log = _jsonl(
+        tmp_path,
+        "orfaos.jsonl",
+        [
+            {"t": 1.0, "evento": "executor.respondeu", "executor": "fantasma", "tentativa": 1},
+            {"t": 2.0, "evento": "portao.reprovado", "portao": "verifier:fantasma", "ciclo": 1, "motivo": "sem chamada"},
+        ],
+    )
+
+    perfil = analisar([log])
+
+    assert "fantasma" not in perfil["por_papel_tier"]
+    desconhecido = perfil["por_papel_tier"]["desconhecido"]["sem-tier"]
+    assert desconhecido["respostas"] == 1
+    assert desconhecido["verifier_julgados"] == 1
+    assert desconhecido["reprovacoes"] == 1
+    assert perfil["por_modelo"]["desconhecido"]["respostas"] == 1
 
 
 def test_carregar_runs_separa_jsonl_concatenado_quando_t_reinicia(tmp_path):
@@ -147,6 +265,8 @@ def test_markdown_e_cli_json(tmp_path):
     )
 
     assert "# Perfil do Curador" in resultado.stdout
+    assert "## Aptidao por modelo" in resultado.stdout
     perfil = json.loads(saida_json.read_text(encoding="utf-8"))
     assert perfil["por_papel_tier"]["executor"]["simples"]["chamadas"] == 2
+    assert "por_modelo" in perfil
     assert "executor/simples" in formatar_markdown(perfil)

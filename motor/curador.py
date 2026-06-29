@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 SEM_TIER = "sem-tier"
+DESCONHECIDO = "desconhecido"
 
 
 def carregar_runs(caminhos: list[str | Path]) -> tuple[list[dict[str, Any]], int]:
@@ -44,11 +45,13 @@ def carregar_runs(caminhos: list[str | Path]) -> tuple[list[dict[str, Any]], int
 def analisar(caminhos: list[str | Path]) -> dict[str, Any]:
     runs, malformadas = carregar_runs(caminhos)
     agregador = _Agregador()
+    por_papel_tier, por_modelo = agregador.consumir_runs(runs)
     return {
         "versao": 1,
         "fontes": sorted({run["fonte"] for run in runs}),
         "linhas_malformadas": malformadas,
-        "por_papel_tier": agregador.consumir_runs(runs),
+        "por_papel_tier": por_papel_tier,
+        "por_modelo": por_modelo,
         "runs": [_analisar_run(run) for run in runs],
     }
 
@@ -79,6 +82,24 @@ def formatar_markdown(perfil: dict[str, Any]) -> str:
             )
             if m["amostras_motivos"]:
                 linhas.append(f"  motivos: {'; '.join(m['amostras_motivos'])}")
+
+    linhas += ["", "## Aptidao por modelo"]
+    modelos = perfil["por_modelo"]
+    if not modelos:
+        linhas.append("- sem eventos agregaveis")
+    for modelo in _ordenar_modelos(modelos):
+        m, lat = modelos[modelo], modelos[modelo]["latencia"]
+        linhas.append(
+            f"- {modelo}: chamadas {m['chamadas']}, respostas {m['respostas']}, "
+            f"erros {m['erros']} ({_pct(m['taxa_erro'])}), "
+            f"falhas internas {m['falhas_internas']}, "
+            f"aprovacao verifier 1a tentativa {_pct(m['taxa_aprovacao_primeira'])}, "
+            f"reprovacoes {m['reprovacoes']}, escaladas {m['escaladas']} "
+            f"(convergencia {_pct(m['taxa_convergencia_pos_escalada'])}), "
+            f"latencia mediana {_seg(lat['mediana'])}, p90 {_seg(lat['p90'])}"
+        )
+        if m["amostras_motivos"]:
+            linhas.append(f"  motivos: {'; '.join(m['amostras_motivos'])}")
 
     linhas += ["", "## Runs"]
     if not perfil["runs"]:
@@ -116,17 +137,22 @@ def main(argv: list[str] | None = None) -> int:
 
 class _Agregador:
     def __init__(self) -> None:
-        self.metricas: dict[str, dict[str, dict[str, Any]]] = defaultdict(lambda: defaultdict(_metricas))
+        self.por_papel_tier: dict[str, dict[str, dict[str, Any]]] = defaultdict(lambda: defaultdict(_metricas))
+        self.por_modelo: dict[str, dict[str, Any]] = defaultdict(_metricas)
 
-    def consumir_runs(self, runs: list[dict[str, Any]]) -> dict[str, dict[str, dict[str, Any]]]:
+    def consumir_runs(
+        self,
+        runs: list[dict[str, Any]],
+    ) -> tuple[dict[str, dict[str, dict[str, Any]]], dict[str, dict[str, Any]]]:
         for run in runs:
             self._consumir_run(run["eventos"])
-        return self._finalizar()
+        return self._finalizar_papel_tier(), self._finalizar_modelos()
 
     def _consumir_run(self, eventos: list[dict[str, Any]]) -> None:
         chamadas: dict[tuple[str, int | None], dict[str, Any]] = {}
         ultimo_executor: dict[str, dict[str, Any]] = {}
         tier_por_papel: dict[str, str] = {}
+        modelo_por_papel: dict[str, str] = {}
         escaladas: list[dict[str, Any]] = []
 
         def chamada(ev: dict[str, Any]) -> dict[str, Any] | None:
@@ -145,27 +171,37 @@ class _Agregador:
                     "tentativa": _int(ev.get("tentativa")),
                     "papel": _str(ev.get("papel")) or executor,
                     "tier": _tier(ev.get("tier")),
+                    "modelo": _str(ev.get("modelo")) or DESCONHECIDO,
                     "t": tempo,
                 }
                 chamadas[(executor, info["tentativa"])] = ultimo_executor[executor] = info
                 tier_por_papel[info["papel"]] = info["tier"]
-                self._m(info)["chamadas"] += 1
+                modelo_por_papel[info["papel"]] = info["modelo"]
+                self._inc(info, "chamadas")
             elif tipo in {"executor.respondeu", "executor.erro"}:
                 info = chamada(ev)
                 if not info:
-                    self.metricas[_str(ev.get("executor")) or "desconhecido"][SEM_TIER]["erros"] += 1
-                    continue
-                self._m(info)["respostas" if tipo == "executor.respondeu" else "erros"] += 1
+                    info = self._desconhecido()
+                self._inc(info, "respostas" if tipo == "executor.respondeu" else "erros")
                 if info["t"] is not None and tempo is not None:
-                    self._m(info)["_latencias"].append(round(max(0.0, tempo - info["t"]), 3))
+                    self._append(info, "_latencias", round(max(0.0, tempo - info["t"]), 3))
             elif tipo == "modelo.falha":
                 papel = _str(ev.get("papel")) or "desconhecido"
-                self.metricas[papel][tier_por_papel.get(papel, SEM_TIER)]["erros"] += 1
+                info = {
+                    "papel": papel,
+                    "tier": tier_por_papel.get(papel, SEM_TIER),
+                    "modelo": _str(ev.get("modelo")) or modelo_por_papel.get(papel, DESCONHECIDO),
+                }
+                self._inc(info, "falhas_internas")
             elif tipo == "executor.escalado":
                 executor = _str(ev.get("executor")) or "desconhecido"
-                info = ultimo_executor.get(executor, {"papel": executor, "tier": SEM_TIER})
-                origem = {"papel": info["papel"], "tier": _tier(ev.get("de") or info["tier"])}
-                self._m(origem)["escaladas"] += 1
+                info = ultimo_executor.get(executor, self._desconhecido())
+                origem = {
+                    "papel": info["papel"],
+                    "tier": _tier(ev.get("de") or info["tier"]),
+                    "modelo": info["modelo"],
+                }
+                self._inc(origem, "escaladas")
                 escaladas.append({"executor": executor, "t": tempo, "origem": origem, "ok": False})
             elif tipo in {"portao.aprovado", "portao.reprovado"} and _verifier(ev):
                 self._julgar(ev, tempo, ultimo_executor, escaladas)
@@ -178,38 +214,54 @@ class _Agregador:
         escaladas: list[dict[str, Any]],
     ) -> None:
         executor = str(ev.get("portao", "")).split(":", 1)[1]
-        info = ultimo_executor.get(executor, {"papel": executor, "tier": SEM_TIER})
-        m = self._m(info)
-        m["verifier_julgados"] += 1
+        info = ultimo_executor.get(executor, self._desconhecido())
+        self._inc(info, "verifier_julgados")
         if ev.get("evento") == "portao.aprovado":
-            m["verifier_aprovados_primeira"] += 1 if _int(ev.get("ciclo")) == 1 else 0
+            if _int(ev.get("ciclo")) == 1:
+                self._inc(info, "verifier_aprovados_primeira")
             for esc in escaladas:
                 if esc["executor"] == executor and not esc["ok"] and _depois(tempo, esc["t"]):
                     esc["ok"] = True
-                    self._m(esc["origem"])["escaladas_convergidas"] += 1
+                    self._inc(esc["origem"], "escaladas_convergidas")
             return
 
-        m["reprovacoes"] += 1
+        self._inc(info, "reprovacoes")
         motivo = _motivo(ev)
-        if motivo and motivo not in m["amostras_motivos"] and len(m["amostras_motivos"]) < 3:
-            m["amostras_motivos"].append(motivo)
+        if motivo:
+            self._append_motivo(info, motivo)
 
-    def _finalizar(self) -> dict[str, dict[str, dict[str, Any]]]:
+    def _finalizar_papel_tier(self) -> dict[str, dict[str, dict[str, Any]]]:
         saida: dict[str, dict[str, dict[str, Any]]] = {}
-        for papel in sorted(self.metricas):
+        for papel in sorted(self.por_papel_tier):
             saida[papel] = {}
-            for tier in sorted(self.metricas[papel]):
-                m = dict(self.metricas[papel][tier])
-                lat = m.pop("_latencias")
-                m["taxa_erro"] = _ratio(m["erros"], m["chamadas"])
-                m["taxa_aprovacao_primeira"] = _ratio(m["verifier_aprovados_primeira"], m["verifier_julgados"])
-                m["taxa_convergencia_pos_escalada"] = _ratio(m["escaladas_convergidas"], m["escaladas"])
-                m["latencia"] = {"amostras": len(lat), "mediana": _median(lat), "p90": _p90(lat)}
-                saida[papel][tier] = m
+            for tier in sorted(self.por_papel_tier[papel]):
+                saida[papel][tier] = _finalizar_metricas(self.por_papel_tier[papel][tier])
         return saida
 
-    def _m(self, info: dict[str, Any]) -> dict[str, Any]:
-        return self.metricas[info["papel"]][info["tier"]]
+    def _finalizar_modelos(self) -> dict[str, dict[str, Any]]:
+        return {modelo: _finalizar_metricas(self.por_modelo[modelo]) for modelo in sorted(self.por_modelo)}
+
+    def _metricas(self, info: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+        return (
+            self.por_papel_tier[info["papel"]][info["tier"]],
+            self.por_modelo[info.get("modelo") or DESCONHECIDO],
+        )
+
+    def _inc(self, info: dict[str, Any], campo: str) -> None:
+        for metricas in self._metricas(info):
+            metricas[campo] += 1
+
+    def _append(self, info: dict[str, Any], campo: str, valor: Any) -> None:
+        for metricas in self._metricas(info):
+            metricas[campo].append(valor)
+
+    def _append_motivo(self, info: dict[str, Any], motivo: str) -> None:
+        for metricas in self._metricas(info):
+            if motivo not in metricas["amostras_motivos"] and len(metricas["amostras_motivos"]) < 3:
+                metricas["amostras_motivos"].append(motivo)
+
+    def _desconhecido(self) -> dict[str, Any]:
+        return {"papel": DESCONHECIDO, "tier": SEM_TIER, "modelo": DESCONHECIDO, "t": None}
 
 
 def _analisar_run(run: dict[str, Any]) -> dict[str, Any]:
@@ -306,6 +358,7 @@ def _metricas() -> dict[str, Any]:
         "chamadas": 0,
         "respostas": 0,
         "erros": 0,
+        "falhas_internas": 0,
         "taxa_erro": 0.0,
         "verifier_julgados": 0,
         "verifier_aprovados_primeira": 0,
@@ -317,6 +370,16 @@ def _metricas() -> dict[str, Any]:
         "taxa_convergencia_pos_escalada": 0.0,
         "_latencias": [],
     }
+
+
+def _finalizar_metricas(metricas: dict[str, Any]) -> dict[str, Any]:
+    m = dict(metricas)
+    lat = m.pop("_latencias")
+    m["taxa_erro"] = _ratio(m["erros"], m["chamadas"])
+    m["taxa_aprovacao_primeira"] = _ratio(m["verifier_aprovados_primeira"], m["verifier_julgados"])
+    m["taxa_convergencia_pos_escalada"] = _ratio(m["escaladas_convergidas"], m["escaladas"])
+    m["latencia"] = {"amostras": len(lat), "mediana": _median(lat), "p90": _p90(lat)}
+    return m
 
 
 def _verifier(ev: dict[str, Any]) -> bool:
@@ -378,6 +441,16 @@ def _p90(valores: list[float]) -> float | None:
     if not valores:
         return None
     return round(float(sorted(valores)[max(0, math.ceil(0.9 * len(valores)) - 1)]), 3)
+
+
+def _ordenar_modelos(perfis: dict[str, dict[str, Any]]) -> list[str]:
+    def chave(modelo: str) -> tuple[float, float, float, str]:
+        m = perfis[modelo]
+        mediana = m["latencia"]["mediana"]
+        latencia = float("inf") if mediana is None else mediana
+        return (-m["taxa_aprovacao_primeira"], m["taxa_erro"], latencia, modelo)
+
+    return sorted(perfis, key=chave)
 
 
 def _pct(valor: float) -> str:
