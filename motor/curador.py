@@ -79,6 +79,7 @@ def formatar_markdown(perfil: dict[str, Any]) -> str:
             linhas.append(
                 f"- {papel}/{tier}: chamadas {m['chamadas']}, respostas {m['respostas']}, "
                 f"erros {m['erros']} ({_pct(m['taxa_erro'])}), "
+                f"incompletas {m['incompletas']} ({_pct(m['taxa_incompletas'])}), "
                 f"aprovacao verifier 1a tentativa {_pct(m['taxa_aprovacao_primeira'])}, "
                 f"reprovacoes {m['reprovacoes']}, escaladas {m['escaladas']} "
                 f"(convergencia {_pct(m['taxa_convergencia_pos_escalada'])}), "
@@ -96,6 +97,7 @@ def formatar_markdown(perfil: dict[str, Any]) -> str:
         linhas.append(
             f"- {modelo}: chamadas {m['chamadas']}, respostas {m['respostas']}, "
             f"erros {m['erros']} ({_pct(m['taxa_erro'])}), "
+            f"incompletas {m['incompletas']} ({_pct(m['taxa_incompletas'])}), "
             f"falhas internas {m['falhas_internas']}, "
             f"aprovacao verifier 1a tentativa {_pct(m['taxa_aprovacao_primeira'])}, "
             f"reprovacoes {m['reprovacoes']}, escaladas {m['escaladas']} "
@@ -120,7 +122,13 @@ def formatar_markdown(perfil: dict[str, Any]) -> str:
     return "\n".join(linhas) + "\n"
 
 
-def propor(perfil: dict[str, Any], min_amostras: int = 3, custo: dict[str, Any] | None = None) -> dict[str, Any]:
+def propor(
+    perfil: dict[str, Any],
+    min_amostras: int = 3,
+    custo: dict[str, Any] | None = None,
+    piso_aprovacao: float = 0.6,
+    limiar_falha: float = 0.5,
+) -> dict[str, Any]:
     """Ranqueia modelos por slot sem aplicar mudancas.
 
     Score de qualidade = aprovacao_1a - taxa_erro - penalidade de escalada nao convergida.
@@ -136,9 +144,12 @@ def propor(perfil: dict[str, Any], min_amostras: int = 3, custo: dict[str, Any] 
             for modelo, metricas in modelos.items()
             if metricas["verifier_julgados"] >= min_amostras
         ]
+        evitar = _modelos_a_evitar(modelos, min_amostras, limiar_falha)
         if not candidatos:
             maior = max((m["verifier_julgados"] for m in modelos.values()), default=0)
             slots[slot] = {"status": "evidencia_insuficiente", "amostras": maior}
+            if evitar:
+                slots[slot]["evitar"] = evitar
             continue
 
         ranking = []
@@ -147,19 +158,33 @@ def propor(perfil: dict[str, Any], min_amostras: int = 3, custo: dict[str, Any] 
         ranking.sort(key=_chave_ranking)
         for item in ranking:
             item.pop("_custo", None)
-        evitar = [
-            item["modelo"]
-            for item in ranking
-            if item["aprov_1a"] == 0.0 or item["taxa_erro"] >= 0.5
-        ]
+        recomendado = ranking[0]
+        status = "proposto"
+        aviso = None
+        if recomendado["aprov_1a"] < piso_aprovacao:
+            status = "melhor_disponivel_abaixo_do_piso"
+            aviso = (
+                f"aprovacao {_pct(recomendado['aprov_1a'])} < piso {_pct(piso_aprovacao)}; "
+                "nao confie sem mais evidencia"
+            )
         slots[slot] = {
-            "status": "proposto",
-            "recomendado": ranking[0]["modelo"],
+            "status": status,
+            "recomendado": recomendado["modelo"],
             "ranking": ranking,
             "evitar": evitar,
         }
+        if aviso:
+            slots[slot]["aviso"] = aviso
+        if len(candidatos) == 1:
+            slots[slot]["unico_candidato"] = True
 
-    return {"versao": 1, "min_amostras": min_amostras, "slots": slots}
+    return {
+        "versao": 1,
+        "min_amostras": min_amostras,
+        "piso_aprovacao": piso_aprovacao,
+        "limiar_falha": limiar_falha,
+        "slots": slots,
+    }
 
 
 def formatar_proposta_markdown(proposta: dict[str, Any]) -> str:
@@ -178,19 +203,30 @@ def formatar_proposta_markdown(proposta: dict[str, Any]) -> str:
     for slot in sorted(slots):
         info = slots[slot]
         linhas += [f"## {slot}"]
+        linhas.append(f"- status: {info['status']}")
         if info["status"] == "evidencia_insuficiente":
             linhas.append(f"- evidencia insuficiente: maior amostra {info['amostras']}")
+            if info.get("evitar"):
+                linhas.append(f"- evitar: {', '.join(info['evitar'])}")
             linhas.append("")
             continue
 
         linhas.append(f"- recomendado: {info['recomendado']}")
+        if info.get("aviso"):
+            linhas.append(f"- aviso: {info['aviso']}")
+        if info.get("unico_candidato"):
+            linhas.append("- unico_candidato: true")
         linhas.append("")
-        linhas.append("| modelo | score | aprov_1a | taxa_erro | latencia_mediana | amostras |")
-        linhas.append("| --- | ---: | ---: | ---: | ---: | ---: |")
+        linhas.append(
+            "| modelo | score | aprov_1a | taxa_erro | incompletas | taxa_incompletas | "
+            "latencia_mediana | amostras |"
+        )
+        linhas.append("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
         for item in info["ranking"]:
             linhas.append(
                 f"| {item['modelo']} | {item['score']:.4f} | {_pct(item['aprov_1a'])} | "
-                f"{_pct(item['taxa_erro'])} | {_seg(item['latencia_mediana'])} | {item['amostras']} |"
+                f"{_pct(item['taxa_erro'])} | {item['incompletas']} | {_pct(item['taxa_incompletas'])} | "
+                f"{_seg(item['latencia_mediana'])} | {item['amostras']} |"
             )
         if info["evitar"]:
             linhas.append(f"- evitar: {', '.join(info['evitar'])}")
@@ -208,6 +244,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--propor", action="store_true", help="imprime proposta read-only por slot/modelo")
     parser.add_argument("--min-amostras", type=int, default=3)
     parser.add_argument("--custo", help="JSON com ordem de custo por modelo/provedor, menor e melhor")
+    parser.add_argument("--piso", type=float, default=0.6, help="piso de aprovacao 1a tentativa para proposta limpa")
+    parser.add_argument("--limiar-falha", type=float, default=0.5, help="limiar de erro+incompleta para evitar modelo")
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
 
     perfil = analisar(args.caminhos)
@@ -217,7 +255,18 @@ def main(argv: list[str] | None = None) -> int:
             encoding="utf-8",
         )
     if args.propor:
-        print(formatar_proposta_markdown(propor(perfil, min_amostras=args.min_amostras, custo=_parse_custo(args.custo))), end="")
+        print(
+            formatar_proposta_markdown(
+                propor(
+                    perfil,
+                    min_amostras=args.min_amostras,
+                    custo=_parse_custo(args.custo),
+                    piso_aprovacao=args.piso,
+                    limiar_falha=args.limiar_falha,
+                )
+            ),
+            end="",
+        )
     else:
         print(formatar_markdown(perfil), end="")
     return 0
@@ -239,6 +288,7 @@ class _Agregador:
 
     def _consumir_run(self, eventos: list[dict[str, Any]]) -> None:
         chamadas: dict[tuple[str, int | None], dict[str, Any]] = {}
+        chamadas_concluidas: set[tuple[str, int | None]] = set()
         ultimo_executor: dict[str, dict[str, Any]] = {}
         tier_por_papel: dict[str, str] = {}
         modelo_por_papel: dict[str, str] = {}
@@ -273,7 +323,14 @@ class _Agregador:
                 modelo_por_papel[papel] = modelo
                 self._inc(info, "chamadas")
             elif tipo in {"executor.respondeu", "executor.erro"}:
-                info_metricas = chamada(ev) or self._desconhecido()
+                chave_chamada = _chave_chamada(ev)
+                info_pareado = chamadas.get(chave_chamada)
+                info_fallback = None if info_pareado is not None else chamada(ev)
+                info_metricas = info_pareado or info_fallback or self._desconhecido()
+                if chave_chamada in chamadas:
+                    chamadas_concluidas.add(chave_chamada)
+                elif info_fallback is not None:
+                    chamadas_concluidas.add((info_fallback["executor"], info_fallback["tentativa"]))
                 self._inc(info_metricas, "respostas" if tipo == "executor.respondeu" else "erros")
                 if info_metricas["t"] is not None and tempo is not None:
                     self._append(info_metricas, "_latencias", round(max(0.0, tempo - info_metricas["t"]), 3))
@@ -297,6 +354,9 @@ class _Agregador:
                 escaladas.append({"executor": executor, "t": tempo, "origem": origem, "ok": False})
             elif tipo in {"portao.aprovado", "portao.reprovado"} and _verifier(ev):
                 self._julgar(ev, tempo, ultimo_executor, escaladas)
+        for chave, info in chamadas.items():
+            if chave not in chamadas_concluidas:
+                self._inc(info, "incompletas")
 
     def _julgar(
         self,
@@ -472,10 +532,28 @@ def _item_ranking(modelo: str, metricas: dict[str, Any], custo: dict[str, int]) 
         "score": score,
         "aprov_1a": metricas["taxa_aprovacao_primeira"],
         "taxa_erro": metricas["taxa_erro"],
+        "incompletas": metricas["incompletas"],
+        "taxa_incompletas": metricas["taxa_incompletas"],
         "latencia_mediana": metricas["latencia"]["mediana"],
         "amostras": metricas["verifier_julgados"],
         "_custo": custo.get(modelo),
     }
+
+
+def _modelos_a_evitar(modelos: dict[str, dict[str, Any]], min_amostras: int, limiar_falha: float) -> list[str]:
+    evitar = []
+    for modelo, metricas in modelos.items():
+        falha_por_chamada = (
+            metricas["chamadas"] >= min_amostras
+            and metricas["taxa_incompletas"] + metricas["taxa_erro"] >= limiar_falha
+        )
+        falha_por_qualidade = (
+            metricas["verifier_julgados"] >= min_amostras
+            and metricas["taxa_aprovacao_primeira"] == 0.0
+        )
+        if falha_por_chamada or falha_por_qualidade:
+            evitar.append(modelo)
+    return sorted(evitar)
 
 
 def _chave_ranking(item: dict[str, Any]) -> tuple[float, float, float, str]:
@@ -504,8 +582,10 @@ def _metricas() -> dict[str, Any]:
         "chamadas": 0,
         "respostas": 0,
         "erros": 0,
+        "incompletas": 0,
         "falhas_internas": 0,
         "taxa_erro": 0.0,
+        "taxa_incompletas": 0.0,
         "verifier_julgados": 0,
         "verifier_aprovados_primeira": 0,
         "taxa_aprovacao_primeira": 0.0,
@@ -522,6 +602,7 @@ def _finalizar_metricas(metricas: dict[str, Any]) -> dict[str, Any]:
     m = dict(metricas)
     lat = m.pop("_latencias")
     m["taxa_erro"] = _ratio(m["erros"], m["chamadas"])
+    m["taxa_incompletas"] = _ratio(m["incompletas"], m["chamadas"])
     m["taxa_aprovacao_primeira"] = _ratio(m["verifier_aprovados_primeira"], m["verifier_julgados"])
     m["taxa_convergencia_pos_escalada"] = _ratio(m["escaladas_convergidas"], m["escaladas"])
     m["latencia"] = {"amostras": len(lat), "mediana": _median(lat), "p90": _p90(lat)}
@@ -565,6 +646,10 @@ def _int(valor: Any) -> int | None:
         return None if isinstance(valor, bool) else int(valor)
     except (TypeError, ValueError):
         return None
+
+
+def _chave_chamada(ev: dict[str, Any]) -> tuple[str, int | None]:
+    return (_str(ev.get("executor")) or "desconhecido", _int(ev.get("tentativa")))
 
 
 def _depois(t: float | None, marco: float | None) -> bool:

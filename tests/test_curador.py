@@ -283,6 +283,98 @@ def test_propor_ranqueia_desempata_e_respeita_amostras(tmp_path):
     }
 
 
+def test_incompleta_inferida_por_chamada_sem_resposta_ou_erro(tmp_path):
+    log = _jsonl(
+        tmp_path,
+        "incompleta.jsonl",
+        [
+            {
+                "t": 0.0,
+                "evento": "executor.chamado",
+                "executor": "ok",
+                "papel": "executor",
+                "tier": "media",
+                "tentativa": 1,
+                "modelo": "modelo-m",
+            },
+            {"t": 1.0, "evento": "executor.respondeu", "executor": "ok", "tentativa": 1},
+            {
+                "t": 2.0,
+                "evento": "executor.chamado",
+                "executor": "travado",
+                "papel": "executor",
+                "tier": "media",
+                "tentativa": 1,
+                "modelo": "modelo-m",
+            },
+        ],
+    )
+
+    perfil = analisar([log])
+
+    modelo = perfil["por_modelo"]["modelo-m"]
+    assert modelo["chamadas"] == 2
+    assert modelo["respostas"] == 1
+    assert modelo["incompletas"] == 1
+    assert modelo["taxa_incompletas"] == 0.5
+    slot = perfil["por_slot_modelo"]["executor/media"]["modelo-m"]
+    assert slot["incompletas"] == 1
+    assert slot["taxa_incompletas"] == 0.5
+    assert "incompletas 1 (50.0%)" in formatar_markdown(perfil)
+
+
+def test_propor_evita_modelo_com_muitas_incompletas_sem_julgamentos(tmp_path):
+    log = _jsonl(
+        tmp_path,
+        "travado.jsonl",
+        [
+            {
+                "t": float(i),
+                "evento": "executor.chamado",
+                "executor": f"travado-{i}",
+                "papel": "executor",
+                "tier": "simples",
+                "tentativa": 1,
+                "modelo": "modelo-travado",
+            }
+            for i in range(3)
+        ],
+    )
+
+    slot = propor(analisar([log]), min_amostras=3)["slots"]["executor/simples"]
+
+    assert slot["status"] == "evidencia_insuficiente"
+    assert slot["evitar"] == ["modelo-travado"]
+
+
+def test_propor_aplica_piso_de_qualidade_e_marca_candidato_unico(tmp_path):
+    abaixo = _jsonl(
+        tmp_path,
+        "abaixo.jsonl",
+        _eventos_modelo("pesquisador", "complexa", "codex", 1, 3, inicio=0.0, prefixo="codex"),
+    )
+
+    slot = propor(analisar([abaixo]), min_amostras=3, piso_aprovacao=0.6)["slots"][
+        "pesquisador/complexa"
+    ]
+
+    assert slot["status"] == "melhor_disponivel_abaixo_do_piso"
+    assert slot["recomendado"] == "codex"
+    assert slot["unico_candidato"] is True
+    assert "aprovacao 33.3% < piso 60.0%" in slot["aviso"]
+
+    acima = _jsonl(
+        tmp_path,
+        "acima.jsonl",
+        _eventos_modelo("especificador", "media", "kimi", 3, 3, inicio=0.0, prefixo="kimi"),
+    )
+
+    slot = propor(analisar([acima]), min_amostras=3, piso_aprovacao=0.6)["slots"]["especificador/media"]
+
+    assert slot["status"] == "proposto"
+    assert slot["unico_candidato"] is True
+
+
 def test_modelo_falha_conta_como_falha_interna_sem_inflar_taxa_erro(tmp_path):
     log = _jsonl(
         tmp_path,
@@ -375,10 +467,24 @@ def test_markdown_e_cli_json(tmp_path):
     assert "executor/simples" in formatar_markdown(perfil)
 
     proposta = subprocess.run(
-        [sys.executable, "-m", "motor.curador", str(log), "--propor", "--min-amostras", "1"],
+        [
+            sys.executable,
+            "-m",
+            "motor.curador",
+            str(log),
+            "--propor",
+            "--min-amostras",
+            "1",
+            "--piso",
+            "0.9",
+            "--limiar-falha",
+            "0.4",
+        ],
         check=True,
         capture_output=True,
         text=True,
     )
     assert "# Proposta do Curador" in proposta.stdout
     assert "## executor/simples" in proposta.stdout
+    assert "- status: melhor_disponivel_abaixo_do_piso" in proposta.stdout
+    assert "| modelo | score | aprov_1a | taxa_erro | incompletas | taxa_incompletas |" in proposta.stdout
