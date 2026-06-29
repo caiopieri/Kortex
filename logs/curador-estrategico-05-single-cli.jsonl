@@ -1,0 +1,15 @@
+{"t": 0.024, "evento": "spec.recebida", "missao": "curador-single-cli", "subagentes": 1}
+{"t": 0.025, "evento": "gate.auto", "portao": "plano", "decisao": "prosseguir"}
+{"t": 0.025, "evento": "paralelo.iniciado", "subagentes": ["especificador"]}
+{"t": 0.027, "evento": "executor.chamado", "executor": "especificador", "papel": "especificador", "tier": "media", "tentativa": 1, "modelo": "ollama-3b/qwen2.5:3b-instruct"}
+{"t": 0.027, "evento": "modelo.roteado_tier", "papel": "especificador", "tier": "media"}
+{"t": 40.946, "evento": "executor.respondeu", "executor": "especificador", "tentativa": 1}
+{"t": 40.946, "evento": "modelo.pin", "papel": "verifier", "tier": null}
+{"t": 49.355, "evento": "portao.aprovado", "portao": "verifier:especificador", "ciclo": 1}
+{"t": 49.356, "evento": "paralelo.concluido", "commitados": 1}
+{"t": 49.357, "evento": "executor.chamado", "executor": "global_evaluator", "modelo": "ollama-3b/qwen2.5:3b-instruct"}
+{"t": 49.357, "evento": "modelo.pin", "papel": "evaluator", "tier": null}
+{"t": 59.803, "evento": "portao.aprovado", "portao": "cobertura"}
+{"t": 59.804, "evento": "executor.chamado", "executor": "synthesizer", "modelo": "ollama-3b/qwen2.5:3b-instruct"}
+{"t": 59.804, "evento": "modelo.pin", "papel": "synthesizer", "tier": null}
+{"t": 87.107, "evento": "tarefa.concluida", "missao": "curador-single-cli"}
