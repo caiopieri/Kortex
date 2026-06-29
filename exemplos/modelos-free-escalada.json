@@ -25,7 +25,7 @@
   },
 
   "pins": {
-    "planner":     "codex/gpt-5.4",
+    "planner":     "nv-kimi/moonshotai/kimi-k2.6",
     "verifier":    "codex/gpt-5.4",
     "evaluator":   "codex/gpt-5.4",
     "synthesizer": "codex/gpt-5.4"
