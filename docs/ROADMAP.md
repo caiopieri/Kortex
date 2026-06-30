@@ -54,8 +54,9 @@ curador**. Detalhe em `LEIA-PRIMEIRO.md` §3.
   que bloqueia merge (Fase 4, passo 1) ainda não foi fiado. Estreia prevista no Logisti.
 - **Jarvis v0.1** — assistente local (Ollama/Qwen, voz, memória em duas camadas, MCP). Consome a
   meta-fábrica como motor headless.
-- **Flint** — app de notas (substituto do Obsidian); a **superfície/cliente** da meta-fábrica. Hoje é
-  visão+v1; o painel vivo é Futuro explícito do próprio Flint.
+- **Flint** — app de notas do dono (substituto do Obsidian); **projeto separado** que *pode* integrar a
+  meta-fábrica como **cliente externo opcional** (não é a superfície dela — a meta-fábrica tem interface
+  própria; e ela não depende do Flint). Hoje é visão+v1.
 - **Verticais não-software já germinando:** pastas `harness-hardware/` e `harness-mecanico/` com
   blueprint e constituição — sementes das próximas verticais.
 
@@ -68,7 +69,7 @@ curador**. Detalhe em `LEIA-PRIMEIRO.md` §3.
 | Eficiência (modelos pequenos especialistas) | barata | telemetria-por-modelo **feita** (perfil de aptidão por slot); fábrica de especialistas é Later |
 | Camada de dados / conhecimento | boa | só a semente md (memória/Obsidian); grafo de conhecimento é Next |
 | Custo (medição) | barata | **livro-razão de custo feito** (tokens+tempo+$); falta o propositor usar custo real no desempate |
-| Interface viva (Flint) | tempo-até-decisão | briefing completo; esquema de eventos motor→superfície **em curso** |
+| Interface viva (própria da meta-fábrica) | tempo-até-decisão | briefing completo; esquema de eventos motor→superfície **em curso** |
 
 ---
 
@@ -115,9 +116,10 @@ curador**. Detalhe em `LEIA-PRIMEIRO.md` §3.
 ## Later (capturado, não comprometido — começar cedo demais é o risco)
 
 - **Loop de produção + learn-time** (Fase 4, passos 4-5) — quando houver produção real com usuários.
-- **Interface viva no Flint** — começa *read-only* visualizando o stream de eventos; depois zoom
-  semântico (macro→micro), interceptação (observar/sugerir/parar/assumir) e replay. Depende do motor
-  emitir eventos e rodar projetos multiagente. Ver `design/interface-briefing.md`.
+- **Interface viva própria da meta-fábrica** — começa *read-only* visualizando o stream de eventos; depois
+  zoom semântico (macro→micro), interceptação (observar/sugerir/parar/assumir) e replay. Depende do motor
+  emitir eventos e rodar projetos multiagente. (Clientes externos como o Flint podem consumir o mesmo
+  stream, opcionalmente.) Ver `design/interface-briefing.md`.
 - **Fábrica de especialistas (a visão do curador-supervisor)** — o curador cria "monstrinhos": modelos
   pequenos, baratos, super-especializados por papel (backend, CAD…) que entregam com maestria. Disciplina
   inegociável (senão é hobby perigoso): **(a)** a régua vem antes — rollout vertical por vertical,

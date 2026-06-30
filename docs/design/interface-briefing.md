@@ -35,16 +35,22 @@ A metáfora-guia do dono:
 > macro. Ver o CAD se atualizando numa janelinha enquanto outro agente roda entre bancos de dados, com
 > as conexões brilhando e a engrenagem do banco girando porque está sendo usado."
 
-## 3. Princípio inegociável: a superfície é o Flint; o motor é headless
+## 3. Princípio inegociável: interface PRÓPRIA da meta-fábrica; o motor é headless
 
-A interface **não é** o sistema. O trabalho pesado vive em motores *headless* (o motor da meta-fábrica,
-o Jarvis); o **Flint** (app de notas do dono, substituto do Obsidian) é a **superfície/cliente** que
-conecta e visualiza. O Flint é *um* cliente do motor, não *o* sistema. A fronteira entre eles é **MCP**.
+Esta é a **interface própria da meta-fábrica** — ela é autossuficiente: tem o motor *headless* (que
+fabrica e expõe estado) **e** a sua própria superfície (que vê e controla). A interface **não é** o motor:
+o trabalho pesado vive no motor headless; a tela **renderiza o stream de eventos** que o motor emite (ver
+§10) — não calcula nem decide nada do processo, só mostra e permite intervir. A fronteira é **MCP**.
 
-Consequência de design: a tela **renderiza um stream de eventos** que o motor emite (ver §10). Ela não
-calcula nem decide nada do processo — ela mostra e permite intervir. O canvas infinito do Flint
-(hospedeiro de frames: nota, tinta, embed web, janela de grafo) é o substrato natural — cada
-agente/sala/artefato é um frame; conexões são linhas nomeadas (já existe no Flint).
+**Flint não é esta superfície.** O Flint (app de notas do dono) é um **projeto separado** que *pode*
+integrar a meta-fábrica como **cliente externo opcional**, consumindo o mesmo stream MCP — a meta-fábrica
+**não depende dele**. O design pedido aqui é o da **interface própria** da meta-fábrica; o canvas/primitivos
+do Flint citados adiante são **referência de padrões** (frames, linhas nomeadas, zoom) que um cliente como
+o Flint poderia reusar, não um requisito de que a superfície seja o Flint.
+
+Modelo de frames (vale pra interface própria e para qualquer cliente que integre): cada agente/sala/
+artefato é um **frame**; conexões são **linhas nomeadas**; e há duas camadas sobreponíveis (grafo de
+conhecimento vs grafo de atividade).
 
 ## 4. Princípios de design (os não-negociáveis)
 
@@ -91,7 +97,8 @@ Cada elemento abaixo deve corresponder a um evento do §10:
 - **Indicador de custo** sempre visível (ex.: "R$ 0,42 nesta run") — a missão é "cada vez mais barato",
   então o custo é cidadão de primeira classe, não escondido.
 
-Restrição estética herdada do Flint: flat, fluido, sem travar; performance é princípio inegociável.
+Estética da interface PRÓPRIA da meta-fábrica (no espírito flat/fluido do Flint, mas é a nossa): flat,
+fluido, sem travar; performance é princípio inegociável.
 
 ## 7. Interceptação — protocolo de quatro níveis
 
@@ -151,16 +158,16 @@ visualmente "isto está vivo" de "isto ainda é maquete". Estados:
 | **Custo visível na tela** | Parcial | **Livro-razão de custo FEITO** (tokens+tempo+$ por run/modelo, via tabela de preço). O dado existe; falta só expor na tela (e o evento `custo.tick`). |
 | **Curador sugere modelo** ("use X aqui") | Parcial | **Curador-fundação completo** (read-only): observador + propositor por slot (com piso e ciente de travas) + custo. A sugestão e o "evitar" já saem — por CLI, não na tela ainda. |
 | **Replay / linha do tempo** | Não existe | O log de eventos (parcial em JSONL) é a base; a feature de rebobinar não. |
-| **Grafo de conhecimento** (universo de dados) | Parcial | Semente em md (Obsidian/memória) existe; grafo visual federado não. É o Flint v1. |
-| **Editor de workflow** (montar pipeline à mão) | Não existe | Futuro explícito do Flint; **esta peça é visualização, não autoria.** Pode ser desenhado, marcado como futuro. |
+| **Grafo de conhecimento** (universo de dados) | Parcial | Semente em md (Obsidian/memória) existe; grafo visual federado não. (Um cliente externo como o Flint poderia renderizá-lo.) |
+| **Editor de workflow** (montar pipeline à mão) | Não existe | Futuro; **esta peça é visualização, não autoria.** Pode ser desenhado, marcado como futuro. |
 
 Uma sugestão de design que nasce disso: a interface pode ter um **modo "maquete" vs "ao vivo"** — partes
 sem dado real aparecem claramente como simulação/placeholder, e "acendem" quando o motor passa a emitir
 aquele sinal. Isso transforma a própria tabela acima em mecânica de produto: o dono *vê a fábrica sendo
 construída* à medida que cada capacidade sai do "não existe" pro "funciona".
 
-Restrições que valem pra tudo: **light e dark mode**, flat, fluido, performance inegociável (herança do
-Flint).
+Restrições que valem pra tudo: **light e dark mode**, flat, fluido, performance inegociável (estética
+própria da meta-fábrica, no espírito flat/fluido do Flint).
 
 ## 11. Critério de sucesso
 
@@ -174,16 +181,17 @@ viva sendo observada*, não um dashboard de métricas.
 
 O [Paperclip](https://github.com/paperclipai/paperclip) já construiu, em produção, várias destas telas —
 use como **inspiração direta** (não como gabarito a copiar pixel-a-pixel; a nossa estética é neuronal/viva
-do Flint): o **dashboard** de saúde/custo; a **thread de uma run com timeline + stop/cancel** (= a nossa
+e própria): o **dashboard** de saúde/custo; a **thread de uma run com timeline + stop/cancel** (= a nossa
 interceptação "parar"); a **Conference Room** (chat com o "CEO" + feed ao vivo); o **org chart** das
 casas/agentes. O que eles NÃO têm e é nosso diferencial a desenhar: o **zoom semântico** macro→meso→micro,
 a **vivacidade neuronal** mapeada a sinal real, o **artefato vivo** dentro do nó, e o **modo maquete↔ao
-vivo**. Estude a forma deles; vista a alma do Flint.
+vivo**. Estude a forma deles; vista a alma neuronal/viva (própria) da meta-fábrica.
 
 ### Referências
 - **`../LEIA-PRIMEIRO.md`** — a visão inteira do sistema, as camadas e o estado atual (leia primeiro).
 - Mockup conceitual de partida: gerado na conversa de planejamento (nível meso, pipeline do "Drone v1").
-- `Flint.md` (no repo do Flint) — a superfície/cliente; canvas, primitivos, os dois grafos, IA-harness.
+- `Flint.md` (no repo do Flint) — um cliente externo que *pode* integrar a meta-fábrica; canvas,
+  primitivos, os dois grafos, IA-harness (referência de padrões reusáveis, não a superfície oficial).
 - `../ROADMAP.md` — onde esta interface se encaixa nas fases.
 - `../../motor/docs/ARQUITETURA-MCP.md` — a fronteira MCP (como a tela fala com o motor headless).
 - `../../dev-harness/docs/motor-entrega-profissional.md` — gates, evidências, papéis (a lógica que a tela mostra).

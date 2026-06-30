@@ -36,17 +36,27 @@ e o todo se organizando pra entregar. Um **curador** supervisiona: lê logs, med
 A meta-fábrica é **fractal** e dividida em camadas. Confundir as camadas é o erro nº 1. Da mais profunda
 à mais externa:
 
+A **meta-fábrica é autossuficiente** — tem motor, casas E **interface própria**. Produtos externos
+(Jarvis, Flint) podem *consumir* a meta-fábrica via MCP, mas ela **não depende de nenhum deles**.
+
 ```
-  Flint (superfície / cliente)         ── VÊ a fábrica rodando; intercepta sem parar. Headless engine ≠ UI.
-        ▲  (MCP, stream de eventos)
-  Orquestrador / Porteiro (Jarvis)     ── entende intenção, roteia, GUARDA (risco, dinheiro, identidade).
-        ▲  (MCP fino)
-  Casas / Harness de domínio           ── softwarehouse (dev-harness), hardwarehouse, mechanical house…
-        │   = CONTROL-PLANE: org-chart, orçamento, tickets, coordenação entre papéis/casas.
-        ▲
-  Motor (kernel / meta-fábrica)        ── roda UM processo (UM artefato) com maestria: grafo de papéis,
-                                          verificação adversarial, gate de cobertura, contrato de evidência.
+  CONSUMIDORES EXTERNOS (opcionais, via MCP):
+     Jarvis (assistente/porteiro)  ·  Flint (app de notas)  ·  outros clientes
+        ▲  (MCP: despachar / status / stream de eventos)
+  ┌─ META-FÁBRICA (autossuficiente) ─────────────────────────────────────────┐
+  │  Interface própria      ── a superfície de 1ª classe: VÊ a fábrica rodando e
+  │                            intercepta. Consome o stream de eventos do motor.
+  │  Casas / harness         ── softwarehouse (dev-harness), hardware, mecânica… =
+  │                            control-plane: org-chart, orçamento, coordenação.
+  │  Motor (kernel)          ── roda UM processo (UM artefato) com maestria: grafo de
+  │                            papéis, verificação adversarial, gate de cobertura, evidência.
+  └────────────────────────────────────────────────────────────────────────────┘
 ```
+
+A meta-fábrica tem **sua própria interface viva** (não depende de app externo pra ser vista/operada). O
+**Jarvis** (assistente/porteiro) e o **Flint** (app de notas do dono) são **projetos separados** que
+*podem se integrar* como clientes do mesmo stream MCP — a relação é unilateral: eles **usam** a
+meta-fábrica; ela não usa nem depende deles.
 
 **Regra pétrea (decisão #5, não relitigar): o motor é músculo, não autoridade.** Ele fabrica resultado
 complexo e **expõe seu estado**. Ele **não** decide permissão, não classifica risco, não mede dinheiro,
@@ -138,13 +148,15 @@ direção errada — pare e releia.
 **Em curso:** esquema de eventos motor→superfície tipado + canal de stream (handoff escrito; é o gancho da
 interface viva).
 
-**Aspiracional (desenhado, ainda não construído):** interface viva (Flint); curador que **age** (fatia 3:
-sombra + certificação); fábrica de especialistas (fine-tuning/destilação governados); casas além da
-softwarehouse; ponte física. Ver §6 e o ROADMAP.
+**Aspiracional (desenhado, ainda não construído):** a **interface viva própria** da meta-fábrica; curador
+que **age** (fatia 3: sombra + certificação); fábrica de especialistas (fine-tuning/destilação
+governados); casas além da softwarehouse; ponte física. Ver §6 e o ROADMAP.
 
-**Outros projetos do ecossistema:** **Jarvis** (assistente local; consome a meta-fábrica como motor
-headless), **Flint** (app de notas; a superfície/cliente), **dev-harness** (a softwarehouse: metodologia
-de engenharia), **harness-hardware / harness-mecanico** (sementes das próximas verticais).
+**Projetos SEPARADOS que consomem a meta-fábrica (não fazem parte dela, não são dependência):**
+**Jarvis** (assistente local; consome a meta-fábrica como motor headless), **Flint** (app de notas do
+dono; pode *integrar* a meta-fábrica como cliente externo opcional — a meta-fábrica não depende dele).
+**Fazem parte do núcleo (este repo):** **dev-harness** (a softwarehouse: metodologia de engenharia),
+**harness-hardware / harness-mecanico** (sementes das próximas verticais).
 
 ---
 
@@ -186,7 +198,7 @@ Leia nesta ordem para entender o sistema:
 1. **`docs/LEIA-PRIMEIRO.md`** (este) — a visão, as camadas, os princípios, o estado, o norte.
 2. **`docs/ROADMAP.md`** — o mapa operacional Now/Next/Later de todo o sistema (qual pilar, em que
    ordem). É onde se decide o que vem a seguir.
-3. **`docs/design/interface-briefing.md`** — a visão completa da interface viva (Flint), com
+3. **`docs/design/interface-briefing.md`** — a visão completa da interface viva **própria da meta-fábrica**, com
    status de maturidade de cada capacidade. O "como o dono quer ver a fábrica".
 4. **`motor/docs/EVOLUCAO.md`** — o norte do **motor**: os vetores aditivos (validadores
    determinísticos, eventos tipados, curador-catraca, spec v0.2, fronteira fractal, fábrica de
@@ -198,12 +210,13 @@ Leia nesta ordem para entender o sistema:
    security-DoD, `docs/biblioteca-de-validadores.md`, fases). É a primeira "casa".
 
 **Onde vivem os briefings (regra: spec/visão no monorepo; preparo-de-implementação no repo do produto):**
-o `docs/design/interface-briefing.md` (a *spec* da interface) fica **aqui** no monorepo,
-canônico — o Flint a implementa e a referencia. Os briefings de *terreno de produto* vivem nos repos dos
-produtos: **Flint** tem o `BRIEFING-FLINT-superficie-meta-fabrica.md` (cliente MCP, ingestão de eventos,
-canvas); **Jarvis** tem o `BRIEFING-JARVIS-orquestrador-meta-fabrica.md` (papel de porteiro/orquestrador,
-consumo do motor). O contrato MCP que ambos consomem é canônico e fica no monorepo
-(`motor/docs/ARQUITETURA-MCP.md`).
+o `docs/design/interface-briefing.md` (a *spec* da **interface própria da meta-fábrica**) fica **aqui** no
+monorepo, canônico — é o que guia a construção da nossa interface; clientes externos (Flint) podem
+referenciá-la se quiserem integrar. Os briefings de *terreno de produto* vivem nos repos dos produtos
+externos: **Flint** tem o `BRIEFING-FLINT-superficie-meta-fabrica.md` (como o Flint *consome* a
+meta-fábrica: cliente MCP, ingestão de eventos, canvas); **Jarvis** tem o
+`BRIEFING-JARVIS-orquestrador-meta-fabrica.md` (papel de porteiro/orquestrador, consumo do motor). O
+contrato MCP que esses clientes consomem é canônico e fica no monorepo (`motor/docs/ARQUITETURA-MCP.md`).
 
 Visão e kernel canônicos de longo prazo vivem no **vault Obsidian** (`2. Pessoal/Meta-fábrica*.md`); estes
 documentos são o mapa operacional versionado.

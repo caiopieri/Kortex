@@ -11,21 +11,25 @@ outras (hardware, mecânica, jurídico, CAD).
 
 ## Arquitetura em camadas
 
+A meta-fábrica é **autossuficiente** (motor + casas + **interface própria**). Produtos externos consomem
+ela via MCP, mas ela **não depende de nenhum deles**.
+
 ```
-Flint (superfície/cliente)        ── VÊ a fábrica rodando e intercepta (repo próprio)
-   ▲  MCP
-Orquestrador / Porteiro (Jarvis)  ── entende intenção, roteia, GUARDA risco/dinheiro (repo próprio)
-   ▲  MCP
-Casas / Harness de domínio        ── softwarehouse (dev-harness), hardware, mecânica… (método)
-   ▲
-Motor (kernel)                    ── roda UM processo com maestria: grafo de papéis, verificação
-                                     adversarial, gate de cobertura, contrato de evidência
+Consumidores externos (opcionais, via MCP):  Jarvis (assistente/porteiro) · Flint (app de notas) · …
+   ▲  MCP (despachar / status / stream de eventos)
+┌ META-FÁBRICA (este repositório) ───────────────────────────────────────────────┐
+│ Interface própria   ── a superfície de 1ª classe: VÊ a fábrica rodando e intercepta
+│ Casas / harness     ── softwarehouse (dev-harness), hardware, mecânica… (método/control-plane)
+│ Motor (kernel)      ── roda UM processo com maestria: grafo de papéis, verificação
+│                        adversarial, gate de cobertura, contrato de evidência
+└────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 **Regra pétrea:** o motor é *músculo, não autoridade* — fabrica e expõe estado; não decide permissão,
 risco ou dinheiro (isso é do porteiro). A fronteira entre camadas é **MCP**. Este repositório é o
-**núcleo** (motor + harnesses de domínio + documentação); os produtos que rodam (Jarvis, Flint) vivem em
-repos próprios e consomem o motor pela fronteira MCP.
+**núcleo** (motor + harnesses de domínio + interface própria + documentação). **Jarvis** e **Flint** são
+**projetos separados** (repos próprios) que *podem* consumir a meta-fábrica como clientes — ela funciona
+sozinha sem eles.
 
 ## Estrutura do repositório
 
