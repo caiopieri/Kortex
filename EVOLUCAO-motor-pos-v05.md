@@ -137,6 +137,13 @@ orquestrado pelo curador/casas usando a máquina do motor, não é nó hard-code
 - Não fazer o motor classificar/decidir gate; ele sobe cru.
 - Não criar parser mágico pra prosa de LLM; ajustar prompt, não topologia.
 - Não deixar o curador aplicar mudança sem sombra+certificação.
+- **Não dar "ferramentas de auto-organização" (to-do/checklist que o nó marca) a um nó do grafo.** O
+  organizador é o grafo; o nó é função pura. Dentro de uma run já existem: plano = WorkflowSpec, progresso
+  = eventos, workspace = `runs/<id>/artefatos`, contexto/handoff = `deps_txt`. "Ver o progresso como
+  checklist" é a **interface** lendo os eventos, não feature do kernel. O que ajuda o agente a entregar
+  melhor é **retrieval** (camada de conhecimento/RAG/ferramentas), não auto-organização. **Estado mutável
+  compartilhado entre nós é anti-padrão** — consistência se resolve por ordenação + evidência +
+  reconciliação (Fase C), não por um "caderno" comum.
 
 ## Onde isto pode dar errado
 
