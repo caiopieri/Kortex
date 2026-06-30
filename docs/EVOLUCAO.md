@@ -1,8 +1,8 @@
 # Evolução do motor (pós-v0.5) — o norte
 
 > Para: Caio + Codex + Claude (sessões futuras). De: revisão de arquitetura, 2026-06-29.
-> Companheiro de `ARQUITETURA-MCP-e-orquestrador.md` (a fronteira) e `HANDOFF.md` (a fabricação v0.5).
-> Referencia `../dev-harness/docs/biblioteca-de-validadores.md` e `../../ROADMAP-META-FABRICA.md`.
+> Companheiro de `ARQUITETURA-MCP.md` (a fronteira) e `../handoffs/HANDOFF.md` (a fabricação v0.5).
+> Referencia `../../dev-harness/docs/biblioteca-de-validadores.md` e `../../docs/ROADMAP.md`.
 
 ## Regra de ouro
 
@@ -35,7 +35,7 @@ está relitigando decisão travada — pare e releia esta seção.
 - **V5 parcialmente real:** a rota `grafo_dependencias` já roda com handoff entre nós via `deps_txt`; a
   formalização do contrato tipado de handoff (spec v0.2) é o que falta.
 - **Paperclip** (MIT) confirmou o V4: o control-plane (orçamento/eventos/approvals/UI) é roda pronta a
-  reusar **na camada das casas**, nunca no motor. Ver `../LEIA-PRIMEIRO.md` §3.
+  reusar **na camada das casas**, nunca no motor. Ver `../../docs/LEIA-PRIMEIRO.md` §3.
 
 ## Os vetores de evolução (aditivos)
 

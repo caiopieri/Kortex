@@ -21,7 +21,7 @@ langgraph dev
 Se mexer em dependências, pare o `langgraph dev` antes. O hot reload observa
 mudanças em `.venv` e pode reiniciar enquanto o pip ainda está escrevendo arquivos.
 
-Visão do sistema inteiro: **`../LEIA-PRIMEIRO.md`** (comece por aí). Norte do motor:
-`EVOLUCAO-motor-pos-v05.md`. Fronteira MCP/orquestrador: `ARQUITETURA-MCP-e-orquestrador.md`. Mapa
-operacional: `../ROADMAP-META-FABRICA.md`. Kernel canônico de longo prazo: vault Obsidian
-(`2. Pessoal/Meta-fábrica*.md`). Handoffs de trabalho: `HANDOFF-CODEX-*.md`.
+Visão do sistema inteiro: **`../docs/LEIA-PRIMEIRO.md`** (comece por aí). Norte do motor:
+`docs/EVOLUCAO.md`. Fronteira MCP/orquestrador: `docs/ARQUITETURA-MCP.md`. Mapa operacional:
+`../docs/ROADMAP.md`. Kernel canônico de longo prazo: vault Obsidian (`2. Pessoal/Meta-fábrica*.md`).
+Handoffs de trabalho (histórico): `handoffs/`.

@@ -3,7 +3,7 @@
 > **Para:** Caio + agente do Jarvis + Codex. **De:** Claude (revisão do motor).
 > **O que é:** o desenho de como a meta-fábrica vira um **MCP** que o Jarvis consome, e onde
 > exatamente fica a linha entre **o que o motor faz** e **o que o orquestrador/porteiro faz**.
-> Companheiro de `HANDOFF-CODEX-MOTOR-R3-roadmap.md` (esse é o "como programar"; este é o
+> Companheiro de `../handoffs/HANDOFF-CODEX-MOTOR-R3-roadmap.md` (esse é o "como programar"; este é o
 > "por que essa forma e onde a fronteira corta").
 
 ---
