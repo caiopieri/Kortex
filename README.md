@@ -6,7 +6,7 @@ avaliador global de cobertura e gate do fundador (`interrupt()`).
 
 ```bash
 pip install -e ".[dev]"
-pytest -q                                      # 12 testes, sem rede (ClienteStub)
+pytest -q                                      # ~244 testes, sem rede (ClienteStub)
 python -m motor --spec exemplos/missao-pesquisa.json   # requer `claude` CLI
 python -m motor "pesquise oportunidades de aumento de receita"
 ```
@@ -21,4 +21,7 @@ langgraph dev
 Se mexer em dependências, pare o `langgraph dev` antes. O hot reload observa
 mudanças em `.venv` e pode reiniciar enquanto o pip ainda está escrevendo arquivos.
 
-Fabricação pendente: ver `HANDOFF.md`. Visão e kernel: vault Obsidian (`2. Pessoal/Meta-fábrica*.md`).
+Visão do sistema inteiro: **`../LEIA-PRIMEIRO.md`** (comece por aí). Norte do motor:
+`EVOLUCAO-motor-pos-v05.md`. Fronteira MCP/orquestrador: `ARQUITETURA-MCP-e-orquestrador.md`. Mapa
+operacional: `../ROADMAP-META-FABRICA.md`. Kernel canônico de longo prazo: vault Obsidian
+(`2. Pessoal/Meta-fábrica*.md`). Handoffs de trabalho: `HANDOFF-CODEX-*.md`.
