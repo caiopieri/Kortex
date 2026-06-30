@@ -1,0 +1,6 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "dynamic_workflow": "motor.studio:make_graph"
+  }
+}

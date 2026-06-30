@@ -1,0 +1,32 @@
+{
+  "_comentario": "ESCADA FREE DIRETA (HTTP openai-compat, SEM opencode). EXECUTOR barato = llama-3.3-70b (tiers simples/media, custo 1). PLANNER+JUÍZO+complexa = Kimi K2 (moonshotai/kimi-k2-instruct, 1T MoE agêntico/tool-use, custo 2) — segura o JSON do planner (o qwen-next-80b funcionava mas era lento; o llama CRASHAVA o planner). Rótulos de provedor distintos (nv-llama/nv-kimi) p/ failover modelo-a-modelo. 'padrao':'nenhum' = sem claude/codex (inerte até o HANDOFF-CODEX-SEM-CAROS; até lá FALHA com TODOS os free fora ainda cai no claude). Exige NVIDIA_API_KEY + Install Certificates.command. ALTERNATIVAS fortes free na NVIDIA: 'moonshotai/kimi-k2.6' (mais novo), 'moonshotai/kimi-k2-thinking' (raciocínio), 'nvidia/llama-3.1-nemotron-ultra-253b-v1' (Nemotron Ultra) — troque o 'modelo' do nv-kimi se quiser. NOTA: o planner é papel frágil; se o nv-kimi cair, o reroteamento genérico manda pro mais barato (llama), que crasha o planner → pendente o handoff 'crash do planner → abort limpo'.",
+
+  "padrao": "nenhum",
+  "auto_esgotar": true,
+
+  "provedores": {
+    "nv-llama": {
+      "base_url": "https://integrate.api.nvidia.com/v1",
+      "api_key_env": "NVIDIA_API_KEY",
+      "custo_ordem": 1
+    },
+    "nv-kimi": {
+      "base_url": "https://integrate.api.nvidia.com/v1",
+      "api_key_env": "NVIDIA_API_KEY",
+      "custo_ordem": 2
+    }
+  },
+
+  "tiers": {
+    "simples":  "nv-llama/meta/llama-3.3-70b-instruct",
+    "media":    "nv-llama/meta/llama-3.3-70b-instruct",
+    "complexa": "nv-kimi/moonshotai/kimi-k2.6"
+  },
+
+  "pins": {
+    "planner":     "nv-kimi/moonshotai/kimi-k2.6",
+    "verifier":    "nv-kimi/moonshotai/kimi-k2.6",
+    "evaluator":   "nv-kimi/moonshotai/kimi-k2.6",
+    "synthesizer": "nv-kimi/moonshotai/kimi-k2.6"
+  }
+}

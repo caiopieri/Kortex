@@ -1,0 +1,33 @@
+{
+  "_comentario": "PERFIL SEM CAROS — só free/barato, NUNCA claude nem codex. Tudo via opencode (sem chave em arquivo; auth = `opencode auth login`). Cada modelo tem RÓTULO DE PROVEDOR PRÓPRIO (ollama/nv-llama/nv-coder/nv-next/orfree) pra o failover ser modelo-a-modelo: se um rate-limita, o auto_esgotar pula pro próximo da cadeia ORDENADA POR CUSTO, não derruba os outros. O parser divide no 1º '/': 'nv-llama/nvidia/meta/llama-3.3-70b-instruct' => provedor 'nv-llama', modelo opencode 'nvidia/meta/llama-3.3-70b-instruct'. CONFIRME os ids reais com `opencode models` e troque onde estiver PLACEHOLDER. 'padrao':'nenhum' = último recurso NÃO é o claude — exige o HANDOFF-CODEX-SEM-CAROS (até ele entrar, este campo é ignorado e o claude ainda é o fallback de falha; rode olhando o log por modelo.fallback).",
+
+  "padrao": "nenhum",
+  "auto_esgotar": true,
+
+  "provedores": {
+    "ollama":   { "tipo": "opencode", "custo_ordem": 0, "permissao": "{\"edit\":\"deny\",\"bash\":\"deny\"}" },
+    "nv-llama": { "tipo": "opencode", "custo_ordem": 1, "permissao": "{\"edit\":\"deny\",\"bash\":\"deny\"}" },
+    "nv-coder": { "tipo": "opencode", "custo_ordem": 1, "permissao": "{\"edit\":\"deny\",\"bash\":\"deny\"}" },
+    "nv-next":  { "tipo": "opencode", "custo_ordem": 1, "permissao": "{\"edit\":\"deny\",\"bash\":\"deny\"}" },
+    "orfree":   { "tipo": "opencode", "custo_ordem": 2, "permissao": "{\"edit\":\"deny\",\"bash\":\"deny\"}" }
+  },
+
+  "tiers": {
+    "simples":  "nv-llama/nvidia/meta/llama-3.3-70b-instruct",
+    "media":    "nv-llama/nvidia/meta/llama-3.3-70b-instruct",
+    "complexa": "nv-next/nvidia/qwen/qwen3-next-80b-a3b-instruct"
+  },
+
+  "pins": {
+    "planner":     "nv-next/nvidia/qwen/qwen3-next-80b-a3b-instruct",
+    "verifier":    "nv-next/nvidia/qwen/qwen3-next-80b-a3b-instruct",
+    "evaluator":   "nv-next/nvidia/qwen/qwen3-next-80b-a3b-instruct",
+    "synthesizer": "nv-next/nvidia/qwen/qwen3-next-80b-a3b-instruct"
+  },
+
+  "_rungs_opcionais": "Pra esticar a escada free, descomente abaixo no lugar dos PLACEHOLDER (rode `opencode models` p/ os ids exatos). ollama LOCAL é custo_ordem 0 = primeiro a ser tentado (de graça e privado); openrouter :free entra como rung 2. Pra adicionar, mova um id pra dentro de 'tiers' ou crie capacidades — ou simplesmente confie no failover por custo da 'cadeia' (auto_esgotar já percorre todos os provedores declarados, do mais barato pro mais caro).",
+  "_exemplos_ids": {
+    "ollama_local":   "ollama/PLACEHOLDER-ex-qwen2.5-coder:7b",
+    "openrouter_free":"orfree/openrouter/PLACEHOLDER-ex-deepseek/deepseek-chat-v3.1:free"
+  }
+}

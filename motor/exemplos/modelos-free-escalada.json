@@ -1,0 +1,33 @@
+{
+  "_comentario": "CONFIG DO RUN LIMPO DA FASE C (escalada de tier). Objetivo: exercitar de verdade o --escalar, isolando-o dos 2 confounds do run free-escalada.jsonl (2026-06-23): (1) media==simples no free-direct = 1º degrau de escalada SEM ganho de capacidade; (2) juiz Kimi tomou HTTP 429 no fan-out, auto_esgotou e degradou pro llama leniente = piso de verificação virou carimbo, 0 reprovações, escalada nunca disparou. CONSERTO AQUI: (a) ESCADA DO EXECUTOR com degraus de capacidade REAIS: simples=llama-3.3-70b (barato, DEVE falhar nas subtarefas difíceis), media=Kimi-k2.6 (forte free — o degrau de escalada que importa), complexa=Codex gpt-5.4 (topo confiável, pega o que o Kimi não resolver). (b) JUÍZO+planner+synthesizer pinados no Codex: confiável (NÃO toma 429 da NVIDIA), estrito (gera reprovação REAL), cross-model vs executores llama/kimi, e reserva o limite do Claude do Caio. Assim os únicos modelos baratos/frágeis são os EXECUTORES — que a gente QUER que falhem nas difíceis pra disparar a escalada. MÉTRICA: rodar com --escalar e --auto e medir: as 3 subtarefas que reprovavam (validacao/transformacao/gravacao) disparam executor.escalado (simples->media) e CONVERGEM ao subir pro Kimi (e pro Codex se o Kimi não bastar)? aprovados sobem? CAVEAT conhecido (documentado): quando um nó escala pra media=Kimi e o juiz é Codex, independência cross-model preservada; mas se escalar até complexa=Codex, executor e juiz caem no mesmo provedor (codex) e a independência se perde NAQUELA tentativa (o pin do verifier vence o guard). Aceitável pra ESTE teste (medimos escalada+convergência, não independência). Exige NVIDIA_API_KEY + Install Certificates.command + Codex logado (assinatura ChatGPT). Se 'gpt-5.4' não for o id exato, trocar pelo que aparece no banner do codex.",
+
+  "padrao": "nenhum",
+  "auto_esgotar": true,
+
+  "provedores": {
+    "nv-llama": {
+      "base_url": "https://integrate.api.nvidia.com/v1",
+      "api_key_env": "NVIDIA_API_KEY",
+      "custo_ordem": 1
+    },
+    "nv-kimi": {
+      "base_url": "https://integrate.api.nvidia.com/v1",
+      "api_key_env": "NVIDIA_API_KEY",
+      "custo_ordem": 2
+    },
+    "codex": { "tipo": "codex", "custo_ordem": 3 }
+  },
+
+  "tiers": {
+    "simples":  "nv-llama/meta/llama-3.3-70b-instruct",
+    "media":    "nv-kimi/moonshotai/kimi-k2.6",
+    "complexa": "codex/gpt-5.4"
+  },
+
+  "pins": {
+    "planner":     "nv-kimi/moonshotai/kimi-k2.6",
+    "verifier":    "codex/gpt-5.4",
+    "evaluator":   "codex/gpt-5.4",
+    "synthesizer": "codex/gpt-5.4"
+  }
+}

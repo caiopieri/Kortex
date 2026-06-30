@@ -1,0 +1,27 @@
+{"t": 0.025, "evento": "spec.recebida", "missao": "curador-single-logisti", "subagentes": 1}
+{"t": 0.026, "evento": "gate.auto", "portao": "plano", "decisao": "prosseguir"}
+{"t": 0.026, "evento": "paralelo.iniciado", "subagentes": ["especificador"]}
+{"t": 0.027, "evento": "executor.chamado", "executor": "especificador", "papel": "especificador", "tier": "media", "tentativa": 1, "modelo": "nv-kimi/moonshotai/kimi-k2.6"}
+{"t": 0.027, "evento": "modelo.roteado_tier", "papel": "especificador", "tier": "media"}
+{"t": 59.938, "evento": "executor.respondeu", "executor": "especificador", "tentativa": 1}
+{"t": 59.939, "evento": "modelo.pin", "papel": "verifier", "tier": null}
+{"t": 68.057, "evento": "portao.reprovado", "portao": "verifier:especificador", "ciclo": 1, "motivo": "Falhou nos critérios da rubrica: não inclui categorias de custo de forma identificável, não inclui veículo de forma identificável e não inclui consulta por período de forma identificável. A saída está desconexa e não define explicitamente esses três itens mínimos."}
+{"t": 68.058, "evento": "paralelo.concluido", "commitados": 1}
+{"t": 68.059, "evento": "executor.chamado", "executor": "global_evaluator", "modelo": "codex/gpt-5.4"}
+{"t": 68.059, "evento": "modelo.pin", "papel": "evaluator", "tier": null}
+{"t": 76.315, "evento": "portao.reprovado", "portao": "cobertura", "lacunas": ["MVP de custos por caminhão no Logisti não foi definido de forma explícita e utilizável.", "subagente reprovado: especificador"]}
+{"t": 76.316, "evento": "gate.auto", "portao": "cobertura", "decisao": "preencher"}
+{"t": 76.316, "evento": "reconciliacao.iniciada", "nos": ["especificador"]}
+{"t": 76.316, "evento": "executor.chamado", "executor": "especificador", "papel": "especificador", "tier": "media", "tentativa": 1, "modelo": "nv-kimi/moonshotai/kimi-k2.6"}
+{"t": 76.316, "evento": "modelo.roteado_tier", "papel": "especificador", "tier": "media"}
+{"t": 85.681, "evento": "executor.respondeu", "executor": "especificador", "tentativa": 1}
+{"t": 85.681, "evento": "modelo.pin", "papel": "verifier", "tier": null}
+{"t": 95.676, "evento": "portao.aprovado", "portao": "verifier:especificador", "ciclo": 1}
+{"t": 95.676, "evento": "lacuna.preenchida", "subagente": "especificador"}
+{"t": 95.676, "evento": "reconciliacao.concluida", "nos": ["especificador"]}
+{"t": 95.676, "evento": "executor.chamado", "executor": "global_evaluator", "modelo": "codex/gpt-5.4"}
+{"t": 95.676, "evento": "modelo.pin", "papel": "evaluator", "tier": null}
+{"t": 109.802, "evento": "portao.aprovado", "portao": "cobertura"}
+{"t": 109.805, "evento": "executor.chamado", "executor": "synthesizer", "modelo": "codex/gpt-5.4"}
+{"t": 109.805, "evento": "modelo.pin", "papel": "synthesizer", "tier": null}
+{"t": 129.848, "evento": "tarefa.concluida", "missao": "curador-single-logisti"}

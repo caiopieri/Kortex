@@ -1,0 +1,16 @@
+{
+  "provedores": {
+    "nvidia": {
+      "base_url": "https://integrate.api.nvidia.com/v1",
+      "api_key_env": "NVIDIA_API_KEY"
+    },
+    "openrouter": {
+      "base_url": "https://openrouter.ai/api/v1",
+      "api_key_env": "OPENROUTER_API_KEY"
+    }
+  },
+  "papeis": {
+    "redator": "nvidia/deepseek-ai/deepseek-v4",
+    "synthesizer": "nvidia/moonshotai/kimi-k2.6"
+  }
+}

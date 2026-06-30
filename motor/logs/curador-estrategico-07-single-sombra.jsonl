@@ -1,0 +1,29 @@
+{"t": 0.025, "evento": "spec.recebida", "missao": "curador-single-sombra", "subagentes": 1}
+{"t": 0.026, "evento": "gate.auto", "portao": "plano", "decisao": "prosseguir"}
+{"t": 0.026, "evento": "paralelo.iniciado", "subagentes": ["especificador"]}
+{"t": 0.027, "evento": "executor.chamado", "executor": "especificador", "papel": "especificador", "tier": "media", "tentativa": 1, "modelo": "ollama-3b/qwen2.5:3b-instruct"}
+{"t": 0.027, "evento": "modelo.roteado_tier", "papel": "especificador", "tier": "media"}
+{"t": 25.649, "evento": "executor.respondeu", "executor": "especificador", "tentativa": 1}
+{"t": 25.65, "evento": "modelo.pin", "papel": "verifier", "tier": null}
+{"t": 32.224, "evento": "portao.reprovado", "portao": "verifier:especificador", "ciclo": 1, "motivo": "Não inclui eventos"}
+{"t": 32.225, "evento": "paralelo.concluido", "commitados": 1}
+{"t": 32.225, "evento": "executor.chamado", "executor": "global_evaluator", "modelo": "ollama-3b/qwen2.5:3b-instruct"}
+{"t": 32.225, "evento": "modelo.pin", "papel": "evaluator", "tier": null}
+{"t": 40.461, "evento": "portao.reprovado", "portao": "cobertura", "lacunas": ["Contrato de sombra definido", "subagente reprovado: especificador"]}
+{"t": 40.461, "evento": "gate.auto", "portao": "cobertura", "decisao": "preencher"}
+{"t": 40.461, "evento": "reconciliacao.iniciada", "nos": ["especificador"]}
+{"t": 40.461, "evento": "executor.chamado", "executor": "especificador", "papel": "especificador", "tier": "media", "tentativa": 1, "modelo": "ollama-3b/qwen2.5:3b-instruct"}
+{"t": 40.461, "evento": "modelo.roteado_tier", "papel": "especificador", "tier": "media"}
+{"t": 69.766, "evento": "executor.respondeu", "executor": "especificador", "tentativa": 1}
+{"t": 69.766, "evento": "modelo.pin", "papel": "verifier", "tier": null}
+{"t": 76.277, "evento": "portao.aprovado", "portao": "verifier:especificador", "ciclo": 1}
+{"t": 76.277, "evento": "lacuna.preenchida", "subagente": "especificador"}
+{"t": 76.277, "evento": "reconciliacao.concluida", "nos": ["especificador"]}
+{"t": 76.277, "evento": "executor.chamado", "executor": "global_evaluator", "modelo": "ollama-3b/qwen2.5:3b-instruct"}
+{"t": 76.277, "evento": "modelo.pin", "papel": "evaluator", "tier": null}
+{"t": 89.693, "evento": "portao.reprovado", "portao": "cobertura", "lacunas": ["A testagem em modo sombra tem duas amostras incluídas (S001 e S002) mas apenas um evento de teste (CriarConfiguracaoSombreado) é especificado. Faltaria especificar o evento que representa a execução do teste para ambas as amostras."]}
+{"t": 89.693, "evento": "reconciliacao.esgotada", "rodadas": 1}
+{"t": 89.693, "evento": "gate.auto", "portao": "cobertura", "decisao": "prosseguir"}
+{"t": 89.694, "evento": "executor.chamado", "executor": "synthesizer", "modelo": "ollama-3b/qwen2.5:3b-instruct"}
+{"t": 89.694, "evento": "modelo.pin", "papel": "synthesizer", "tier": null}
+{"t": 110.516, "evento": "tarefa.concluida", "missao": "curador-single-sombra"}

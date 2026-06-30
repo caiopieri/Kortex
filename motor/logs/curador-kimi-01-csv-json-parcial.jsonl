@@ -1,0 +1,73 @@
+{"t": 0.021, "evento": "executor.chamado", "executor": "planner", "tentativa": 1, "modelo": "nv-kimi/moonshotai/kimi-k2.6"}
+{"t": 0.025, "evento": "modelo.pin", "papel": "planner", "tier": null}
+{"t": 209.458, "evento": "executor.erro", "executor": "planner", "motivo": "spec inválida ou sem JSON", "tentativa": 1}
+{"t": 209.458, "evento": "executor.chamado", "executor": "planner", "tentativa": 2, "modelo": "nv-kimi/moonshotai/kimi-k2.6"}
+{"t": 209.462, "evento": "modelo.pin", "papel": "planner", "tier": null}
+{"t": 288.712, "evento": "spec.criada", "missao": "csv-json-cli-spec", "subagentes": 3}
+{"t": 288.713, "evento": "gate.auto", "portao": "plano", "decisao": "prosseguir"}
+{"t": 288.714, "evento": "grafo_dep.iniciado", "subagentes": ["especificador", "arquiteto", "validador"]}
+{"t": 288.714, "evento": "onda.iniciada", "ids": ["especificador"]}
+{"t": 288.714, "evento": "executor.chamado", "executor": "especificador", "papel": "redator", "tier": "media", "tentativa": 1, "modelo": "nv-kimi/moonshotai/kimi-k2.6"}
+{"t": 288.714, "evento": "modelo.roteado_tier", "papel": "redator", "tier": "media"}
+{"t": 314.182, "evento": "executor.respondeu", "executor": "especificador", "tentativa": 1}
+{"t": 314.182, "evento": "modelo.pin", "papel": "verifier", "tier": null}
+{"t": 326.105, "evento": "portao.reprovado", "portao": "verifier:especificador", "ciclo": 1, "motivo": "Falhou no critério de erros: a saída mostrada não especifica 3 ou mais tipos de erro completos com mensagem exemplo e ação sugerida. No trecho fornecido, apenas `E001` está completo; `E002` aparece truncado e não há 3 erros verificáveis."}
+{"t": 326.105, "evento": "executor.escalado", "executor": "especificador", "de": "media", "para": "complexa", "tentativa": 1}
+{"t": 326.106, "evento": "executor.chamado", "executor": "especificador", "papel": "redator", "tier": "complexa", "tentativa": 2, "modelo": "codex/gpt-5.4"}
+{"t": 326.106, "evento": "modelo.roteado_tier", "papel": "redator", "tier": "complexa"}
+{"t": 382.675, "evento": "executor.respondeu", "executor": "especificador", "tentativa": 2}
+{"t": 382.675, "evento": "modelo.pin", "papel": "verifier", "tier": null}
+{"t": 392.275, "evento": "portao.aprovado", "portao": "verifier:especificador", "ciclo": 2}
+{"t": 392.276, "evento": "onda.concluida", "ids": ["especificador"]}
+{"t": 392.276, "evento": "onda.iniciada", "ids": ["arquiteto"]}
+{"t": 392.276, "evento": "executor.chamado", "executor": "arquiteto", "papel": "pesquisador", "tier": "complexa", "tentativa": 1, "modelo": "codex/gpt-5.4"}
+{"t": 392.276, "evento": "modelo.roteado_tier", "papel": "pesquisador", "tier": "complexa"}
+{"t": 529.54, "evento": "executor.respondeu", "executor": "arquiteto", "tentativa": 1}
+{"t": 529.54, "evento": "modelo.pin", "papel": "verifier", "tier": null}
+{"t": 548.485, "evento": "portao.reprovado", "portao": "verifier:arquiteto", "ciclo": 1, "motivo": "Falhou no critério 'Especifica tratamento para: cabeçalho duplicado, campo vazio, encoding inválido, linha malformada'. O texto especifica cabeçalho duplicado, encoding inválido e linha malformada, mas não define de forma explícita o tratamento para campo vazio em dados do CSV; ele só cobre campo vazio no cabeçalho. Falta dizer claramente se campo vazio em linha de dados é aceito como string vazia, normalizado para null, ou tratado como erro."}
+{"t": 548.485, "evento": "executor.chamado", "executor": "arquiteto", "papel": "pesquisador", "tier": "complexa", "tentativa": 2, "modelo": "codex/gpt-5.4"}
+{"t": 548.485, "evento": "modelo.roteado_tier", "papel": "pesquisador", "tier": "complexa"}
+{"t": 593.395, "evento": "executor.respondeu", "executor": "arquiteto", "tentativa": 2}
+{"t": 593.395, "evento": "modelo.pin", "papel": "verifier", "tier": null}
+{"t": 604.65, "evento": "portao.aprovado", "portao": "verifier:arquiteto", "ciclo": 2}
+{"t": 604.65, "evento": "onda.concluida", "ids": ["arquiteto"]}
+{"t": 604.65, "evento": "onda.iniciada", "ids": ["validador"]}
+{"t": 604.65, "evento": "executor.chamado", "executor": "validador", "papel": "pesquisador", "tier": "simples", "tentativa": 1, "modelo": "nv-llama/meta/llama-3.3-70b-instruct"}
+{"t": 604.65, "evento": "modelo.roteado_tier", "papel": "pesquisador", "tier": "simples"}
+{"t": 637.889, "evento": "executor.respondeu", "executor": "validador", "tentativa": 1}
+{"t": 637.889, "evento": "modelo.pin", "papel": "verifier", "tier": null}
+{"t": 651.56, "evento": "portao.reprovado", "portao": "verifier:validador", "ciclo": 1, "motivo": "Falhou em 3 critérios da rubrica: (1) em 'Pontos de Ambiguidade Restante' há 2 ambiguidades, mas não há sugestão de precisão para nenhuma delas; (2) a 'Avaliação da Especificação' não responde de forma explícita se a especificação permite implementação direta sem decisões de design implícitas; (3) a ordem em 3 fases foi proposta, mas sem justificativa de risco clara para a sequência escolhida."}
+{"t": 651.56, "evento": "executor.escalado", "executor": "validador", "de": "simples", "para": "media", "tentativa": 1}
+{"t": 651.56, "evento": "executor.chamado", "executor": "validador", "papel": "pesquisador", "tier": "media", "tentativa": 2, "modelo": "nv-kimi/moonshotai/kimi-k2.6"}
+{"t": 651.56, "evento": "modelo.roteado_tier", "papel": "pesquisador", "tier": "media"}
+{"t": 697.59, "evento": "executor.respondeu", "executor": "validador", "tentativa": 2}
+{"t": 697.591, "evento": "modelo.pin", "papel": "verifier", "tier": null}
+{"t": 709.787, "evento": "portao.aprovado", "portao": "verifier:validador", "ciclo": 2}
+{"t": 709.787, "evento": "onda.concluida", "ids": ["validador"]}
+{"t": 709.789, "evento": "paralelo.concluido", "commitados": 3}
+{"t": 709.789, "evento": "executor.chamado", "executor": "global_evaluator", "modelo": "codex/gpt-5.4"}
+{"t": 709.79, "evento": "modelo.pin", "papel": "evaluator", "tier": null}
+{"t": 742.629, "evento": "portao.reprovado", "portao": "cobertura", "lacunas": ["Contrato CLI/comportamental ainda não está não ambíguo: a especificação mistura caminho eager para arquivos pequenos com streaming ativado por `--chunk-size`, enquanto a arquitetura define pipeline único em streaming e `--chunk-size` apenas como buffer de escrita; `auto`/`memory-mapped` também não têm regra normativa única de seleção e elegibilidade por encoding/seekability.", "Mensagens de erro ainda não fixam qual referência de linha deve ser exibida ao usuário (`linha lógica` do registro vs `linha física` do parser), o que deixa o diagnóstico inconsistente em CSVs com campos quoted contendo newline."]}
+{"t": 742.629, "evento": "gate.auto", "portao": "cobertura", "decisao": "preencher"}
+{"t": 742.629, "evento": "reconciliacao.iniciada", "nos": ["arquiteto", "especificador", "validador"]}
+{"t": 742.629, "evento": "executor.chamado", "executor": "especificador", "papel": "redator", "tier": "media", "tentativa": 1, "modelo": "nv-kimi/moonshotai/kimi-k2.6"}
+{"t": 742.629, "evento": "modelo.roteado_tier", "papel": "redator", "tier": "media"}
+{"t": 816.527, "evento": "executor.respondeu", "executor": "especificador", "tentativa": 1}
+{"t": 816.527, "evento": "modelo.pin", "papel": "verifier", "tier": null}
+{"t": 831.851, "evento": "portao.aprovado", "portao": "verifier:especificador", "ciclo": 1}
+{"t": 831.851, "evento": "lacuna.preenchida", "subagente": "especificador"}
+{"t": 831.851, "evento": "executor.chamado", "executor": "arquiteto", "papel": "pesquisador", "tier": "complexa", "tentativa": 1, "modelo": "codex/gpt-5.4"}
+{"t": 831.852, "evento": "modelo.roteado_tier", "papel": "pesquisador", "tier": "complexa"}
+{"t": 891.118, "evento": "executor.respondeu", "executor": "arquiteto", "tentativa": 1}
+{"t": 891.118, "evento": "modelo.pin", "papel": "verifier", "tier": null}
+{"t": 903.624, "evento": "portao.aprovado", "portao": "verifier:arquiteto", "ciclo": 1}
+{"t": 903.624, "evento": "lacuna.preenchida", "subagente": "arquiteto"}
+{"t": 903.624, "evento": "executor.chamado", "executor": "validador", "papel": "pesquisador", "tier": "simples", "tentativa": 1, "modelo": "nv-llama/meta/llama-3.3-70b-instruct"}
+{"t": 903.625, "evento": "modelo.roteado_tier", "papel": "pesquisador", "tier": "simples"}
+{"t": 1107.505, "evento": "executor.respondeu", "executor": "validador", "tentativa": 1}
+{"t": 1107.505, "evento": "modelo.pin", "papel": "verifier", "tier": null}
+{"t": 1122.719, "evento": "portao.aprovado", "portao": "verifier:validador", "ciclo": 1}
+{"t": 1122.719, "evento": "lacuna.preenchida", "subagente": "validador"}
+{"t": 1122.719, "evento": "reconciliacao.concluida", "nos": ["especificador", "arquiteto", "validador"]}
+{"t": 1122.719, "evento": "executor.chamado", "executor": "global_evaluator", "modelo": "codex/gpt-5.4"}
+{"t": 1122.72, "evento": "modelo.pin", "papel": "evaluator", "tier": null}

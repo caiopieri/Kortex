@@ -1,0 +1,747 @@
+"""Grafo fixo que interpreta uma WorkflowSpec dinâmica — padrão fan_out_sintese.
+
+Topologia (espelha a referência dynamic-workflow-harness, ver memória do projeto):
+
+    START → planner → revisar_plano → [fan-out: subagente × N] → avaliar → sintetizar → END
+                          (attempt → verifier → commit, retry ≤ max_tentativas)
+                                              (cobertura reprovada → interrupt() ao fundador)
+
+Regras de fronteira (anti-lock-in):
+- nós são funções puras que só falam com `cliente.chamar(papel, prompt)`;
+- estado serializável; a spec é dado, não código;
+- todo passo emite evento JSONL próprio (painel/auditoria), além do checkpointer.
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import shlex
+import shutil
+import subprocess
+from datetime import datetime
+from pathlib import Path
+from typing import Annotated, Any, TypedDict
+from uuid import uuid4
+
+from langgraph.graph import END, START, StateGraph
+from langgraph.types import Send, interrupt
+
+from .eventos import LogEventos
+from .modelos import ClienteModelo, extrai_json
+from .politica import PoliticaGates
+from .spec import WorkflowSpec
+
+
+def mesclar_resultados(a: list[dict[str, Any]], b: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Mescla commits de subagentes por id; commits mais novos substituem antigos."""
+    por_id = {r["id"]: r for r in a}
+    for resultado in b:
+        por_id[resultado["id"]] = resultado
+    return list(por_id.values())
+
+
+class EstadoMotor(TypedDict, total=False):
+    missao_texto: str
+    spec: dict[str, Any]
+    run_id: str
+    resultados: Annotated[list[dict[str, Any]], mesclar_resultados]
+    avaliacao: dict[str, Any]
+    resposta_final: str
+
+
+GABARITO_ROTA_DEFAULT = (
+    "entre 2 e {max_sub} subagentes focados e INDEPENDENTES (depende_de sempre []);"
+)
+ROTA_DEFAULT = {
+    "padrao": "fan_out_sintese",
+    "gabarito": GABARITO_ROTA_DEFAULT,
+}
+
+PROMPT_SELETOR_ROTA = """Escolha a rota de decomposição para a missão abaixo.
+Missão:
+\"\"\"{missao}\"\"\"
+
+Rotas disponíveis (nome e quando usar):
+{catalogo}
+
+Escolha a rota cujo campo "quando" melhor descreve a missão. Se nenhuma servir claramente,
+responda "pesquisa-sintese". Responda APENAS um JSON: {{"rota": "<nome>"}}"""
+
+PROMPT_PLANNER = """Você é o planner da meta-fábrica. Missão do usuário:
+\"\"\"{missao}\"\"\"
+
+Produza uma WorkflowSpec versão 0.1 em JSON (responda APENAS o JSON), conforme o schema:
+{schema}
+
+Regras: {gabarito}
+cada subagente com rubrica objetiva e verificável; criterios_cobertura checáveis contra a missão;
+padrao = "{padrao}".
+Subagentes podem ser executados por modelos de capacidade limitada: escreva cada objetivo sem
+ambiguidade nem decisão de design implícita, e rubricas que checam a PRESENÇA de conteúdo
+verificável (um tópico abordado, um número, um exemplo, um caso) — nunca critérios que dependem de
+bom gosto. Cada rubrica deve ter NO MÁXIMO 5 critérios, e cada critério julga a SUBSTÂNCIA pelo
+SIGNIFICADO, não por caracteres exatos: descreva o que a saída deve CONTER ("aborda tratamento de
+erros", "lista pelo menos 2 casos de teste"), e NUNCA exija título de seção exato, nível de heading,
+formato de ID, prefixo de linha ou estilo de lista (marcador vs numerado) — formatação cosmética não
+é critério. NÃO exija versão exata de biblioteca, nomes internos de parâmetros de API, valores-padrão
+de funções de terceiros, nem conhecimento factual profundo que um executor de capacidade limitada não
+garante: a rubrica é o CONTRATO MÍNIMO do objetivo, não uma prova de erudição nem de formatação.
+Para cada subagente, classifique o campo "tier" pela complexidade da tarefa (roteamento por custo):
+"simples" (extração/formatação/lookup direto), "media" (pesquisa ou redação com algum raciocínio),
+"complexa" (design, trade-offs, modelagem ou síntese que exige um modelo forte).
+Para cada subagente, preencha também "capacidades_requeridas": a LISTA de capacidades que a tarefa exige, escolhidas SOMENTE deste vocabulário fixo (use exatamente estas palavras): codigo (escrever/editar/revisar código ou script), redacao (texto natural: relatório, doc, spec, descrição), calculo (quantitativo determinístico: custos, tolerâncias, dimensionamento), pesquisa (levantar info externa: busca, sourcing, lookup), raciocinio-longo (planejamento, trade-offs, design ou síntese multi-passo). Liste só o que a tarefa REALMENTE exige (em geral 1–2 tags). Estas tags valem para qualquer domínio (software, hardware, manufatura): a produção física é de outros executores; aqui você classifica só o trabalho cognitivo.{erro}"""
+
+PROMPT_SUBAGENTE = """Você é o subagente '{id}' (papel: {papel}) de um workflow.
+Missão global: {missao_objetivo}
+Contexto: {missao_contexto}
+Seu objetivo: {objetivo}
+Entradas: {entradas}
+Resultado esperado: {resultado_esperado}{deps_txt}
+Sua saída será avaliada contra esta rubrica — atenda TODOS os critérios:
+{rubrica_txt}{feedback}
+
+Entregue diretamente o resultado, específico e fundamentado."""
+
+PROMPT_VERIFIER = """Você é o verificador adversarial do subagente '{id}'.
+Objetivo dele: {objetivo}
+Rubrica (TODOS os critérios precisam passar):
+{rubrica}
+
+Saída a avaliar:
+\"\"\"{saida}\"\"\"
+
+Julgue ESTRITAMENTE contra os critérios da rubrica acima: NÃO invente critérios novos nem exija nada
+além do que a rubrica lista (sem trazer conhecimento de domínio que não está na rubrica). Se TODOS os
+critérios da rubrica forem atendidos, APROVE — mesmo que você imagine melhorias possíveis. Seja cético
+quanto ao que a rubrica pede, não quanto ao que você gostaria. Responda APENAS um JSON:
+{{"aprovado": true/false, "motivo": "cite QUAL critério da rubrica falhou, específico e acionável"}}"""
+
+PROMPT_EVALUATOR = """Você é o avaliador global de cobertura de um workflow.
+Missão: {missao_objetivo}
+Critérios de cobertura (TODOS precisam estar cobertos pelos resultados):
+{criterios}
+
+Resultados commitados:
+{resultados}
+
+Em "nos_a_refazer", liste os ids (EXATAMENTE como aparecem nos resultados) dos subagentes que são a
+ORIGEM de cada lacuna/inconsistência — prefira o nó MAIS A MONTANTE responsável (ex.: se a
+especificação contradiz a arquitetura, nomeie o nó da especificação), pois refazê-lo re-deriva os que
+dependem dele. Se nada precisa refazer, use [].
+Responda APENAS um JSON: {{"aprovado": true/false, "lacunas": ["o que falta", ...], "nos_a_refazer": ["id", ...]}}"""
+
+PROMPT_SYNTHESIZER = """Você é o sintetizador final de um workflow.
+Missão: {missao_objetivo}
+Instrução de síntese: {instrucao} (formato: {formato})
+
+Resultados verificados dos subagentes:
+{resultados}
+
+Produza a resposta final da missão."""
+
+
+ORDEM_TIER = ["simples", "media", "complexa"]
+
+
+def _proximo_tier(t: str | None) -> str:
+    """Próximo degrau acima na escada de dificuldade. Teto = 'complexa'."""
+    if t in ORDEM_TIER and ORDEM_TIER.index(t) < len(ORDEM_TIER) - 1:
+        return ORDEM_TIER[ORDEM_TIER.index(t) + 1]
+    return "complexa"
+
+
+def montar_prompt_planner(*, missao: str, schema: str, max_sub: int, erro: str = "",
+                           rota: dict[str, Any] | None = None) -> str:
+    rota_ativa = rota or ROTA_DEFAULT
+    gabarito = str(rota_ativa.get("gabarito") or "").replace("{max_sub}", str(max_sub))
+    return PROMPT_PLANNER.format(
+        missao=missao,
+        schema=schema,
+        gabarito=gabarito,
+        padrao=rota_ativa["padrao"],
+        erro=erro,
+    )
+
+
+def _escolher_rota(cliente: ClienteModelo, missao: str,
+                   rotas: dict[str, dict[str, Any]], log: LogEventos) -> str | None:
+    catalogo = [
+        {"nome": nome, "quando": rota.get("quando", "")}
+        for nome, rota in rotas.items()
+    ]
+    try:
+        resposta = cliente.chamar("planner", PROMPT_SELETOR_ROTA.format(
+            missao=missao,
+            catalogo=json.dumps(catalogo, ensure_ascii=False),
+        ))
+    except Exception:
+        resposta = None
+    bruto = extrai_json(resposta or "")
+    nome = str(bruto.get("rota") or "").strip() if isinstance(bruto, dict) else ""
+    fallback = nome not in rotas
+    if fallback:
+        nome = "pesquisa-sintese" if "pesquisa-sintese" in rotas else ""
+    rota_ativa = rotas.get(nome) or ROTA_DEFAULT
+    log.evento(
+        "rota.escolhida",
+        rota=nome or "pesquisa-sintese",
+        padrao=rota_ativa["padrao"],
+        fallback=fallback,
+    )
+    return nome or None
+
+
+def registrar_artefato(workspace: str | Path, nome: str, tipo: str, conteudo: str) -> dict[str, str]:
+    """Escreve conteúdo textual no workspace e devolve só a referência serializável."""
+    raiz = Path(workspace)
+    raiz.mkdir(parents=True, exist_ok=True)
+    caminho = raiz / nome
+    caminho.write_text(conteudo, encoding="utf-8")
+    digest = hashlib.sha256(conteudo.encode("utf-8")).hexdigest()
+    return {"nome": nome, "caminho": str(caminho), "tipo": tipo, "hash": digest}
+
+
+def referenciar_artefato(caminho: str | Path, nome: str, tipo: str) -> dict[str, str]:
+    caminho = Path(caminho)
+    digest = hashlib.sha256(caminho.read_bytes()).hexdigest()
+    return {"nome": nome, "caminho": str(caminho), "tipo": tipo, "hash": digest}
+
+
+def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
+                    politica: PoliticaGates | None = None,
+                    workspace_base: str | Path = "runs",
+                    ferramentas: dict[str, dict[str, Any]] | None = None,
+                    rota: dict[str, Any] | None = None,
+                    rotas: dict[str, dict[str, Any]] | None = None,
+                    escalar_em_retry: bool = False,
+                    max_rodadas_reconciliacao: int = 1):
+    """Compila o grafo. `cliente` e `log` são injetados — o grafo não conhece backends.
+    `politica` decide quais gates pausam (manual) ou resolvem sozinhos (auto-mode);
+    ausente = tudo manual (comportamento default).
+    `max_rodadas_reconciliacao` limita quantas rodadas de preenchimento de cobertura
+    podem rodar antes de seguir parcial."""
+    politica = politica or PoliticaGates()
+    workspace_base = Path(workspace_base)
+    ferramentas = ferramentas or {}
+
+    def run_id_de(state: EstadoMotor) -> str:
+        return state.get("run_id") or f"{datetime.now():%Y%m%d-%H%M%S}-{uuid4().hex[:6]}"
+
+    def workspace_de(state: EstadoMotor) -> Path:
+        return workspace_base / state["run_id"] / "artefatos"
+
+    def _descricao_modelo(papel: str, tier: str | None = None,
+                          ferramentas: str | None = None,
+                          capacidades: list[str] | None = None) -> str | None:
+        if hasattr(cliente, "descricao_de"):
+            return cliente.descricao_de(papel, tier, ferramentas, capacidades=capacidades)
+        prov = getattr(cliente, "provedor", None)
+        mapa = getattr(cliente, "mapa_papeis", None)
+        modelo = mapa.get(papel) if isinstance(mapa, dict) and papel in mapa else getattr(cliente, "modelo", None)
+        if prov and modelo:
+            return f"{prov}/{modelo}"
+        return str(prov) if prov else (str(modelo) if modelo else None)
+
+    def planner(state: EstadoMotor) -> dict:
+        run_id = run_id_de(state)
+        if state.get("spec"):  # spec fornecida pelo usuário: valida e segue (missão dirigida por dado)
+            spec = WorkflowSpec.model_validate(state["spec"])
+            log.evento("spec.recebida", missao=spec.missao.id, subagentes=len(spec.subagentes))
+            return {"spec": spec.model_dump(), "run_id": run_id}
+        rota_ativa = rota
+        if rota_ativa is None and rotas:
+            nome_rota = _escolher_rota(cliente, state["missao_texto"], rotas, log)
+            rota_ativa = rotas.get(nome_rota) or ROTA_DEFAULT
+        erro = ""
+        for tentativa in (1, 2, 3):
+            log.evento("executor.chamado", executor="planner", tentativa=tentativa,
+                       modelo=_descricao_modelo("planner"))
+            resp = cliente.chamar("planner", montar_prompt_planner(
+                missao=state["missao_texto"],
+                schema=json.dumps(WorkflowSpec.model_json_schema(), ensure_ascii=False),
+                max_sub=10, erro=erro, rota=rota_ativa))
+            bruto = extrai_json(resp or "")
+            if bruto is not None:
+                try:
+                    spec = WorkflowSpec.model_validate(bruto)
+                    log.evento("spec.criada", missao=spec.missao.id, subagentes=len(spec.subagentes))
+                    return {"spec": spec.model_dump(), "run_id": run_id}
+                except Exception as ex:  # validação pydantic reprovada → reinjeta o erro
+                    erro = f"\n\nSua tentativa anterior falhou na validação: {ex}\nCorrija e reenvie só o JSON."
+            else:  # sem JSON parseável → reinjeta instrução (senão a retentativa repete às cegas)
+                erro = ("\n\nSua resposta anterior NÃO continha um objeto JSON válido. Responda APENAS o "
+                        "objeto JSON da WorkflowSpec, sem nenhum texto antes ou depois e sem cercas de código (```).")
+            log.evento("executor.erro", executor="planner", motivo="spec inválida ou sem JSON", tentativa=tentativa)
+        raise RuntimeError("planner não produziu WorkflowSpec válida em 3 tentativas")
+
+    def plano_de(spec: dict[str, Any]) -> list[dict[str, Any]]:
+        plano = []
+        for sub in spec["subagentes"]:
+            modelo = None
+            if sub.get("tipo", "modelo") == "modelo":
+                modelo = (cliente.provedor_de(sub["papel"], sub.get("tier"), sub.get("ferramentas"),
+                                              capacidades=sub.get("capacidades_requeridas"))
+                          if hasattr(cliente, "provedor_de") else None)
+            plano.append({
+                "id": sub["id"],
+                "papel": sub.get("papel"),
+                "tier": sub.get("tier"),
+                "modelo": modelo,
+            })
+        return plano
+
+    def revisar_plano(state: EstadoMotor) -> dict:
+        spec = state["spec"]
+        plano = plano_de(spec)
+        auto = politica.decisao_auto("plano", default="prosseguir")
+        if auto is not None:
+            log.evento("gate.auto", portao="plano", decisao=auto)
+            return {}
+
+        log.evento("escalado", para="plano")
+        decisao = interrupt({
+            "portao": "plano",
+            "plano": plano,
+            "pergunta": "Revise o plano. prosseguir / editar / abortar",
+            "opcoes": "prosseguir · editar · abortar",
+        })
+
+        if isinstance(decisao, dict):
+            edicoes = dict(decisao)
+            spec_editada = {**spec, "subagentes": [dict(s) for s in spec["subagentes"]]}
+            for sub in spec_editada["subagentes"]:
+                if sub["id"] in edicoes:
+                    sub["tier"] = edicoes[sub["id"]]
+            log.evento("decisao.plano", edicoes=edicoes)
+            return {"spec": spec_editada}
+
+        decisao_txt = str(decisao).strip().lower()
+        log.evento("decisao.plano", decisao=str(decisao))
+        if decisao_txt.startswith("abort"):
+            return {"avaliacao": {"abortada": True, "motivo": "plano rejeitado"}}
+        return {}
+
+    def despachar(state: EstadoMotor):
+        spec = state["spec"]
+        log.evento("paralelo.iniciado", subagentes=[s["id"] for s in spec["subagentes"]])
+        workspace = workspace_de(state)
+        return [Send("subagente", {"sub": s, "spec": spec, "workspace": workspace}) for s in spec["subagentes"]]
+
+    def rota_pos_plano(state: EstadoMotor):
+        if state.get("avaliacao", {}).get("abortada"):
+            return END
+        if state["spec"]["padrao"] == "grafo_dependencias":
+            return "executar_grafo_dep"
+        return despachar(state)
+
+    def subagente(payload: dict) -> dict:
+        sub, spec = payload["sub"], payload["spec"]
+        missao = spec["missao"]
+        max_t = spec["restricoes"]["max_tentativas"]
+        deps = payload.get("deps", {})
+        deps_txt = ""
+        if deps:
+            deps_txt = "\nResultados das dependências:\n" + "\n".join(
+                f"- {sid}: {saida}" for sid, saida in deps.items()
+            )
+        if sub.get("tipo", "modelo") == "ferramenta":
+            return executar_ferramenta(sub, payload["workspace"])
+
+        # Guard de independência: o verifier deve evitar o provedor DO executor desta
+        # tarefa (cross-model anti-auto-aprovação). Só quando o cliente sabe rotear.
+        prov_exec = (cliente.provedor_de(sub["papel"], sub.get("tier"), sub.get("ferramentas"),
+                                         capacidades=sub.get("capacidades_requeridas"))
+                     if hasattr(cliente, "provedor_de") else None)
+        kw_verifier = {"evitar": prov_exec} if prov_exec else {}
+        tier_atual = sub.get("tier")
+        rubrica_txt = "\n".join(f"- {c}" for c in sub["rubrica"])
+        feedback, ultima = payload.get("feedback", ""), payload.get("rascunho_anterior")
+        for tentativa in range(1, max_t + 1):
+            # Revisão > regeneração: se já há um rascunho, mandamos corrigir SÓ o que o
+            # verificador apontou em vez de reescrever do zero (não joga trabalho bom fora
+            # e converge mais rápido em falhas pequenas/cosméticas).
+            if feedback and ultima:
+                bloco_feedback = (
+                    "\n\nSUA TENTATIVA ANTERIOR (o conteúdo já está bom — NÃO reescreva do zero):\n"
+                    f"\"\"\"\n{ultima}\n\"\"\"\n"
+                    f"O verificador reprovou por: \"{feedback}\". Corrija APENAS o que foi apontado "
+                    "e devolva o texto inteiro corrigido, preservando todo o resto como está."
+                )
+            elif feedback:
+                bloco_feedback = f"\nNa tentativa anterior o verificador reprovou: \"{feedback}\". Corrija."
+            else:
+                bloco_feedback = ""
+            log.evento("executor.chamado", executor=sub["id"], papel=sub["papel"],
+                       tier=tier_atual, tentativa=tentativa,
+                       modelo=_descricao_modelo(
+                           sub["papel"], tier_atual, sub.get("ferramentas"),
+                           capacidades=sub.get("capacidades_requeridas"),
+                       ))
+            ultima = cliente.chamar(sub["papel"], PROMPT_SUBAGENTE.format(
+                id=sub["id"], papel=sub["papel"],
+                missao_objetivo=missao["objetivo"], missao_contexto=missao["contexto"],
+                objetivo=sub["objetivo"], entradas=json.dumps(sub["entradas"], ensure_ascii=False),
+                resultado_esperado=sub["resultado_esperado"],
+                deps_txt=deps_txt, rubrica_txt=rubrica_txt,
+                feedback=bloco_feedback,
+            ), ferramentas=sub.get("ferramentas"), tier=tier_atual,
+                capacidades=sub.get("capacidades_requeridas"))
+            if not ultima:
+                feedback = "modelo não respondeu"
+                log.evento("executor.erro", executor=sub["id"], motivo=feedback, tentativa=tentativa)
+                continue
+            log.evento("executor.respondeu", executor=sub["id"], tentativa=tentativa)
+            veredito = extrai_json(cliente.chamar("verifier", PROMPT_VERIFIER.format(
+                id=sub["id"], objetivo=sub["objetivo"],
+                rubrica="\n".join(f"- {c}" for c in sub["rubrica"]), saida=ultima,
+            ), **kw_verifier) or "") or {"aprovado": False, "motivo": "verifier sem JSON"}
+            if veredito.get("aprovado"):
+                log.evento("portao.aprovado", portao=f"verifier:{sub['id']}", ciclo=tentativa)
+                resultado = {"id": sub["id"], "saida": ultima,
+                             "tentativas": tentativa, "aprovado": True}
+                if sub.get("produz_artefatos"):
+                    artefato = sub["produz_artefatos"][0]
+                    nome = f"{sub['id']}__{artefato['nome']}"
+                    ref = registrar_artefato(payload["workspace"], nome, artefato["tipo"], ultima)
+                    ref["nome"] = artefato["nome"]
+                    resultado["artefatos"] = [ref]
+                return {"resultados": [resultado]}
+            feedback = veredito.get("motivo", "sem motivo")
+            log.evento("portao.reprovado", portao=f"verifier:{sub['id']}", ciclo=tentativa, motivo=feedback)
+            if escalar_em_retry:
+                novo = _proximo_tier(tier_atual)
+                if novo != tier_atual:
+                    log.evento("executor.escalado", executor=sub["id"],
+                               de=tier_atual, para=novo, tentativa=tentativa)
+                tier_atual = novo
+        return {"resultados": [{"id": sub["id"], "saida": ultima or "",
+                                "tentativas": max_t, "aprovado": False, "motivo": feedback}]}
+
+    def executar_ferramenta(sub: dict[str, Any], workspace: Path) -> dict:
+        nome_ferramenta = str(sub.get("ferramenta") or "")
+        ferramenta = ferramentas.get(nome_ferramenta)
+        if ferramenta is None:
+            motivo = f"ferramenta '{nome_ferramenta}' não registrada"
+            log.evento("ferramenta.indisponivel", ferramenta=nome_ferramenta, motivo=motivo)
+            return {"resultados": [{"id": sub["id"], "saida": "", "tentativas": 1,
+                                    "aprovado": False, "motivo": motivo}]}
+
+        comando_tpl = str(ferramenta.get("comando") or "")
+        produz = ferramenta.get("produz") or []
+        if not isinstance(produz, list):
+            produz = []
+        workspace.mkdir(parents=True, exist_ok=True)
+        valores = {chave: str(valor) for chave, valor in sub.get("entradas", {}).items()}
+        saidas_por_placeholder: dict[str, dict[str, str]] = {}
+        for item in produz:
+            if not isinstance(item, dict):
+                continue
+            nome = str(item.get("nome") or "").strip()
+            tipo = str(item.get("tipo") or "").strip()
+            placeholder = str(item.get("de_placeholder") or "").strip()
+            if nome and placeholder:
+                caminho_saida = workspace / f"{sub['id']}__{nome}"
+                valores[placeholder] = str(caminho_saida)
+                saidas_por_placeholder[placeholder] = {"nome": nome, "tipo": tipo, "caminho": str(caminho_saida)}
+        try:
+            comando = comando_tpl.format_map(valores)
+        except KeyError as ex:
+            motivo = f"placeholder sem entrada: {ex.args[0]}"
+            log.evento("ferramenta.indisponivel", ferramenta=nome_ferramenta, motivo=motivo)
+            return {"resultados": [{"id": sub["id"], "saida": "", "tentativas": 1,
+                                    "aprovado": False, "motivo": motivo}]}
+
+        try:
+            partes = shlex.split(comando)
+        except ValueError as ex:
+            motivo = f"comando inválido: {ex}"
+            log.evento("ferramenta.indisponivel", ferramenta=nome_ferramenta, motivo=motivo)
+            return {"resultados": [{"id": sub["id"], "saida": "", "tentativas": 1,
+                                    "aprovado": False, "motivo": motivo}]}
+        if not partes or shutil.which(partes[0]) is None:
+            executavel = partes[0] if partes else ""
+            motivo = f"executável ausente: {executavel}"
+            log.evento("ferramenta.indisponivel", ferramenta=nome_ferramenta, motivo=motivo)
+            return {"resultados": [{"id": sub["id"], "saida": "", "tentativas": 1,
+                                    "aprovado": False, "motivo": motivo}]}
+
+        try:
+            timeout_s = int(ferramenta.get("timeout", 300))
+            proc = subprocess.run(partes, capture_output=True, text=True, timeout=timeout_s, stdin=subprocess.DEVNULL)
+            saida = "\n".join(p for p in [proc.stdout.strip(), proc.stderr.strip()] if p)
+            modo = ferramenta.get("interpreta_saida")
+            metricas = {}
+            motivo_json = ""
+            if modo == "exit_code":
+                aprovado = proc.returncode == 0
+            elif modo == "json":
+                try:
+                    dados = json.loads(proc.stdout)
+                    if not isinstance(dados, dict) or "aprovado" not in dados:
+                        raise ValueError("json sem 'aprovado'")
+                    aprovado = bool(dados["aprovado"])
+                    metricas = dados.get("metricas") or {}
+                    if not isinstance(metricas, dict):
+                        metricas = {}
+                    motivo_json = str(dados.get("motivo") or "")
+                except (json.JSONDecodeError, ValueError) as ex:
+                    aprovado = False
+                    motivo_json = f"saída inválida: {ex}"
+                    log.evento("ferramenta.saida_invalida", ferramenta=nome_ferramenta,
+                               subagente=sub["id"], motivo=motivo_json)
+            else:
+                aprovado = False
+            motivo = "" if aprovado else (motivo_json or saida or f"exit_code={proc.returncode}")
+            artefatos = []
+            if aprovado:
+                for ref in saidas_por_placeholder.values():
+                    caminho = Path(ref["caminho"])
+                    if not caminho.exists():
+                        aprovado = False
+                        motivo = f"artefato não produzido: {ref['nome']}"
+                        break
+                    artefatos.append(referenciar_artefato(caminho, ref["nome"], ref["tipo"]))
+            dados_evento = {"ferramenta": nome_ferramenta, "subagente": sub["id"], "aprovado": aprovado}
+            if metricas:
+                dados_evento["metricas"] = metricas
+            log.evento("ferramenta.executada", **dados_evento)
+            resultado = {"id": sub["id"], "saida": saida, "tentativas": 1,
+                         "aprovado": aprovado}
+            if motivo:
+                resultado["motivo"] = motivo
+            if metricas:
+                resultado["metricas"] = metricas
+            if artefatos:
+                resultado["artefatos"] = artefatos
+            return {"resultados": [resultado]}
+        except FileNotFoundError:
+            motivo = f"executável ausente: {partes[0]}"
+            log.evento("ferramenta.indisponivel", ferramenta=nome_ferramenta, motivo=motivo)
+            return {"resultados": [{"id": sub["id"], "saida": "", "tentativas": 1,
+                                    "aprovado": False, "motivo": motivo}]}
+        except subprocess.TimeoutExpired:
+            motivo = "timeout ao executar ferramenta"
+            log.evento("ferramenta.executada", ferramenta=nome_ferramenta,
+                       subagente=sub["id"], aprovado=False)
+            return {"resultados": [{"id": sub["id"], "saida": "", "tentativas": 1,
+                                    "aprovado": False, "motivo": motivo}]}
+
+    def executar_grafo_dep(state: EstadoMotor) -> dict:
+        spec = state["spec"]
+        subs = {s["id"]: s for s in spec["subagentes"]}
+        workspace = workspace_de(state)
+        concluidos: dict[str, dict[str, Any]] = {}
+        resultados: list[dict[str, Any]] = []
+        restantes = set(subs)
+        log.evento("grafo_dep.iniciado", subagentes=list(subs))
+        while restantes:
+            onda = sorted(
+                sid for sid in restantes
+                if set(subs[sid].get("depende_de", [])) <= set(concluidos)
+            )
+            if not onda:
+                log.evento("grafo_dep.travado", restantes=sorted(restantes))
+                break
+            log.evento("onda.iniciada", ids=onda)
+            for sid in onda:
+                sub = {**subs[sid], "entradas": resolver_refs_artefato(subs[sid].get("entradas", {}), concluidos)}
+                deps = {d: texto_dependencia(concluidos[d]) for d in sub.get("depende_de", [])}
+                retorno = subagente({"sub": sub, "spec": spec, "deps": deps, "workspace": workspace})
+                resultado = retorno["resultados"][0]
+                concluidos[sid] = resultado
+                resultados.append(resultado)
+                restantes.discard(sid)
+            log.evento("onda.concluida", ids=onda)
+        return {"resultados": resultados}
+
+    def texto_dependencia(resultado: dict[str, Any]) -> str:
+        texto = str(resultado.get("saida", ""))
+        if resultado.get("metricas"):
+            texto += "\nMétricas: " + json.dumps(resultado["metricas"], ensure_ascii=False)
+        return texto
+
+    def resolver_refs_artefato(valor: Any, concluidos: dict[str, dict[str, Any]]) -> Any:
+        if isinstance(valor, dict):
+            ref = valor.get("ref_artefato")
+            if isinstance(ref, dict):
+                origem = str(ref.get("de") or "")
+                nome = str(ref.get("nome") or "")
+                artefatos = concluidos.get(origem, {}).get("artefatos", [])
+                for artefato in artefatos:
+                    if artefato.get("nome") == nome:
+                        return artefato["caminho"]
+                raise RuntimeError(f"artefato '{nome}' de '{origem}' não encontrado em runtime")
+            return {chave: resolver_refs_artefato(item, concluidos) for chave, item in valor.items()}
+        if isinstance(valor, list):
+            return [resolver_refs_artefato(item, concluidos) for item in valor]
+        return valor
+
+    def avaliar_cobertura(spec: dict[str, Any], resultados: list[dict[str, Any]]) -> dict[str, Any]:
+        reprovados = [r["id"] for r in resultados if not r["aprovado"]]
+        log.evento("executor.chamado", executor="global_evaluator",
+                   modelo=_descricao_modelo("evaluator"))
+        veredito = extrai_json(cliente.chamar("evaluator", PROMPT_EVALUATOR.format(
+            missao_objetivo=spec["missao"]["objetivo"],
+            criterios="\n".join(f"- {c}" for c in spec["missao"]["criterios_cobertura"]),
+            resultados=json.dumps(resultados, ensure_ascii=False),
+        )) or "") or {"aprovado": False, "lacunas": ["evaluator sem JSON"]}
+        if reprovados:
+            veredito = {"aprovado": False,
+                        "lacunas": list(veredito.get("lacunas", [])) + [f"subagente reprovado: {i}" for i in reprovados]}
+        nomes = veredito.get("nos_a_refazer", [])
+        if not isinstance(nomes, list):
+            nomes = []
+        nos = list(dict.fromkeys([str(n) for n in nomes] + reprovados))
+        veredito = {**veredito, "nos_a_refazer": nos}
+        return veredito
+
+    def decidir_cobertura(veredito: dict[str, Any], permitir_preencher: bool) -> Any:
+        auto = politica.decisao_auto("cobertura", default="prosseguir")
+        if auto == "preencher" and not permitir_preencher:
+            auto = "prosseguir"
+        if auto is not None:  # auto-mode (ou override): resolve sozinho, sem pausar
+            log.evento("gate.auto", portao="cobertura", decisao=auto)
+            return auto
+
+        log.evento("escalado", para="fundador")
+        opcoes = "prosseguir · preencher · abortar" if permitir_preencher else "prosseguir · abortar"
+        pergunta = ("Cobertura insuficiente. Prosseguir com síntese parcial, preencher lacunas ou abortar?"
+                    if permitir_preencher else
+                    "Cobertura insuficiente. Prosseguir com síntese parcial ou abortar?")
+        decisao = interrupt({  # pausa durável: o checkpointer segura até Command(resume=...)
+            "portao": "cobertura",
+            "pergunta": pergunta,
+            "lacunas": veredito.get("lacunas", []),
+            "opcoes": opcoes,
+        })
+        log.evento("decisao.fundador", portao="cobertura", decisao=str(decisao))
+        return decisao
+
+    def preencher_lacunas(spec: dict[str, Any], resultados: list[dict[str, Any]],
+                          workspace: Path,
+                          veredito: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        por_id = {s["id"]: s for s in spec["subagentes"]}
+        alvo = [
+            sid for sid in dict.fromkeys(str(s) for s in veredito.get("nos_a_refazer", []))
+            if sid in por_id
+        ]
+        if not alvo:
+            return resultados, []
+
+        alvo_set = set(alvo)
+        closure_set = set(alvo)
+        mudou = True
+        while mudou:
+            mudou = False
+            for sid, sub in por_id.items():
+                if sid not in closure_set and any(dep in closure_set for dep in sub.get("depende_de", [])):
+                    closure_set.add(sid)
+                    mudou = True
+
+        restantes = set(closure_set)
+        concluidos = {r["id"]: r for r in resultados if r["id"] not in closure_set}
+        por_id_resultado = {r["id"]: r for r in resultados}
+        lacunas = [str(l) for l in veredito.get("lacunas", [])]
+        novos: list[dict[str, Any]] = []
+        ordem_recomputada: list[str] = []
+        log.evento("reconciliacao.iniciada", nos=sorted(closure_set))
+        while restantes:
+            onda = sorted(
+                sid for sid in restantes
+                if set(por_id[sid].get("depende_de", [])) <= set(concluidos)
+            )
+            if not onda:
+                log.evento("grafo_dep.travado", restantes=sorted(restantes))
+                break
+            for sid in onda:
+                sub = {**por_id[sid], "entradas": resolver_refs_artefato(por_id[sid].get("entradas", {}), concluidos)}
+                deps = {d: texto_dependencia(concluidos[d]) for d in sub.get("depende_de", [])}
+                feedback_lacunas = [l for l in lacunas if sid in l] or lacunas[:]
+                if sid not in alvo_set:
+                    feedback_lacunas.append("uma dependência foi revista; realinhe-se a ela")
+                feedback = "; ".join(feedback_lacunas)
+                retorno = subagente({
+                    "sub": sub,
+                    "spec": spec,
+                    "deps": deps,
+                    "feedback": feedback,
+                    "rascunho_anterior": por_id_resultado.get(sid, {}).get("saida"),
+                    "workspace": workspace,
+                })
+                resultado = retorno["resultados"][0]
+                concluidos[sid] = resultado
+                novos.append(resultado)
+                ordem_recomputada.append(sid)
+                restantes.discard(sid)
+                log.evento("lacuna.preenchida", subagente=sid)
+        log.evento("reconciliacao.concluida", nos=ordem_recomputada)
+        return mesclar_resultados(resultados, novos), novos
+
+    def finalizar_cobertura(veredito: dict[str, Any], decisao: Any) -> dict[str, Any]:
+        if str(decisao).strip().lower().startswith("abort"):
+            log.evento("tarefa.abortada", motivo="decisão do fundador")
+            return {**veredito, "abortada": True}
+        return {**veredito, "prosseguir_parcial": True}
+
+    def avaliar(state: EstadoMotor) -> dict:
+        spec, resultados = state["spec"], state["resultados"]
+        log.evento("paralelo.concluido", commitados=len(resultados))
+        veredito = avaliar_cobertura(spec, resultados)
+        acumulados: list[dict[str, Any]] = []
+        rodada = 0
+
+        while not veredito.get("aprovado"):
+            log.evento("portao.reprovado", portao="cobertura", lacunas=veredito.get("lacunas", []))
+            permitir = rodada < max_rodadas_reconciliacao
+            if not permitir:
+                log.evento("reconciliacao.esgotada", rodadas=rodada)
+            decisao = decidir_cobertura(veredito, permitir_preencher=permitir)
+            if not (permitir and str(decisao).strip().lower().startswith("preench")):
+                base = {"resultados": acumulados} if acumulados else {}
+                return {**base, "avaliacao": finalizar_cobertura(veredito, decisao)}
+
+            resultados, novos = preencher_lacunas(spec, resultados, workspace_de(state), veredito)
+            if not novos:
+                decisao = decidir_cobertura(veredito, permitir_preencher=False)
+                base = {"resultados": acumulados} if acumulados else {}
+                return {**base, "avaliacao": finalizar_cobertura(veredito, decisao)}
+
+            acumulados = mesclar_resultados(acumulados, novos)
+            rodada += 1
+            veredito = avaliar_cobertura(spec, resultados)
+
+        log.evento("portao.aprovado", portao="cobertura")
+        if acumulados:
+            return {"resultados": acumulados, "avaliacao": veredito}
+        return {"avaliacao": veredito}
+
+    def rota_pos_avaliacao(state: EstadoMotor):
+        return END if state["avaliacao"].get("abortada") else "sintetizar"
+
+    def sintetizar(state: EstadoMotor) -> dict:
+        spec = state["spec"]
+        log.evento("executor.chamado", executor="synthesizer",
+                   modelo=_descricao_modelo("synthesizer"))
+        resposta = cliente.chamar("synthesizer", PROMPT_SYNTHESIZER.format(
+            missao_objetivo=spec["missao"]["objetivo"],
+            instrucao=spec["sintese"]["instrucao"], formato=spec["sintese"]["formato"],
+            resultados=json.dumps([r for r in state["resultados"] if r["aprovado"]], ensure_ascii=False),
+        )) or "(synthesizer não respondeu)"
+        log.evento("tarefa.concluida", missao=spec["missao"]["id"])
+        return {"resposta_final": resposta}
+
+    g = StateGraph(EstadoMotor)
+    g.add_node("planner", planner)
+    g.add_node("revisar_plano", revisar_plano)
+    g.add_node("subagente", subagente)  # type: ignore[arg-type]
+    g.add_node("executar_grafo_dep", executar_grafo_dep)
+    g.add_node("avaliar", avaliar)
+    g.add_node("sintetizar", sintetizar)
+    g.add_edge(START, "planner")
+    g.add_edge("planner", "revisar_plano")
+    g.add_conditional_edges("revisar_plano", rota_pos_plano, ["subagente", "executar_grafo_dep", END])
+    g.add_edge("subagente", "avaliar")
+    g.add_edge("executar_grafo_dep", "avaliar")
+    g.add_conditional_edges("avaliar", rota_pos_avaliacao, ["sintetizar", END])
+    g.add_edge("sintetizar", END)
+    return g.compile(checkpointer=checkpointer)
