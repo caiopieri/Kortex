@@ -2,6 +2,9 @@
 .DS_Store
 .fuse_hidden*
 
+# Obsidian (config do vault — não pertence ao repo)
+.obsidian/
+
 # Python
 __pycache__/
 *.pyc
