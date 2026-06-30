@@ -17,8 +17,8 @@ class LogEventos:
         self._f = open(self.path, "w" if truncar else "a", encoding="utf-8")
         self.t0 = time.time()
 
-    def evento(self, tipo: str, **dados) -> None:
-        e = {"t": round(time.time() - self.t0, 3), "evento": tipo, **dados}
+    def evento(self, tipo_evento: str, **dados) -> None:
+        e = {"t": round(time.time() - self.t0, 3), "evento": tipo_evento, **dados}
         self._f.write(json.dumps(e, ensure_ascii=False) + "\n")
         self._f.flush()
 

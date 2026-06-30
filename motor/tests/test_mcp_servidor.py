@@ -5,6 +5,7 @@ import pytest
 
 from motor.mcp_servidor import (
     DESCRICAO_DESPACHAR,
+    DESCRICAO_EVENTOS,
     DESCRICAO_RESPONDER_GATE,
     DESCRICAO_RESUMO,
     DESCRICAO_STATUS,
@@ -62,6 +63,7 @@ def test_descricoes_mcp_sao_contrato():
         assert ferramentas["metafabrica.status_missao"] == DESCRICAO_STATUS
         assert ferramentas["metafabrica.responder_gate"] == DESCRICAO_RESPONDER_GATE
         assert ferramentas["metafabrica.resumo_missao"] == DESCRICAO_RESUMO
+        assert ferramentas["metafabrica.eventos"] == DESCRICAO_EVENTOS
 
     asyncio.run(cenario())
 
@@ -116,6 +118,57 @@ def test_mcp_despachar_aceita_thread_id_explicito(tmp_path):
         })
 
         assert inicio == {"job_id": "jarvis-abc", "estado": "em_execucao"}
+
+    asyncio.run(cenario())
+
+
+def test_mcp_eventos_retorna_stream_incremental(tmp_path):
+    async def cenario():
+        gerenciador = GerenciadorJobs(
+            db_path=tmp_path / "motor.db",
+            workspace_base=tmp_path / "runs",
+            cliente=ClienteStub(faz_roteador()),
+        )
+        app = criar_app(gerenciador)
+        inicio = await chamar(app, "metafabrica.despachar_missao", {
+            "objetivo": "pesquise oportunidades",
+            "thread_id": "stream",
+        })
+        await aguardar_estado(app, inicio["job_id"], "gate_pendente")
+
+        primeiro = await chamar(app, "metafabrica.eventos", {"job_id": inicio["job_id"], "desde": 0})
+        assert primeiro["schema_versao"] == 1
+        assert primeiro["proximo_offset"] == len(primeiro["eventos"])
+        assert primeiro["proximo_offset"] > 0
+        assert any(evento["evento"] == "spec.criada" for evento in primeiro["eventos"])
+
+        segundo = await chamar(app, "metafabrica.eventos", {
+            "job_id": inicio["job_id"],
+            "desde": primeiro["proximo_offset"],
+        })
+        assert segundo["eventos"] == []
+        assert segundo["proximo_offset"] == primeiro["proximo_offset"]
+
+    asyncio.run(cenario())
+
+
+def test_mcp_eventos_rejeita_job_id_com_traversal(tmp_path):
+    async def cenario():
+        app = criar_app(GerenciadorJobs(
+            db_path=tmp_path / "motor.db",
+            workspace_base=tmp_path / "runs",
+            cliente=ClienteStub(faz_roteador()),
+        ))
+
+        resposta = await chamar(app, "metafabrica.eventos", {
+            "job_id": "../segredo",
+            "desde": 0,
+        })
+
+        assert resposta == {
+            "estado": "erro",
+            "erro": {"tipo": "ValueError", "mensagem": "job_id inválido"},
+        }
 
     asyncio.run(cenario())
 

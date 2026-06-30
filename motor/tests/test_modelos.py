@@ -420,19 +420,15 @@ def test_compat_emite_modelo_uso_quando_resposta_tem_usage(monkeypatch):
 
     assert c.chamar("redator", "p") == "ok"
 
-    assert log.eventos == [
-        (
-            "modelo.uso",
-            {
-                "papel": "redator",
-                "provedor": "nvidia",
-                "modelo": "moonshotai/kimi-k2.6",
-                "prompt_tokens": 11,
-                "completion_tokens": 7,
-                "total_tokens": 18,
-            },
-        )
-    ]
+    dados_uso = {
+        "papel": "redator",
+        "provedor": "nvidia",
+        "modelo": "moonshotai/kimi-k2.6",
+        "prompt_tokens": 11,
+        "completion_tokens": 7,
+        "total_tokens": 18,
+    }
+    assert log.eventos == [("modelo.uso", dados_uso), ("custo.tick", dados_uso)]
 
 
 @t5

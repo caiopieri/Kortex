@@ -140,6 +140,8 @@ class ClienteStub:
         self.roteador = roteador
         self.sempre_none = sempre_none
         self.chamadas: list[tuple[str, str]] = []
+        self.provedor: str | None = None
+        self.modelo: str | None = None
 
     def chamar(self, papel: str, prompt: str, ferramentas: Optional[str] = None,
                tier: Optional[str] = None, timeout: int = 300,
@@ -647,8 +649,7 @@ class ClienteOpenAICompat:
                 if conteudo:
                     uso = resp.get("usage") or {}
                     if self.log is not None and uso:
-                        self.log.evento(
-                            "modelo.uso",
+                        dados_uso = dict(
                             papel=papel,
                             provedor=self.provedor,
                             modelo=self.mapa_papeis.get(papel, self.modelo),
@@ -656,6 +657,8 @@ class ClienteOpenAICompat:
                             completion_tokens=uso.get("completion_tokens"),
                             total_tokens=uso.get("total_tokens"),
                         )
+                        self.log.evento("modelo.uso", **dados_uso)
+                        self.log.evento("custo.tick", **dados_uso)
                     return conteudo
                 motivo = "conteúdo vazio"
             except Exception as ex:

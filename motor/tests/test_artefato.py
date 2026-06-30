@@ -65,12 +65,17 @@ def _rodar(tmp_path, spec: dict, saida: str = "CONTEUDO FIXO"):
         politica=PoliticaGates(overrides={"plano": "prosseguir"}),
         workspace_base=tmp_path / "runs",
     )
-    return grafo.invoke({"spec": spec}, {"configurable": {"thread_id": "artefato"}})
+    resultado = grafo.invoke({"spec": spec}, {"configurable": {"thread_id": "artefato"}})
+    eventos = [
+        json.loads(linha)
+        for linha in (tmp_path / "log.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    return resultado, eventos
 
 
 def test_modelo_produz_artefato_em_workspace_com_hash(tmp_path):
     texto = "CONTEUDO FIXO"
-    resultado = _rodar(tmp_path, _spec(_sub([{"nome": "saida.txt", "tipo": "txt"}])), texto)
+    resultado, eventos = _rodar(tmp_path, _spec(_sub([{"nome": "saida.txt", "tipo": "txt"}])), texto)
 
     ref = resultado["resultados"][0]["artefatos"][0]
     caminho = Path(ref["caminho"])
@@ -84,11 +89,19 @@ def test_modelo_produz_artefato_em_workspace_com_hash(tmp_path):
         "tipo": "txt",
         "hash": hashlib.sha256(texto.encode("utf-8")).hexdigest(),
     }
+    assert any(
+        evento["evento"] == "artefato.atualizou"
+        and evento["nome"] == "saida.txt"
+        and evento["tipo"] == "txt"
+        and evento["subagente"] == "autor"
+        and evento["caminho"] == str(caminho)
+        for evento in eventos
+    )
 
 
 def test_estado_carrega_referencia_sem_conteudo_no_artefato(tmp_path):
     texto = "CONTEUDO FIXO"
-    resultado = _rodar(tmp_path, _spec(_sub([{"nome": "saida.txt", "tipo": "txt"}])), texto)
+    resultado, _ = _rodar(tmp_path, _spec(_sub([{"nome": "saida.txt", "tipo": "txt"}])), texto)
 
     item = resultado["resultados"][0]
 
@@ -98,7 +111,7 @@ def test_estado_carrega_referencia_sem_conteudo_no_artefato(tmp_path):
 
 
 def test_sem_producao_nao_adiciona_chave_artefatos(tmp_path):
-    resultado = _rodar(tmp_path, _spec(_sub()))
+    resultado, _ = _rodar(tmp_path, _spec(_sub()))
 
     assert "artefatos" not in resultado["resultados"][0]
 

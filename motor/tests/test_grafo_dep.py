@@ -72,13 +72,17 @@ def _rodar(tmp_path, spec: dict):
         politica=PoliticaGates(overrides={"plano": "prosseguir"}),
     )
     resultado = grafo.invoke({"spec": spec}, {"configurable": {"thread_id": "grafo-dep"}})
-    return resultado, ordem, prompts
+    eventos = [
+        json.loads(linha)
+        for linha in (tmp_path / "log.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    return resultado, ordem, prompts, eventos
 
 
 def test_cadeia_executa_em_ordem_e_injeta_dependencia(tmp_path):
     spec = _spec([_sub("A"), _sub("B", ["A"]), _sub("C", ["B"]), _sub("D", ["C"])])
 
-    resultado, ordem, prompts = _rodar(tmp_path, spec)
+    resultado, ordem, prompts, _ = _rodar(tmp_path, spec)
 
     assert resultado["resposta_final"] == "FINAL"
     assert ordem == ["A", "B", "C", "D"]
@@ -88,7 +92,7 @@ def test_cadeia_executa_em_ordem_e_injeta_dependencia(tmp_path):
 def test_diamante_respeita_ordem_topologica(tmp_path):
     spec = _spec([_sub("A"), _sub("B", ["A"]), _sub("C", ["A"]), _sub("D", ["B", "C"])])
 
-    _, ordem, prompts = _rodar(tmp_path, spec)
+    _, ordem, prompts, eventos = _rodar(tmp_path, spec)
 
     assert ordem.index("A") < ordem.index("B")
     assert ordem.index("A") < ordem.index("C")
@@ -96,6 +100,8 @@ def test_diamante_respeita_ordem_topologica(tmp_path):
     assert ordem.index("D") > ordem.index("C")
     assert "- B: SAIDA B" in prompts["D"]
     assert "- C: SAIDA C" in prompts["D"]
+    arestas = [(e["de"], e["para"]) for e in eventos if e["evento"] == "aresta.fluxo"]
+    assert arestas == [("A", "B"), ("A", "C"), ("B", "D"), ("C", "D")]
 
 
 def test_ciclo_em_grafo_dependencias_rejeitado():
@@ -122,7 +128,7 @@ def test_fan_out_continua_rejeitando_depende_de():
 def test_fan_out_sem_deps_nao_injeta_secao_no_prompt(tmp_path):
     spec = _spec([_sub("A"), _sub("B")], padrao="fan_out_sintese")
 
-    _, ordem, prompts = _rodar(tmp_path, spec)
+    _, ordem, prompts, _ = _rodar(tmp_path, spec)
 
     assert set(ordem) == {"A", "B"}
     assert all("Resultados das dependências" not in prompt for prompt in prompts.values())

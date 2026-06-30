@@ -251,7 +251,8 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         rota_ativa = rota
         if rota_ativa is None and rotas:
             nome_rota = _escolher_rota(cliente, state["missao_texto"], rotas, log)
-            rota_ativa = rotas.get(nome_rota) or ROTA_DEFAULT
+            rota_ativa = rotas.get(nome_rota) if nome_rota is not None else ROTA_DEFAULT
+            rota_ativa = rota_ativa or ROTA_DEFAULT
         erro = ""
         for tentativa in (1, 2, 3):
             log.evento("executor.chamado", executor="planner", tentativa=tentativa,
@@ -404,6 +405,13 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                     nome = f"{sub['id']}__{artefato['nome']}"
                     ref = registrar_artefato(payload["workspace"], nome, artefato["tipo"], ultima)
                     ref["nome"] = artefato["nome"]
+                    log.evento(
+                        "artefato.atualizou",
+                        nome=ref["nome"],
+                        tipo=ref["tipo"],
+                        subagente=sub["id"],
+                        caminho=ref["caminho"],
+                    )
                     resultado["artefatos"] = [ref]
                 return {"resultados": [resultado]}
             feedback = veredito.get("motivo", "sem motivo")
@@ -470,7 +478,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
             proc = subprocess.run(partes, capture_output=True, text=True, timeout=timeout_s, stdin=subprocess.DEVNULL)
             saida = "\n".join(p for p in [proc.stdout.strip(), proc.stderr.strip()] if p)
             modo = ferramenta.get("interpreta_saida")
-            metricas = {}
+            metricas: dict[str, Any] = {}
             motivo_json = ""
             if modo == "exit_code":
                 aprovado = proc.returncode == 0
@@ -500,7 +508,15 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                         aprovado = False
                         motivo = f"artefato não produzido: {ref['nome']}"
                         break
-                    artefatos.append(referenciar_artefato(caminho, ref["nome"], ref["tipo"]))
+                    artefato = referenciar_artefato(caminho, ref["nome"], ref["tipo"])
+                    artefatos.append(artefato)
+                    log.evento(
+                        "artefato.atualizou",
+                        nome=artefato["nome"],
+                        tipo=artefato["tipo"],
+                        subagente=sub["id"],
+                        caminho=artefato["caminho"],
+                    )
             dados_evento = {"ferramenta": nome_ferramenta, "subagente": sub["id"], "aprovado": aprovado}
             if metricas:
                 dados_evento["metricas"] = metricas
@@ -545,6 +561,8 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
             log.evento("onda.iniciada", ids=onda)
             for sid in onda:
                 sub = {**subs[sid], "entradas": resolver_refs_artefato(subs[sid].get("entradas", {}), concluidos)}
+                for dep in sub.get("depende_de", []):
+                    log.evento("aresta.fluxo", de=dep, para=sid)
                 deps = {d: texto_dependencia(concluidos[d]) for d in sub.get("depende_de", [])}
                 retorno = subagente({"sub": sub, "spec": spec, "deps": deps, "workspace": workspace})
                 resultado = retorno["resultados"][0]

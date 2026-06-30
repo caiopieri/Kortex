@@ -35,6 +35,9 @@ DESCRICAO_RESUMO = """Resumo compacto de uma missão para acompanhamento convers
   marcos, gate pendente e referências de artefato — sem despejar logs ou conteúdo.
   Use para responder 'como está a missão X'."""
 
+DESCRICAO_EVENTOS = """Stream incremental read-only dos eventos JSONL de uma missão. Use `desde=0`
+  na primeira chamada e depois `desde=proximo_offset` para polling sem repetir eventos."""
+
 
 def _gerenciador_de_env() -> GerenciadorJobs:
     modelos = os.environ.get("MOTOR_MODELOS")
@@ -86,6 +89,13 @@ def criar_app(gerenciador: GerenciadorJobs | None = None) -> FastMCP:
     def resumo_missao(job_id: str) -> dict:
         try:
             return jobs.resumo(job_id)
+        except Exception as ex:
+            return {"estado": "erro", "erro": {"tipo": type(ex).__name__, "mensagem": str(ex)}}
+
+    @app.tool(name="metafabrica.eventos", description=DESCRICAO_EVENTOS)
+    def eventos(job_id: str, desde: int = 0) -> dict:
+        try:
+            return jobs.eventos(job_id, desde=desde)
         except Exception as ex:
             return {"estado": "erro", "erro": {"tipo": type(ex).__name__, "mensagem": str(ex)}}
 

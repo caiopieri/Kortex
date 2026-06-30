@@ -123,6 +123,9 @@ def main() -> int:
             print(f"erro: {ex}")
             return 2
     if nome_rota is not None:
+        if rotas is None:
+            print("erro: --rota exige --registro.")
+            return 2
         rota = rotas.get(nome_rota)
         if rota is None:
             print(f"erro: rota {nome_rota!r} não encontrada no Registry.")

@@ -17,10 +17,19 @@ from langgraph.types import Command
 
 from .__main__ import construir_cliente
 from .eventos import LogEventos
+from .eventos_schema import SCHEMA_VERSAO
 from .grafo import construir_grafo
 from .modelos import ClienteModelo
 from .politica import PoliticaGates
 from .registro import ferramentas_de_registro, rotas_de_registro
+
+
+PADRAO_JOB_ID = re.compile(r"^[A-Za-z0-9._-]+$")
+
+
+def _validar_job_id(job_id: str) -> None:
+    if not PADRAO_JOB_ID.fullmatch(job_id):
+        raise ValueError("job_id inválido")
 
 
 class GerenciadorJobs:
@@ -58,9 +67,12 @@ class GerenciadorJobs:
             raise ValueError("exige missao_texto XOR spec")
         if not thread_id:
             raise ValueError("thread_id é obrigatório")
+        _validar_job_id(thread_id)
 
         cliente = self._obter_cliente()
-        entrada = {"missao_texto": missao_texto} if missao_texto is not None else {"spec": spec}
+        entrada: dict[str, Any] = (
+            {"missao_texto": missao_texto} if missao_texto is not None else {"spec": spec}
+        )
         entrada["run_id"] = thread_id
         with self._lock:
             self._jobs[thread_id] = {"estado": "em_execucao"}
@@ -69,6 +81,7 @@ class GerenciadorJobs:
 
     def status(self, job_id: str) -> dict:
         """Estado atual sem bloquear."""
+        _validar_job_id(job_id)
         with self._lock:
             registro = self._jobs.get(job_id)
             if registro and registro.get("estado") != "em_execucao":
@@ -79,6 +92,7 @@ class GerenciadorJobs:
 
     def responder_gate(self, job_id: str, decisao) -> dict:
         """Retoma um job pausado com a decisão humana fornecida pelo chamador."""
+        _validar_job_id(job_id)
         atual = self.status(job_id)
         if atual.get("estado") != "gate_pendente":
             return {
@@ -97,6 +111,7 @@ class GerenciadorJobs:
 
     def resumo(self, job_id: str) -> dict:
         """Digest compacto, derivado de state + log.jsonl. Nunca devolve log cru."""
+        _validar_job_id(job_id)
         status = self.status(job_id)
         eventos = self._eventos_do_job(job_id)
         digest = {
@@ -114,6 +129,17 @@ class GerenciadorJobs:
             erro = status.get("erro", {})
             digest["marcos"] = [*digest["marcos"], f"erro: {erro.get('tipo', 'Erro')}"]
         return digest
+
+    def eventos(self, job_id: str, desde: int = 0) -> dict:
+        """Stream incremental read-only do log JSONL de um job."""
+        _validar_job_id(job_id)
+        eventos = self._eventos_do_job(job_id)
+        offset = max(0, int(desde))
+        return {
+            "eventos": eventos[offset:],
+            "proximo_offset": len(eventos),
+            "schema_versao": SCHEMA_VERSAO,
+        }
 
     def _obter_cliente(self) -> ClienteModelo:
         if self._cliente is not None:
