@@ -1,0 +1,225 @@
+{
+  "main": {
+    "id": "de1973745ae9cd92",
+    "type": "split",
+    "children": [
+      {
+        "id": "221c5099de14465d",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "6087e4c797a5bb2c",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "dev-harness/piloto-logisti-kit/telemetria.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "telemetria"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "d23912d60951a500",
+    "type": "split",
+    "children": [
+      {
+        "id": "d01e01a1ec40b115",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "240c3fb6f5c41bd9",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Explorador de arquivos"
+            }
+          },
+          {
+            "id": "edf73e547d51020d",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Procurar"
+            }
+          },
+          {
+            "id": "70969dde9c0ac572",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Marcadores"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "52c850a49006e50c",
+    "type": "split",
+    "children": [
+      {
+        "id": "3dd334cf9179d5fb",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "e73b7e444423e668",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "dev-harness/piloto-logisti-kit/telemetria.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Links inversos para telemetria"
+            }
+          },
+          {
+            "id": "83cb4520d7df0b11",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "dev-harness/piloto-logisti-kit/telemetria.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Links de saída para telemetria"
+            }
+          },
+          {
+            "id": "0cf1dcc12519a76b",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Etiquetas"
+            }
+          },
+          {
+            "id": "45867d8977bb6e41",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "Todas as propriedades"
+            }
+          },
+          {
+            "id": "c73c6a73b8508117",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "dev-harness/piloto-logisti-kit/telemetria.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Sumário de telemetria"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Abrir a troca rápida": false,
+      "graph:Abrir visualização em gráfico": false,
+      "canvas:Criar novo canvas": false,
+      "daily-notes:Abrir a nota de hoje": false,
+      "templates:Inserir modelo": false,
+      "command-palette:Abrir paleta de comandos": false,
+      "bases:Criar nova base": false
+    }
+  },
+  "active": "6087e4c797a5bb2c",
+  "lastOpenFiles": [
+    "Jarvis/orchestrator/__pycache__/react.cpython-314.pyc",
+    "Jarvis/orchestrator/__pycache__/__init__.cpython-314.pyc",
+    "Jarvis/orchestrator/__pycache__",
+    "Jarvis/tests/__pycache__/test_react_orchestrator.cpython-314-pytest-9.0.3.pyc",
+    "Jarvis/config/__pycache__/settings.cpython-314.pyc",
+    "Jarvis/config/__pycache__/__init__.cpython-314.pyc",
+    "Jarvis/llm/__pycache__/ollama_client.cpython-314.pyc",
+    "Jarvis/llm/__pycache__/__init__.cpython-314.pyc",
+    "Jarvis/tests/__pycache__/test_ollama_client.cpython-314-pytest-9.0.3.pyc",
+    "Jarvis/tests/__pycache__/__init__.cpython-314.pyc",
+    "Jarvis/tests/test_react_orchestrator.py",
+    "Jarvis/docs/ROTEIRO-CONSTRUCAO-jarvis.md",
+    "Jarvis/docs/PROMPT-CODEX-adendo-sequencia-e-testes.md",
+    "Jarvis/docs/PROMPT-CODEX-jarvis-consumir-metafabrica.md",
+    "motor/PROMPT-CODEX-motor.md",
+    "motor/ARQUITETURA-MCP-e-orquestrador.md",
+    "motor/HANDOFF-CODEX-MOTOR-R3-roadmap.md",
+    "Harness Mecânico/specs/README.md",
+    "Harness Mecânico/corpus/README.md",
+    "Harness Mecânico/ferramentas/README.md",
+    "Harness Mecânico/README.md",
+    "Jarvis/docs/REQUISITOS-METAFABRICA-para-jarvis.md",
+    "Harness Mecânico/02-REQUISITOS-AO-MOTOR.md",
+    "Harness Mecânico/01-CONSTITUICAO-MECANICA.md",
+    "Harness Mecânico/00-BLUEPRINT.md",
+    "Jarvis/CLAUDE.md",
+    "Jarvis/AGENTS.md",
+    "Jarvis/README.md",
+    "Jarvis/docs/specs/T1.2-orquestrador-loop-react.research.md",
+    "Jarvis/docs/specs/T1.2-orquestrador-loop-react.md",
+    "Jarvis/docs/specs/T1.1-esqueleto-cliente-ollama.research.md",
+    "Jarvis/docs/specs/T1.1-esqueleto-cliente-ollama.plan.md",
+    "Jarvis/docs/specs/T1.1-esqueleto-cliente-ollama.md",
+    "Jarvis/docs/spec-template.md",
+    "Jarvis/docs/security-DoD.md",
+    "Jarvis/design/05-especificacao-tecnica-e-stack.md"
+  ]
+}

@@ -1,0 +1,22 @@
+# macOS / FUSE
+.DS_Store
+.fuse_hidden*
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+pytest-cache-files-*
+.venv/
+venv/
+
+# Runtime do motor (logs vivos, banco de checkpoint, workspaces de run)
+log.jsonl
+motor.db
+motor.db-*
+runs/
+.langgraph_api/
+
+# Node (futuros consumidores/superfícies)
+node_modules/
