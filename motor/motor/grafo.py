@@ -29,6 +29,7 @@ from langgraph.types import Send, interrupt
 from .eventos import LogEventos
 from .modelos import ClienteModelo, extrai_json
 from .politica import PoliticaGates
+from .rag import carregar_dataset, recuperar
 from .spec import WorkflowSpec
 
 
@@ -160,6 +161,25 @@ def montar_prompt_planner(*, missao: str, schema: str, max_sub: int, erro: str =
         gabarito=gabarito,
         padrao=rota_ativa["padrao"],
         erro=erro,
+    )
+
+
+def _formatar_contexto_rag(fonte: str, registros: list[dict[str, Any]]) -> str:
+    partes = []
+    for i, registro in enumerate(registros, start=1):
+        metadados = []
+        for chave in ("id", "origem", "licenca"):
+            valor = registro.get(chave)
+            if valor:
+                metadados.append(f"{chave}: {valor}")
+        cabecalho = f"[{i}]"
+        if metadados:
+            cabecalho += " " + " · ".join(metadados)
+        partes.append(f"{cabecalho}\n{registro['conteudo']}")
+    corpo = "\n\n".join(partes)
+    return (
+        f"\n\nCONTEXTO RECUPERADO (fonte: {fonte}, use se relevante; "
+        f"NÃO invente além disto):\n{corpo}"
     )
 
 
@@ -357,6 +377,22 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         tier_atual = sub.get("tier")
         rubrica_txt = "\n".join(f"- {c}" for c in sub["rubrica"])
         feedback, ultima = payload.get("feedback", ""), payload.get("rascunho_anterior")
+        contexto_rag = ""
+        fonte_rag = sub.get("fonte_rag")
+        if fonte_rag:
+            consulta = f"{sub['objetivo']} {json.dumps(sub.get('entradas', {}), ensure_ascii=False)}"
+            k_rag = int(sub.get("rag_k", 5))
+            recs = recuperar(carregar_dataset(fonte_rag), consulta, k_rag)
+            log.evento(
+                "rag.consultado",
+                subagente=sub["id"],
+                fonte=fonte_rag,
+                k=k_rag,
+                recuperados=len(recs),
+                ids=[r.get("id") for r in recs if r.get("id")],
+            )
+            if recs:
+                contexto_rag = _formatar_contexto_rag(fonte_rag, recs)
         for tentativa in range(1, max_t + 1):
             # Revisão > regeneração: se já há um rascunho, mandamos corrigir SÓ o que o
             # verificador apontou em vez de reescrever do zero (não joga trabalho bom fora
@@ -378,15 +414,21 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                            sub["papel"], tier_atual, sub.get("ferramentas"),
                            capacidades=sub.get("capacidades_requeridas"),
                        ))
-            ultima = cliente.chamar(sub["papel"], PROMPT_SUBAGENTE.format(
+            prompt_subagente = contexto_rag + PROMPT_SUBAGENTE.format(
                 id=sub["id"], papel=sub["papel"],
                 missao_objetivo=missao["objetivo"], missao_contexto=missao["contexto"],
                 objetivo=sub["objetivo"], entradas=json.dumps(sub["entradas"], ensure_ascii=False),
                 resultado_esperado=sub["resultado_esperado"],
                 deps_txt=deps_txt, rubrica_txt=rubrica_txt,
                 feedback=bloco_feedback,
-            ), ferramentas=sub.get("ferramentas"), tier=tier_atual,
-                capacidades=sub.get("capacidades_requeridas"))
+            )
+            ultima = cliente.chamar(
+                sub["papel"],
+                prompt_subagente,
+                ferramentas=sub.get("ferramentas"),
+                tier=tier_atual,
+                capacidades=sub.get("capacidades_requeridas"),
+            )
             if not ultima:
                 feedback = "modelo não respondeu"
                 log.evento("executor.erro", executor=sub["id"], motivo=feedback, tentativa=tentativa)

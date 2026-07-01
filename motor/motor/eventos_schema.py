@@ -193,6 +193,11 @@ ESQUEMA: dict[str, dict[str, Any]] = {
         "campos": ["provedores"],
         "descricao": "Registra provedores marcados como esgotados por configuração.",
     },
+    "rag.consultado": {
+        "categoria": "dados",
+        "campos": ["subagente", "fonte", "k", "recuperados", "ids"],
+        "descricao": "Registra consulta a dataset RAG local para injeção de contexto.",
+    },
     "reconciliacao.concluida": {
         "categoria": "reconciliacao",
         "campos": ["nos"],

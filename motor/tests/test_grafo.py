@@ -13,7 +13,7 @@ except ImportError:
 
 from motor.eventos import LogEventos
 from motor import __main__ as cli
-from motor.grafo import _proximo_tier, construir_grafo
+from motor.grafo import PROMPT_SUBAGENTE, _proximo_tier, construir_grafo
 from motor.modelos import ClienteRoteador, ClienteStub
 from motor.politica import PoliticaGates
 
@@ -89,6 +89,141 @@ def roda(tmp_path, roteador, entrada):
 def eventos_de(tmp_path):
     linhas = (tmp_path / "log.jsonl").read_text(encoding="utf-8").strip().splitlines()
     return [json.loads(l) for l in linhas]
+
+
+def spec_rag(fonte_rag=None):
+    sub = {
+        "id": "rust",
+        "tipo": "modelo",
+        "papel": "executor",
+        "objetivo": "corrigir erro de ownership com move e borrow",
+        "entradas": {"codigo": "let s = String::from(\"x\"); let t = s; println!(\"{}\", s);"},
+        "resultado_esperado": "explicação e código Rust corrigido",
+        "rubrica": ["aborda ownership", "inclui correção"],
+        "tier": "simples",
+        "capacidades_requeridas": ["codigo"],
+    }
+    if fonte_rag is not None:
+        sub["fonte_rag"] = str(fonte_rag)
+        sub["rag_k"] = 2
+    return {
+        "versao": "0.1",
+        "padrao": "fan_out_sintese",
+        "missao": {
+            "id": "rag-rust",
+            "objetivo": "Validar RAG em tarefa Rust",
+            "contexto": "",
+            "criterios_cobertura": ["subagente aprovado"],
+        },
+        "restricoes": {"teto_custo": 2.0, "max_subagentes": 1, "max_tentativas": 1},
+        "subagentes": [sub],
+        "gates": [],
+        "sintese": {"instrucao": "Sintetize", "formato": "markdown"},
+    }
+
+
+def _cliente_prompts_rag():
+    def roteador(papel, prompt):
+        if papel == "executor":
+            return "ownership explicado"
+        if papel == "verifier":
+            return json.dumps({"aprovado": True, "motivo": "ok"})
+        if papel == "evaluator":
+            return json.dumps({"aprovado": True, "lacunas": [], "nos_a_refazer": []})
+        if papel == "synthesizer":
+            return "FINAL"
+        raise AssertionError(f"papel inesperado: {papel}")
+
+    return ClienteStub(roteador)
+
+
+def test_rag_injeta_contexto_recuperado_e_emite_evento(tmp_path):
+    dataset = tmp_path / "rust.jsonl"
+    dataset.write_text(
+        "\n".join([
+            json.dumps({"id": "erro-move", "origem": "rust-book", "conteudo": "move de String impede uso posterior; use borrow por referência"}),
+            json.dumps({"id": "result", "conteudo": "Result e operador ? propagam erros"}),
+            json.dumps({"id": "irrelevante", "conteudo": "trait bounds e generics"}),
+        ]),
+        encoding="utf-8",
+    )
+    cliente = _cliente_prompts_rag()
+    log = LogEventos(tmp_path / "log.jsonl")
+    grafo = construir_grafo(
+        cliente,
+        log,
+        checkpointer=InMemorySaver(),
+        politica=PoliticaGates(overrides={"plano": "prosseguir"}),
+    )
+
+    resultado = grafo.invoke({"spec": spec_rag(dataset)}, {"configurable": {"thread_id": "rag"}})
+
+    assert resultado["resposta_final"] == "FINAL"
+    prompt = next(p for papel, p in cliente.chamadas if papel == "executor")
+    assert "CONTEXTO RECUPERADO" in prompt
+    assert "erro-move" in prompt
+    assert "move de String impede uso posterior" in prompt
+    assert "irrelevante" not in prompt
+    evento = next(e for e in eventos_de(tmp_path) if e["evento"] == "rag.consultado")
+    assert evento["subagente"] == "rust"
+    assert evento["fonte"] == str(dataset)
+    assert evento["k"] == 2
+    assert evento["recuperados"] == 1
+    assert evento["ids"] == ["erro-move"]
+
+
+def test_sem_fonte_rag_prompt_permanece_sem_bloco_e_sem_evento(tmp_path):
+    cliente = _cliente_prompts_rag()
+    log = LogEventos(tmp_path / "log.jsonl")
+    grafo = construir_grafo(
+        cliente,
+        log,
+        checkpointer=InMemorySaver(),
+        politica=PoliticaGates(overrides={"plano": "prosseguir"}),
+    )
+    spec = spec_rag()
+
+    grafo.invoke({"spec": spec}, {"configurable": {"thread_id": "sem-rag"}})
+
+    prompt = next(p for papel, p in cliente.chamadas if papel == "executor")
+    sub = spec["subagentes"][0]
+    esperado = PROMPT_SUBAGENTE.format(
+        id=sub["id"],
+        papel=sub["papel"],
+        missao_objetivo=spec["missao"]["objetivo"],
+        missao_contexto=spec["missao"]["contexto"],
+        objetivo=sub["objetivo"],
+        entradas=json.dumps(sub["entradas"], ensure_ascii=False),
+        resultado_esperado=sub["resultado_esperado"],
+        deps_txt="",
+        rubrica_txt="\n".join(f"- {c}" for c in sub["rubrica"]),
+        feedback="",
+    )
+    assert prompt == esperado
+    assert not any(e["evento"] == "rag.consultado" for e in eventos_de(tmp_path))
+
+
+def test_fonte_rag_inexistente_nao_quebra_e_nao_injeta_bloco(tmp_path):
+    cliente = _cliente_prompts_rag()
+    log = LogEventos(tmp_path / "log.jsonl")
+    grafo = construir_grafo(
+        cliente,
+        log,
+        checkpointer=InMemorySaver(),
+        politica=PoliticaGates(overrides={"plano": "prosseguir"}),
+    )
+
+    resultado = grafo.invoke(
+        {"spec": spec_rag(tmp_path / "ausente.jsonl")},
+        {"configurable": {"thread_id": "rag-ausente"}},
+    )
+
+    assert resultado["resposta_final"] == "FINAL"
+    prompt = next(p for papel, p in cliente.chamadas if papel == "executor")
+    assert "CONTEXTO RECUPERADO" not in prompt
+    evento = next(e for e in eventos_de(tmp_path) if e["evento"] == "rag.consultado")
+    assert evento["recuperados"] == 0
+    assert evento["ids"] == []
 
 
 def test_missao_dirigida_por_spec_serializada(tmp_path):
