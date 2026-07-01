@@ -24,6 +24,25 @@ from motor.politica import PoliticaGates
 from motor.spec import WorkflowSpec
 
 
+class ClienteMetricaDeterministica:
+    """Delegador que mede o executor + validadores sem depender de juiz/sintese LLM."""
+
+    def __init__(self, base):
+        self.base = base
+
+    def __getattr__(self, nome):
+        return getattr(self.base, nome)
+
+    def chamar(self, papel, prompt, **kwargs):
+        if papel == "verifier":
+            return json.dumps({"aprovado": True, "motivo": "neutro para medir validador deterministico"})
+        if papel == "evaluator":
+            return json.dumps({"aprovado": True, "lacunas": [], "nos_a_refazer": []})
+        if papel == "synthesizer":
+            return "FINAL"
+        return self.base.chamar(papel, prompt, **kwargs)
+
+
 def carregar_spec(path):
     spec = json.loads(Path(path).read_text(encoding="utf-8"))
     WorkflowSpec.model_validate(spec)
@@ -46,21 +65,44 @@ def preparar_spec(spec, fonte_rag, com_rag):
     return preparada
 
 
+def _extrair_validador(resultado_subagente):
+    try:
+        saida = json.loads(resultado_subagente.get("saida") or "{}")
+    except json.JSONDecodeError:
+        saida = {}
+    if not isinstance(saida, dict) or "kind" not in saida:
+        return None
+    return {
+        "id": resultado_subagente.get("id"),
+        "alvo": saida.get("alvo") or resultado_subagente.get("alvo"),
+        "kind": saida.get("kind"),
+        "aprovado": bool(resultado_subagente.get("aprovado")),
+        "motivo": resultado_subagente.get("motivo", ""),
+        "evidencia": saida.get("evidencia", {}),
+    }
+
+
 def _resumir(resultado):
     if "__interrupt__" in resultado:
         gate = resultado["__interrupt__"][0].value
         return {"aprovado": False, "motivo": f"interrompido no gate {gate.get('portao')}",
-                "subagentes": [], "cobertura": {"aprovado": False, "lacunas": gate.get("lacunas", [])}}
+                "subagentes": [], "validadores": [],
+                "cobertura": {"aprovado": False, "lacunas": gate.get("lacunas", [])}}
 
     subs = [{
         "id": r.get("id"),
         "aprovado": bool(r.get("aprovado")),
         "motivo": r.get("motivo", "ok" if r.get("aprovado") else "sem motivo"),
     } for r in resultado.get("resultados", [])]
+    validadores = [
+        validador
+        for r in resultado.get("resultados", [])
+        if (validador := _extrair_validador(r)) is not None
+    ]
     cobertura = resultado.get("avaliacao", {})
     aprovado = bool(subs) and all(s["aprovado"] for s in subs) and bool(cobertura.get("aprovado"))
     motivo = "ok" if aprovado else "; ".join(str(l) for l in cobertura.get("lacunas", [])) or "reprovado"
-    return {"aprovado": aprovado, "motivo": motivo, "subagentes": subs,
+    return {"aprovado": aprovado, "motivo": motivo, "subagentes": subs, "validadores": validadores,
             "cobertura": {"aprovado": bool(cobertura.get("aprovado")),
                           "lacunas": cobertura.get("lacunas", [])}}
 
@@ -92,8 +134,19 @@ def _rodar_condicao(nome, spec, repeticoes, cliente_factory, workspace):
         for i in range(1, repeticoes + 1)
     ]
     aprovadas = sum(1 for r in rodadas if r["aprovado"])
+    rodadas_com_contem = [
+        [v for v in r.get("validadores", []) if v.get("kind") == "contem"]
+        for r in rodadas
+    ]
+    rodadas_com_contem = [validadores for validadores in rodadas_com_contem if validadores]
+    contem_aprovadas = sum(1 for validadores in rodadas_com_contem if all(v["aprovado"] for v in validadores))
     return {"nome": nome, "aprovadas": aprovadas, "repeticoes": repeticoes,
-            "taxa_aprovacao": aprovadas / repeticoes, "rodadas": rodadas}
+            "taxa_aprovacao": aprovadas / repeticoes,
+            "contem": {"aprovadas": contem_aprovadas,
+                       "repeticoes": len(rodadas_com_contem),
+                       "taxa_aprovacao": (contem_aprovadas / len(rodadas_com_contem)
+                                          if rodadas_com_contem else None)},
+            "rodadas": rodadas}
 
 
 def rodar_experimento(spec, *, fonte_rag, repeticoes, cliente_factory, workspace_base):
@@ -117,11 +170,31 @@ def formatar_relatorio(resultado):
         item = resultado[chave]
         return f"{rotulo}: {item['aprovadas']}/{item['repeticoes']} aprovadas ({item['taxa_aprovacao'] * 100:.0f}%)"
 
-    linhas = [linha("sem_rag", "SEM RAG"), linha("com_rag", "COM RAG"), f"logs: {resultado['workspace']}"]
+    def linha_contem(chave, rotulo):
+        item = resultado[chave]["contem"]
+        if item["taxa_aprovacao"] is None:
+            return f"{rotulo} contem: sem validador contem"
+        return (
+            f"{rotulo} contem: {item['aprovadas']}/{item['repeticoes']} aprovadas "
+            f"({item['taxa_aprovacao'] * 100:.0f}%)"
+        )
+
+    linhas = [
+        linha("sem_rag", "SEM RAG"),
+        linha("com_rag", "COM RAG"),
+        linha_contem("sem_rag", "SEM RAG"),
+        linha_contem("com_rag", "COM RAG"),
+        f"logs: {resultado['workspace']}",
+    ]
     for i, (sem, com) in enumerate(zip(resultado["sem_rag"]["rodadas"], resultado["com_rag"]["rodadas"]), 1):
+        sem_contem = [v for v in sem.get("validadores", []) if v.get("kind") == "contem"]
+        com_contem = [v for v in com.get("validadores", []) if v.get("kind") == "contem"]
+        sem_contem_ok = all(v["aprovado"] for v in sem_contem) if sem_contem else None
+        com_contem_ok = all(v["aprovado"] for v in com_contem) if com_contem else None
         linhas.append(
             f"rodada {i}: SEM RAG aprovado={sem['aprovado']} motivo={sem['motivo']} | "
-            f"COM RAG aprovado={com['aprovado']} motivo={com['motivo']}"
+            f"COM RAG aprovado={com['aprovado']} motivo={com['motivo']} | "
+            f"contem SEM={sem_contem_ok} COM={com_contem_ok}"
         )
     return "\n".join(linhas)
 
@@ -134,6 +207,11 @@ def _parse_args(argv):
     p.add_argument("--modelos")
     p.add_argument("--registro")
     p.add_argument("--workspace")
+    p.add_argument(
+        "--somente-metrica-deterministica",
+        action="store_true",
+        help="usa modelo real so nos executores; verifier/evaluator/synthesizer viram respostas neutras",
+    )
     return p.parse_args(argv)
 
 
@@ -142,11 +220,17 @@ def main(argv=None):
     cfg = json.loads(Path(args.modelos).read_text(encoding="utf-8")) if args.modelos else None
     workspace = args.workspace or tempfile.mkdtemp(prefix="experimento-rag-")
 
+    def cliente_factory():
+        cliente = construir_cliente(cfg, args.registro)
+        if args.somente_metrica_deterministica:
+            return ClienteMetricaDeterministica(cliente)
+        return cliente
+
     resultado = rodar_experimento(
         carregar_spec(args.spec),
         fonte_rag=args.fonte_rag,
         repeticoes=args.repeticoes,
-        cliente_factory=lambda: construir_cliente(cfg, args.registro),
+        cliente_factory=cliente_factory,
         workspace_base=workspace,
     )
     print(formatar_relatorio(resultado))

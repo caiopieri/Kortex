@@ -1,0 +1,62 @@
+{
+  "versao": "0.1",
+  "padrao": "grafo_dependencias",
+  "missao": {
+    "id": "lift-docs-metafabrica",
+    "objetivo": "Responder uma pergunta sobre docs internos da meta-fabrica para medir lift de RAG com corpus que o modelo base tende a ignorar.",
+    "contexto": "Experimento v2: corpus interno + metrica deterministica contem. A resposta deve vir dos docs recuperados, nao de conhecimento generico.",
+    "criterios_cobertura": ["resposta validada pelo validador deterministico contem"]
+  },
+  "restricoes": {"teto_custo": 2.0, "max_subagentes": 2, "max_tentativas": 1},
+  "subagentes": [
+    {
+      "id": "especialista-docs",
+      "tipo": "modelo",
+      "papel": "executor",
+      "objetivo": "Explique os tres pilares da Fase C do motor e como a primitiva V1 de validacao difere dos verificadores LLM do grafo.",
+      "entradas": {
+        "pergunta": "Quais sao os tres pilares da Fase C do motor? Como um validador V1 se diferencia do verifier LLM e do avaliador global?"
+      },
+      "resultado_esperado": "Resposta curta, especifica, com os nomes proprios usados nos docs internos e contraste claro entre validador V1 e verificadores LLM.",
+      "rubrica": [
+        "identifica os tres pilares da Fase C pelos nomes usados nos docs recuperados",
+        "explica que V1 executa checagem mecanica sobre a saida de outro no",
+        "contrasta a checagem V1 com julgamento LLM/adversarial e avaliacao global",
+        "mantem a resposta ancorada nos docs internos"
+      ],
+      "fonte_rag": "__SUBSTITUIR_PELO_CAMINHO_DO_DATASET_JSONL__",
+      "rag_k": 8,
+      "tier": "media",
+      "capacidades_requeridas": ["redacao", "raciocinio-longo"]
+    },
+    {
+      "id": "valida-jargao-metafabrica",
+      "tipo": "validador",
+      "valida": "especialista-docs",
+      "validador": {
+        "kind": "contem",
+        "config": {
+          "requer": [
+            "prevenção",
+            "escalada de tier",
+            "reconciliação na fonte",
+            "dependência em ondas",
+            "loop bounded",
+            "determinístico",
+            "gate de cobertura"
+          ],
+          "min": 5
+        }
+      },
+      "objetivo": "Medir se a resposta contem o jargao especifico dos docs internos.",
+      "entradas": {},
+      "resultado_esperado": "Veredito deterministico sobre presenca de termos internos.",
+      "depende_de": ["especialista-docs"]
+    }
+  ],
+  "gates": [],
+  "sintese": {
+    "instrucao": "Sintetize somente a resposta validada e mencione se o validador deterministico passou.",
+    "formato": "markdown"
+  }
+}
