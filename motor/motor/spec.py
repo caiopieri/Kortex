@@ -21,9 +21,14 @@ class Restricoes(BaseModel):
 
 class Subagente(BaseModel):
     id: str = Field(min_length=1)
-    tipo: Literal["modelo", "ferramenta"] = "modelo"
+    tipo: Literal["modelo", "ferramenta", "validador"] = "modelo"
     papel: Optional[str] = Field(default=None, description="papel de modelo (mapeado no cliente: pesquisador, redator...)")
     ferramenta: Optional[str] = Field(default=None, description="nome lógico da ferramenta determinística")
+    valida: Optional[str] = Field(default=None, description="id do subagente cuja saída este nó valida")
+    validador: Optional[dict[str, Any]] = Field(
+        default=None,
+        description="{'kind': 'schema_json'|'contem', 'config': {...}}",
+    )
     objetivo: str = Field(min_length=1)
     entradas: dict[str, Any] = Field(default_factory=dict)
     resultado_esperado: str = Field(min_length=1)
@@ -80,6 +85,7 @@ class WorkflowSpec(BaseModel):
         ids = [s.id for s in self.subagentes]
         if len(ids) != len(set(ids)):
             raise ValueError("ids de subagentes duplicados")
+        id_set = set(ids)
         if len(ids) > self.restricoes.max_subagentes:
             raise ValueError(f"{len(ids)} subagentes excede max_subagentes={self.restricoes.max_subagentes}")
         for s in self.subagentes:
@@ -90,6 +96,20 @@ class WorkflowSpec(BaseModel):
                     raise ValueError(f"subagente '{s.id}' do tipo modelo exige rubrica")
             if s.tipo == "ferramenta" and not s.ferramenta:
                 raise ValueError(f"subagente '{s.id}' do tipo ferramenta exige ferramenta")
+            if s.tipo == "validador":
+                if not s.valida:
+                    raise ValueError(f"subagente '{s.id}' do tipo validador exige valida")
+                if s.valida not in id_set:
+                    raise ValueError(f"subagente '{s.id}' valida id inexistente '{s.valida}'")
+                if s.valida == s.id:
+                    raise ValueError(f"subagente '{s.id}' não pode validar a si mesmo")
+                if s.valida not in s.depende_de:
+                    raise ValueError(f"subagente '{s.id}' do tipo validador exige valida em depende_de")
+                if not isinstance(s.validador, dict):
+                    raise ValueError(f"subagente '{s.id}' do tipo validador exige validador")
+                kind = s.validador.get("kind")
+                if kind not in {"schema_json", "contem"}:
+                    raise ValueError(f"subagente '{s.id}' usa validador kind inválido: {kind}")
             if len(s.produz_artefatos) > 1:
                 raise ValueError(f"subagente '{s.id}' declara mais de um artefato")
             for artefato in [*s.produz_artefatos, *s.produz]:
@@ -106,7 +126,6 @@ class WorkflowSpec(BaseModel):
                     )
             return self
 
-        id_set = set(ids)
         deps_por_id = {s.id: list(s.depende_de) for s in self.subagentes}
         for s in self.subagentes:
             for dep in s.depende_de:

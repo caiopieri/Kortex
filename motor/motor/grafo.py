@@ -32,6 +32,13 @@ from .politica import PoliticaGates
 from .rag import carregar_dataset, recuperar
 from .spec import WorkflowSpec
 
+try:
+    from jsonschema import ValidationError as JsonSchemaValidationError  # type: ignore[import-untyped]
+    from jsonschema import validate as validar_jsonschema  # type: ignore[import-untyped]
+except ImportError:  # pragma: no cover - fallback para ambiente sem jsonschema.
+    JsonSchemaValidationError = None  # type: ignore[assignment]
+    validar_jsonschema = None  # type: ignore[assignment]
+
 
 def mesclar_resultados(a: list[dict[str, Any]], b: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Mescla commits de subagentes por id; commits mais novos substituem antigos."""
@@ -180,6 +187,101 @@ def _formatar_contexto_rag(fonte: str, registros: list[dict[str, Any]]) -> str:
     return (
         f"\n\nCONTEXTO RECUPERADO (fonte: {fonte}, use se relevante; "
         f"NÃO invente além disto):\n{corpo}"
+    )
+
+
+def _validar_schema_minimo(dados: Any, schema: dict[str, Any], caminho: str = "$") -> str | None:
+    tipo = schema.get("type")
+    if tipo:
+        tipos = tipo if isinstance(tipo, list) else [tipo]
+
+        def confere(tipo_json: str) -> bool:
+            if tipo_json == "object":
+                return isinstance(dados, dict)
+            if tipo_json == "array":
+                return isinstance(dados, list)
+            if tipo_json == "string":
+                return isinstance(dados, str)
+            if tipo_json == "integer":
+                return isinstance(dados, int) and not isinstance(dados, bool)
+            if tipo_json == "number":
+                return isinstance(dados, (int, float)) and not isinstance(dados, bool)
+            if tipo_json == "boolean":
+                return isinstance(dados, bool)
+            if tipo_json == "null":
+                return dados is None
+            return False
+
+        if not any(isinstance(t, str) and confere(t) for t in tipos):
+            return f"{caminho}: esperado {tipo}"
+    if isinstance(dados, dict):
+        required = schema.get("required") or []
+        for campo in required:
+            if campo not in dados:
+                return f"{caminho}: campo obrigatório ausente '{campo}'"
+        propriedades = schema.get("properties") or {}
+        if isinstance(propriedades, dict):
+            for campo, sub_schema in propriedades.items():
+                if campo in dados and isinstance(sub_schema, dict):
+                    erro = _validar_schema_minimo(dados[campo], sub_schema, f"{caminho}.{campo}")
+                    if erro:
+                        return erro
+        if schema.get("additionalProperties") is False:
+            extras = set(dados) - set(propriedades)
+            if extras:
+                return f"{caminho}: campos extras {sorted(extras)}"
+    if isinstance(dados, list) and isinstance(schema.get("items"), dict):
+        for indice, item in enumerate(dados):
+            erro = _validar_schema_minimo(item, schema["items"], f"{caminho}[{indice}]")
+            if erro:
+                return erro
+    return None
+
+
+def _validar_schema_json(saida: str, config: dict[str, Any]) -> tuple[bool, str, dict[str, Any]]:
+    schema = config.get("schema")
+    if not isinstance(schema, dict):
+        return False, "config.schema ausente ou inválido", {"erro": "schema inválido"}
+    try:
+        dados = json.loads(saida)
+    except json.JSONDecodeError as ex:
+        return False, f"JSON inválido: {ex.msg}", {"erro": ex.msg}
+    if validar_jsonschema is not None:
+        try:
+            validar_jsonschema(instance=dados, schema=schema)
+        except Exception as ex:
+            if JsonSchemaValidationError is not None and isinstance(ex, JsonSchemaValidationError):
+                caminho = ".".join(str(p) for p in ex.path)
+                local = f" em {caminho}" if caminho else ""
+                return False, f"schema_json falhou{local}: {ex.message}", {"erro": ex.message}
+            return False, f"schema_json falhou: {ex}", {"erro": str(ex)}
+    else:
+        erro = _validar_schema_minimo(dados, schema)
+        if erro:
+            return False, f"schema_json falhou: {erro}", {"erro": erro}
+    return True, "schema_json aprovado", {"json": dados}
+
+
+def _validar_contem(saida: str, config: dict[str, Any]) -> tuple[bool, str, dict[str, Any]]:
+    requer = config.get("requer")
+    if not isinstance(requer, list) or not all(isinstance(item, str) for item in requer):
+        return False, "config.requer ausente ou inválido", {"faltantes": []}
+    minimo_bruto = config.get("min", len(requer))
+    try:
+        minimo = int(minimo_bruto)
+    except (TypeError, ValueError):
+        return False, "config.min inválido", {"faltantes": requer}
+    minimo = max(0, min(minimo, len(requer)))
+    texto = saida.casefold()
+    presentes = [item for item in requer if item.casefold() in texto]
+    faltantes = [item for item in requer if item not in presentes]
+    aprovado = len(presentes) >= minimo
+    if aprovado:
+        return True, "contem aprovado", {"presentes": presentes, "faltantes": faltantes, "min": minimo}
+    return (
+        False,
+        f"contem falhou: presentes {len(presentes)}/{minimo}; faltantes: {', '.join(faltantes)}",
+        {"presentes": presentes, "faltantes": faltantes, "min": minimo},
     )
 
 
@@ -367,6 +469,8 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
             )
         if sub.get("tipo", "modelo") == "ferramenta":
             return executar_ferramenta(sub, payload["workspace"])
+        if sub.get("tipo", "modelo") == "validador":
+            return executar_validador(sub, deps)
 
         # Guard de independência: o verifier deve evitar o provedor DO executor desta
         # tarefa (cross-model anti-auto-aprovação). Só quando o cliente sabe rotear.
@@ -584,6 +688,39 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
             return {"resultados": [{"id": sub["id"], "saida": "", "tentativas": 1,
                                     "aprovado": False, "motivo": motivo}]}
 
+    def executar_validador(sub: dict[str, Any], deps: dict[str, str]) -> dict:
+        alvo = str(sub.get("valida") or "")
+        spec_validador = sub.get("validador") or {}
+        kind = str(spec_validador.get("kind") or "")
+        config = spec_validador.get("config") or {}
+        if not isinstance(config, dict):
+            config = {}
+        saida_alvo = deps.get(alvo)
+        if saida_alvo is None:
+            aprovado = False
+            motivo = f"saída do alvo '{alvo}' indisponível"
+            evidencia: dict[str, Any] = {"erro": "alvo indisponível"}
+        elif kind == "schema_json":
+            aprovado, motivo, evidencia = _validar_schema_json(saida_alvo, config)
+        elif kind == "contem":
+            aprovado, motivo, evidencia = _validar_contem(saida_alvo, config)
+        else:
+            aprovado = False
+            motivo = f"validador kind inválido: {kind}"
+            evidencia = {"erro": "kind inválido"}
+        log.evento("validador.rodou", id=sub["id"], alvo=alvo, kind=kind,
+                   aprovado=aprovado, motivo=motivo)
+        saida = json.dumps(
+            {"id": sub["id"], "alvo": alvo, "kind": kind, "aprovado": aprovado,
+             "motivo": motivo, "evidencia": evidencia},
+            ensure_ascii=False,
+        )
+        resultado = {"id": sub["id"], "saida": saida, "tentativas": 1,
+                     "aprovado": aprovado, "motivo": motivo, "alvo": alvo}
+        if not aprovado and alvo:
+            resultado["refazer"] = alvo
+        return {"resultados": [resultado]}
+
     def executar_grafo_dep(state: EstadoMotor) -> dict:
         spec = state["spec"]
         subs = {s["id"]: s for s in spec["subagentes"]}
@@ -638,6 +775,11 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
 
     def avaliar_cobertura(spec: dict[str, Any], resultados: list[dict[str, Any]]) -> dict[str, Any]:
         reprovados = [r["id"] for r in resultados if not r["aprovado"]]
+        refazer_reprovados = [
+            str(r.get("refazer") or r["id"])
+            for r in resultados
+            if not r["aprovado"]
+        ]
         log.evento("executor.chamado", executor="global_evaluator",
                    modelo=_descricao_modelo("evaluator"))
         veredito = extrai_json(cliente.chamar("evaluator", PROMPT_EVALUATOR.format(
@@ -651,7 +793,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         nomes = veredito.get("nos_a_refazer", [])
         if not isinstance(nomes, list):
             nomes = []
-        nos = list(dict.fromkeys([str(n) for n in nomes] + reprovados))
+        nos = list(dict.fromkeys([str(n) for n in nomes] + refazer_reprovados))
         veredito = {**veredito, "nos_a_refazer": nos}
         return veredito
 

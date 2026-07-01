@@ -243,6 +243,11 @@ ESQUEMA: dict[str, dict[str, Any]] = {
         "campos": ["missao"],
         "descricao": "Sinaliza conclusão da tarefa.",
     },
+    "validador.rodou": {
+        "categoria": "gate",
+        "campos": ["id", "alvo", "kind", "aprovado", "motivo"],
+        "descricao": "Registra execução de validador determinístico sobre saída de subagente.",
+    },
 }
 
 
