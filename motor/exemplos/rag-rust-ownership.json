@@ -1,0 +1,33 @@
+{
+  "versao": "0.1",
+  "padrao": "fan_out_sintese",
+  "missao": {
+    "id": "rag-rust-ownership",
+    "objetivo": "Explicar e corrigir um erro de ownership em Rust com tratamento de erro idiomatico.",
+    "contexto": "Mede se contexto recuperado de um dataset sobre Rust ownership melhora a resposta do especialista.",
+    "criterios_cobertura": ["explica por que o valor foi movido", "mostra uma correcao compilavel", "aborda Result e o operador ?"]
+  },
+  "restricoes": {"teto_custo": 2.0, "max_subagentes": 1, "max_tentativas": 2},
+  "subagentes": [{
+    "id": "especialista-rust",
+    "tipo": "modelo",
+    "papel": "executor",
+    "objetivo": "Explique o erro de ownership no trecho abaixo e reescreva a funcao de modo idiomatico, retornando Result<String, std::io::Error> e usando ? para propagar erro de leitura.",
+    "entradas": {
+      "codigo": "use std::fs::File;\nuse std::io::{self, Read};\n\nfn carrega_nome(path: &str) -> Result<String, io::Error> {\n    let mut arquivo = File::open(path)?;\n    let mut nome = String::new();\n    arquivo.read_to_string(&mut nome)?;\n    let copia = nome;\n    println!(\"{}\", nome);\n    Ok(copia)\n}"
+    },
+    "resultado_esperado": "Explicacao curta do move, correcao compilavel e comentario sobre Result/?",
+    "rubrica": [
+      "explica que atribuir nome a copia move o String e impede uso posterior de nome",
+      "oferece correcao compilavel usando borrow, clone ou reordenacao antes do move",
+      "mantem assinatura com Result<String, std::io::Error> ou equivalente e usa ? para propagacao",
+      "inclui um trecho de codigo Rust completo o bastante para substituir a funcao"
+    ],
+    "fonte_rag": "__SUBSTITUIR_PELO_CAMINHO_DO_DATASET_JSONL__",
+    "rag_k": 5,
+    "tier": "media",
+    "capacidades_requeridas": ["codigo", "raciocinio-longo"]
+  }],
+  "gates": [],
+  "sintese": {"instrucao": "Sintetize a resposta do especialista, preservando explicacao e codigo.", "formato": "markdown"}
+}
