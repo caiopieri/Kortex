@@ -308,6 +308,7 @@ def test_propor_ranqueia_desempata_e_respeita_amostras(tmp_path):
     assert [item["modelo"] for item in slot["ranking"]] == ["modelo-b", "modelo-a"]
     assert slot["recomendado"] == "modelo-b"
     assert "_custo" not in slot["ranking"][0]
+    assert "custo_usd_por_chamada" not in slot["ranking"][0]
 
     insuficiente = _jsonl(
         tmp_path,
@@ -318,6 +319,50 @@ def test_propor_ranqueia_desempata_e_respeita_amostras(tmp_path):
         "status": "evidencia_insuficiente",
         "amostras": 2,
     }
+
+
+def test_propor_desempata_por_custo_real_por_chamada_quando_disponivel(tmp_path):
+    log = _jsonl(
+        tmp_path,
+        "real-cost.jsonl",
+        [
+            *_eventos_modelo("executor", "complexa", "modelo-a", 3, 3, latencia=5.0, inicio=0.0, prefixo="a"),
+            *_eventos_modelo("executor", "complexa", "modelo-b", 3, 3, latencia=5.0, inicio=50.0, prefixo="b"),
+        ],
+    )
+    perfil = analisar([log])
+    perfil["custo"]["por_modelo"] = {
+        "modelo-a": {"custo_usd": 0.30, "chamadas_com_uso": 3},
+        "modelo-b": {"custo_usd": 0.03, "chamadas_com_uso": 3},
+    }
+
+    slot = propor(perfil, min_amostras=3, custo={"modelo-a": 1, "modelo-b": 2})["slots"]["executor/complexa"]
+
+    assert [item["modelo"] for item in slot["ranking"]] == ["modelo-b", "modelo-a"]
+    assert slot["recomendado"] == "modelo-b"
+    assert slot["ranking"][0]["custo_usd_por_chamada"] == 0.01
+    assert slot["ranking"][1]["custo_usd_por_chamada"] == 0.1
+
+
+def test_propor_qualidade_nao_perde_para_custo_real_menor(tmp_path):
+    log = _jsonl(
+        tmp_path,
+        "quality-over-cost.jsonl",
+        [
+            *_eventos_modelo("executor", "media", "bom-caro", 3, 3, latencia=5.0, inicio=0.0, prefixo="bom"),
+            *_eventos_modelo("executor", "media", "pior-barato", 2, 3, latencia=5.0, inicio=50.0, prefixo="pior"),
+        ],
+    )
+    perfil = analisar([log])
+    perfil["custo"]["por_modelo"] = {
+        "bom-caro": {"custo_usd": 3.00, "chamadas_com_uso": 3},
+        "pior-barato": {"custo_usd": 0.03, "chamadas_com_uso": 3},
+    }
+
+    slot = propor(perfil, min_amostras=3)["slots"]["executor/media"]
+
+    assert [item["modelo"] for item in slot["ranking"]] == ["bom-caro", "pior-barato"]
+    assert slot["recomendado"] == "bom-caro"
 
 
 def test_incompleta_inferida_por_chamada_sem_resposta_ou_erro(tmp_path):

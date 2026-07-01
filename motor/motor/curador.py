@@ -137,6 +137,7 @@ def propor(
     qualidade; empates sao resolvidos por menor latencia mediana e, se informado, menor custo.
     """
     custo_ordem = _normalizar_custo(custo)
+    custo_real = _custo_real_por_modelo(perfil)
     slots: dict[str, Any] = {}
     for slot in sorted(perfil.get("por_slot_modelo", {})):
         modelos = perfil["por_slot_modelo"][slot]
@@ -155,7 +156,7 @@ def propor(
 
         ranking = []
         for modelo, metricas in candidatos:
-            ranking.append(_item_ranking(modelo, metricas, custo_ordem))
+            ranking.append(_item_ranking(modelo, metricas, custo_ordem, custo_real))
         ranking.sort(key=_chave_ranking)
         for item in ranking:
             item.pop("_custo", None)
@@ -725,6 +726,22 @@ def _normalizar_custo(custo: dict[str, Any] | None) -> dict[str, int]:
     return saida
 
 
+def _custo_real_por_modelo(perfil: dict[str, Any]) -> dict[str, float]:
+    saida: dict[str, float] = {}
+    por_modelo = perfil.get("custo", {}).get("por_modelo", {})
+    if not isinstance(por_modelo, dict):
+        return saida
+    for modelo, metricas in por_modelo.items():
+        if not isinstance(metricas, dict):
+            continue
+        custo_usd = _num(metricas.get("custo_usd"))
+        if custo_usd is None:
+            continue
+        chamadas = _int(metricas.get("chamadas_com_uso")) or 0
+        saida[str(modelo)] = round(custo_usd / max(1, chamadas), 8)
+    return saida
+
+
 def _normalizar_precos(precos: dict[str, Any] | None) -> dict[str, dict[str, float]]:
     if not precos:
         return {}
@@ -742,10 +759,16 @@ def _normalizar_precos(precos: dict[str, Any] | None) -> dict[str, dict[str, flo
     return saida
 
 
-def _item_ranking(modelo: str, metricas: dict[str, Any], custo: dict[str, int]) -> dict[str, Any]:
+def _item_ranking(
+    modelo: str,
+    metricas: dict[str, Any],
+    custo: dict[str, int],
+    custo_real: dict[str, float],
+) -> dict[str, Any]:
     convergencia = metricas["taxa_convergencia_pos_escalada"] if metricas["escaladas"] else 1.0
     score = round(metricas["taxa_aprovacao_primeira"] - metricas["taxa_erro"] - (1.0 - convergencia), 4)
-    return {
+    custo_usd_por_chamada = custo_real.get(modelo)
+    item = {
         "modelo": modelo,
         "score": score,
         "aprov_1a": metricas["taxa_aprovacao_primeira"],
@@ -754,8 +777,11 @@ def _item_ranking(modelo: str, metricas: dict[str, Any], custo: dict[str, int]) 
         "taxa_incompletas": metricas["taxa_incompletas"],
         "latencia_mediana": metricas["latencia"]["mediana"],
         "amostras": metricas["verifier_julgados"],
-        "_custo": custo.get(modelo),
+        "_custo": custo_usd_por_chamada if custo_usd_por_chamada is not None else custo.get(modelo),
     }
+    if custo_usd_por_chamada is not None:
+        item["custo_usd_por_chamada"] = custo_usd_por_chamada
+    return item
 
 
 def _modelos_a_evitar(modelos: dict[str, dict[str, Any]], min_amostras: int, limiar_falha: float) -> list[str]:
