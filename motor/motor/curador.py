@@ -14,7 +14,7 @@ SEM_TIER = "sem-tier"
 DESCONHECIDO = "desconhecido"
 
 
-def carregar_runs(caminhos: list[str | Path]) -> tuple[list[dict[str, Any]], int]:
+def carregar_runs(caminhos: list[str | Path], incluir_rascunho: bool = False) -> tuple[list[dict[str, Any]], int]:
     runs: list[dict[str, Any]] = []
     malformadas = 0
     for arquivo in _expandir(caminhos):
@@ -36,17 +36,21 @@ def carregar_runs(caminhos: list[str | Path]) -> tuple[list[dict[str, Any]], int
                     continue
                 t = _num(ev.get("t"))
                 if eventos and t is not None and ultimo_t is not None and t < ultimo_t:
-                    runs.append(_run(arquivo, indice, eventos))
+                    _adicionar_run(runs, arquivo, indice, eventos, incluir_rascunho)
                     eventos, indice = [], indice + 1
                 eventos.append(ev)
                 ultimo_t = t if t is not None else ultimo_t
         if eventos:
-            runs.append(_run(arquivo, indice, eventos))
+            _adicionar_run(runs, arquivo, indice, eventos, incluir_rascunho)
     return runs, malformadas
 
 
-def analisar(caminhos: list[str | Path], precos: dict[str, Any] | None = None) -> dict[str, Any]:
-    runs, malformadas = carregar_runs(caminhos)
+def analisar(
+    caminhos: list[str | Path],
+    precos: dict[str, Any] | None = None,
+    incluir_rascunho: bool = False,
+) -> dict[str, Any]:
+    runs, malformadas = carregar_runs(caminhos, incluir_rascunho=incluir_rascunho)
     agregador = _Agregador()
     por_papel_tier, por_modelo, por_slot_modelo = agregador.consumir_runs(runs)
     return {
@@ -316,11 +320,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--piso", type=float, default=0.6, help="piso de aprovacao 1a tentativa para proposta limpa")
     parser.add_argument("--limiar-falha", type=float, default=0.5, help="limiar de erro+incompleta para evitar modelo")
+    parser.add_argument("--incluir-rascunho", action="store_true", help="inclui runs marcados como rascunho")
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
 
     perfil = analisar(
         args.caminhos,
         precos=_parse_precos(args.custo) if args.custo is not None and not args.propor else None,
+        incluir_rascunho=args.incluir_rascunho,
     )
     if args.json_path:
         args.json_path.write_text(
@@ -817,8 +823,33 @@ def _expandir(caminhos: list[str | Path]) -> list[Path]:
     return sorted(arquivos)
 
 
-def _run(arquivo: Path, indice: int, eventos: list[dict[str, Any]]) -> dict[str, Any]:
-    return {"id": arquivo.name if indice == 1 else f"{arquivo.name}#{indice}", "fonte": str(arquivo), "eventos": eventos}
+def _perfil_run(eventos: list[dict[str, Any]]) -> str:
+    for ev in eventos:
+        if ev.get("evento") == "run.perfil":
+            return "rascunho" if ev.get("perfil") == "rascunho" else "certificado"
+    return "certificado"
+
+
+def _adicionar_run(
+    runs: list[dict[str, Any]],
+    arquivo: Path,
+    indice: int,
+    eventos: list[dict[str, Any]],
+    incluir_rascunho: bool,
+) -> None:
+    perfil = _perfil_run(eventos)
+    if perfil == "rascunho" and not incluir_rascunho:
+        return
+    runs.append(_run(arquivo, indice, eventos, perfil))
+
+
+def _run(arquivo: Path, indice: int, eventos: list[dict[str, Any]], perfil: str) -> dict[str, Any]:
+    return {
+        "id": arquivo.name if indice == 1 else f"{arquivo.name}#{indice}",
+        "fonte": str(arquivo),
+        "perfil": perfil,
+        "eventos": eventos,
+    }
 
 
 def _metricas() -> dict[str, Any]:

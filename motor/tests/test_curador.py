@@ -192,6 +192,50 @@ def test_analisar_metricas_sinteticas_do_observador(tmp_path):
     assert len(run["resiliencia"]["motivos_429"]) == 2
 
 
+def test_curador_exclui_rascunho_por_default_e_inclui_com_flag(tmp_path):
+    certificado = _jsonl(
+        tmp_path,
+        "certificado.jsonl",
+        [
+            {"t": 0.0, "evento": "run.perfil", "perfil": "certificado"},
+            *_eventos_modelo("executor", "simples", "modelo-cert", 1, 1),
+        ],
+    )
+    rascunho = _jsonl(
+        tmp_path,
+        "rascunho.jsonl",
+        [
+            {"t": 0.0, "evento": "run.perfil", "perfil": "rascunho"},
+            *_eventos_modelo("executor", "simples", "modelo-rascunho", 1, 1, inicio=10.0),
+        ],
+    )
+
+    perfil = analisar([certificado, rascunho])
+
+    assert [run["id"] for run in perfil["runs"]] == ["certificado.jsonl"]
+    assert set(perfil["por_modelo"]) == {"modelo-cert"}
+
+    perfil_com_rascunho = analisar([certificado, rascunho], incluir_rascunho=True)
+
+    assert [run["id"] for run in perfil_com_rascunho["runs"]] == ["certificado.jsonl", "rascunho.jsonl"]
+    assert set(perfil_com_rascunho["por_modelo"]) == {"modelo-cert", "modelo-rascunho"}
+
+
+def test_curador_trata_run_legado_sem_perfil_como_certificado(tmp_path):
+    legado = _jsonl(
+        tmp_path,
+        "legado.jsonl",
+        _eventos_modelo("executor", "simples", "modelo-legado", 1, 1),
+    )
+
+    runs, malformadas = carregar_runs([legado])
+    perfil = analisar([legado])
+
+    assert malformadas == 0
+    assert runs[0]["perfil"] == "certificado"
+    assert perfil["por_modelo"]["modelo-legado"]["chamadas"] == 1
+
+
 def test_analisar_agrega_e_ranqueia_por_modelo(tmp_path):
     log = _jsonl(
         tmp_path,

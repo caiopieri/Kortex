@@ -223,6 +223,11 @@ ESQUEMA: dict[str, dict[str, Any]] = {
         "campos": ["rota", "padrao", "fallback"],
         "descricao": "Registra rota de decomposição escolhida pelo seletor.",
     },
+    "run.perfil": {
+        "categoria": "missao",
+        "campos": ["perfil"],
+        "descricao": "Registra se o run é certificado ou rascunho para consumo pelo curador.",
+    },
     "spec.criada": {
         "categoria": "missao",
         "campos": ["missao", "subagentes"],

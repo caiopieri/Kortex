@@ -1,6 +1,7 @@
 """Ponta a ponta com ClienteStub — valida a topologia, o retry do verifier,
 o gate do fundador (interrupt/resume) e a missão dirigida por spec serializada."""
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -241,6 +242,60 @@ def test_planner_cria_spec_a_partir_de_missao_texto(tmp_path):
     _, _, _, resultado = roda(tmp_path, faz_roteador(), {"missao_texto": "pesquise oportunidades de receita"})
     assert resultado["resposta_final"] == "SÍNTESE FINAL DA MISSÃO"
     assert "spec.criada" in [e["evento"] for e in eventos_de(tmp_path)]
+
+
+def test_run_perfil_emitido_como_certificado_por_default(tmp_path):
+    _, _, _, _ = roda(tmp_path, faz_roteador(), {"spec": SPEC})
+
+    eventos = eventos_de(tmp_path)
+    perfil = next(e for e in eventos if e["evento"] == "run.perfil")
+    assert perfil["perfil"] == "certificado"
+    assert [e["evento"] for e in eventos].index("run.perfil") < [e["evento"] for e in eventos].index("spec.recebida")
+
+
+def test_run_perfil_emitido_como_rascunho_quando_configurado(tmp_path):
+    log = LogEventos(tmp_path / "log.jsonl")
+    grafo = construir_grafo(
+        ClienteStub(faz_roteador()),
+        log,
+        checkpointer=InMemorySaver(),
+        politica=PoliticaGates(overrides={"plano": "prosseguir"}),
+        perfil_execucao="rascunho",
+    )
+
+    grafo.invoke({"spec": SPEC}, {"configurable": {"thread_id": "perfil-rascunho"}})
+
+    perfil = next(e for e in eventos_de(tmp_path) if e["evento"] == "run.perfil")
+    assert perfil["perfil"] == "rascunho"
+
+
+def test_cli_rascunho_propaga_perfil_para_grafo(tmp_path, monkeypatch):
+    spec_path = tmp_path / "spec.json"
+    spec_path.write_text(json.dumps(SPEC), encoding="utf-8")
+    capturado = {}
+
+    class LogFake:
+        def __init__(self, caminho):
+            self.caminho = caminho
+
+        def fechar(self):
+            pass
+
+    class GrafoFake:
+        def invoke(self, entrada, config):
+            return {"resposta_final": "ok"}
+
+    def construir_fake(*args, **kwargs):
+        capturado["perfil_execucao"] = kwargs.get("perfil_execucao")
+        return GrafoFake()
+
+    monkeypatch.setattr(sys, "argv", ["motor", "--spec", str(spec_path), "--rascunho"])
+    monkeypatch.setattr(cli, "LogEventos", LogFake)
+    monkeypatch.setattr(cli, "construir_cliente", lambda *args, **kwargs: ClienteStub(faz_roteador()))
+    monkeypatch.setattr(cli, "construir_grafo", construir_fake)
+
+    assert cli.main() == 0
+    assert capturado["perfil_execucao"] == "rascunho"
 
 
 def test_retry_do_verifier(tmp_path):

@@ -176,6 +176,10 @@ def main() -> int:
     if escalar_em_retry:
         args.remove("--escalar")
 
+    perfil_execucao = "rascunho" if "--rascunho" in args else "certificado"
+    if "--rascunho" in args:
+        args.remove("--rascunho")
+
     max_rodadas_reconciliacao = 1
     if "--reconciliar" in args:
         i = args.index("--reconciliar")
@@ -222,7 +226,8 @@ def main() -> int:
                                 workspace_base=workspace_base, ferramentas=ferramentas,
                                 rota=rota, rotas=rotas,
                                 escalar_em_retry=escalar_em_retry,
-                                max_rodadas_reconciliacao=max_rodadas_reconciliacao)
+                                max_rodadas_reconciliacao=max_rodadas_reconciliacao,
+                                perfil_execucao=perfil_execucao)
         caixa = CaixaFundador(dir_caixa, log)
         resultado = rodar_com_caixa(grafo, entrada, config, caixa, log)
         conn.close()
@@ -232,7 +237,8 @@ def main() -> int:
                                 workspace_base=workspace_base, ferramentas=ferramentas,
                                 rota=rota, rotas=rotas,
                                 escalar_em_retry=escalar_em_retry,
-                                max_rodadas_reconciliacao=max_rodadas_reconciliacao)
+                                max_rodadas_reconciliacao=max_rodadas_reconciliacao,
+                                perfil_execucao=perfil_execucao)
         resultado = grafo.invoke(entrada, config)
         while "__interrupt__" in resultado:  # gate do fundador
             pedido = resultado["__interrupt__"][0].value

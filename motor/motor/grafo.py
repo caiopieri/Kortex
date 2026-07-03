@@ -336,7 +336,8 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                     rota: dict[str, Any] | None = None,
                     rotas: dict[str, dict[str, Any]] | None = None,
                     escalar_em_retry: bool = False,
-                    max_rodadas_reconciliacao: int = 1):
+                    max_rodadas_reconciliacao: int = 1,
+                    perfil_execucao: str = "certificado"):
     """Compila o grafo. `cliente` e `log` são injetados — o grafo não conhece backends.
     `politica` decide quais gates pausam (manual) ou resolvem sozinhos (auto-mode);
     ausente = tudo manual (comportamento default).
@@ -345,6 +346,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
     politica = politica or PoliticaGates()
     workspace_base = Path(workspace_base)
     ferramentas = ferramentas or {}
+    perfil_execucao = "rascunho" if perfil_execucao == "rascunho" else "certificado"
 
     def run_id_de(state: EstadoMotor) -> str:
         return state.get("run_id") or f"{datetime.now():%Y%m%d-%H%M%S}-{uuid4().hex[:6]}"
@@ -366,6 +368,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
 
     def planner(state: EstadoMotor) -> dict:
         run_id = run_id_de(state)
+        log.evento("run.perfil", perfil=perfil_execucao)
         if state.get("spec"):  # spec fornecida pelo usuário: valida e segue (missão dirigida por dado)
             spec = WorkflowSpec.model_validate(state["spec"])
             log.evento("spec.recebida", missao=spec.missao.id, subagentes=len(spec.subagentes))
