@@ -189,6 +189,21 @@ def ferramentas_de_registro(pasta: str | Path) -> dict[str, dict[str, Any]]:
     return ferramentas
 
 
+def ferramentas_permitidas_de_registro(pasta: str | Path) -> list[str]:
+    """Carrega allowlist global de executáveis declarada no Registry."""
+    raiz = Path(pasta)
+    permitidas: list[str] = []
+    vistas: set[str] = set()
+    for caminho in sorted(raiz.glob("*.md"), key=lambda p: p.name):
+        dados = _frontmatter(caminho)
+        for executavel in _lista(dados.get("ferramentas_permitidas")):
+            nome = executavel.strip()
+            if nome and nome not in vistas:
+                permitidas.append(nome)
+                vistas.add(nome)
+    return permitidas
+
+
 def rotas_de_registro(pasta: str | Path) -> dict[str, dict[str, Any]]:
     """Carrega entidades `tipo: rota` do Registry, indexadas pelo nome."""
     raiz = Path(pasta)

@@ -337,7 +337,8 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                     rotas: dict[str, dict[str, Any]] | None = None,
                     escalar_em_retry: bool = False,
                     max_rodadas_reconciliacao: int = 1,
-                    perfil_execucao: str = "certificado"):
+                    perfil_execucao: str = "certificado",
+                    ferramentas_permitidas: list[str] | None = None):
     """Compila o grafo. `cliente` e `log` são injetados — o grafo não conhece backends.
     `politica` decide quais gates pausam (manual) ou resolvem sozinhos (auto-mode);
     ausente = tudo manual (comportamento default).
@@ -347,6 +348,11 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
     workspace_base = Path(workspace_base)
     ferramentas = ferramentas or {}
     perfil_execucao = "rascunho" if perfil_execucao == "rascunho" else "certificado"
+    executaveis_permitidos = {
+        Path(executavel).name
+        for executavel in (ferramentas_permitidas or [])
+        if str(executavel).strip()
+    }
 
     def run_id_de(state: EstadoMotor) -> str:
         return state.get("run_id") or f"{datetime.now():%Y%m%d-%H%M%S}-{uuid4().hex[:6]}"
@@ -628,6 +634,12 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         if not partes or shutil.which(partes[0]) is None:
             executavel = partes[0] if partes else ""
             motivo = f"executável ausente: {executavel}"
+            log.evento("ferramenta.indisponivel", ferramenta=nome_ferramenta, motivo=motivo)
+            return {"resultados": [{"id": sub["id"], "saida": "", "tentativas": 1,
+                                    "aprovado": False, "motivo": motivo}]}
+        executavel = Path(partes[0]).name
+        if executaveis_permitidos and executavel not in executaveis_permitidos:
+            motivo = f"executável não permitido: {executavel}"
             log.evento("ferramenta.indisponivel", ferramenta=nome_ferramenta, motivo=motivo)
             return {"resultados": [{"id": sub["id"], "saida": "", "tentativas": 1,
                                     "aprovado": False, "motivo": motivo}]}

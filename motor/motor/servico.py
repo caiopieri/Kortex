@@ -21,7 +21,7 @@ from .eventos_schema import SCHEMA_VERSAO
 from .grafo import construir_grafo
 from .modelos import ClienteModelo
 from .politica import PoliticaGates
-from .registro import ferramentas_de_registro, rotas_de_registro
+from .registro import ferramentas_de_registro, ferramentas_permitidas_de_registro, rotas_de_registro
 
 
 PADRAO_JOB_ID = re.compile(r"^[A-Za-z0-9._-]+$")
@@ -30,6 +30,14 @@ PADRAO_JOB_ID = re.compile(r"^[A-Za-z0-9._-]+$")
 def _validar_job_id(job_id: str) -> None:
     if not PADRAO_JOB_ID.fullmatch(job_id):
         raise ValueError("job_id inválido")
+
+
+def _lista_str(valor: Any) -> list[str]:
+    if not valor:
+        return []
+    if isinstance(valor, list):
+        return [str(item) for item in valor if str(item).strip()]
+    return [str(valor)]
 
 
 class GerenciadorJobs:
@@ -50,6 +58,9 @@ class GerenciadorJobs:
         self._cliente = cliente
         self.ferramentas = (ferramentas if ferramentas is not None else
                             ferramentas_de_registro(self.dir_registro) if self.dir_registro else {})
+        self.ferramentas_permitidas = _lista_str((cfg_modelos or {}).get("ferramentas_permitidas"))
+        if not self.ferramentas_permitidas and self.dir_registro:
+            self.ferramentas_permitidas = ferramentas_permitidas_de_registro(self.dir_registro)
         self.rotas = rotas_de_registro(self.dir_registro) if self.dir_registro else {}
         self._jobs: dict[str, dict[str, Any]] = {}
         self._lock = threading.RLock()
@@ -165,6 +176,7 @@ class GerenciadorJobs:
                 politica=self.politica,
                 workspace_base=self.workspace_base,
                 ferramentas=self.ferramentas,
+                ferramentas_permitidas=self.ferramentas_permitidas,
                 rotas=self.rotas,
             )
             resultado = grafo.invoke(entrada, self._config(job_id))
@@ -189,6 +201,7 @@ class GerenciadorJobs:
             politica=self.politica,
             workspace_base=self.workspace_base,
             ferramentas=self.ferramentas,
+            ferramentas_permitidas=self.ferramentas_permitidas,
             rotas=self.rotas,
         )
         try:

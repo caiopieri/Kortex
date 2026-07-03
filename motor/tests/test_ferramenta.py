@@ -7,11 +7,12 @@ try:
 except ImportError:
     from langgraph.checkpoint.memory import MemorySaver as InMemorySaver
 
+from motor import __main__ as cli
 from motor.eventos import LogEventos
 from motor.grafo import construir_grafo
 from motor.modelos import ClienteStub
 from motor.politica import PoliticaGates
-from motor.registro import ferramentas_de_registro
+from motor.registro import ferramentas_de_registro, ferramentas_permitidas_de_registro
 
 
 def _tool_sub(nome="fake", entradas=None) -> dict:
@@ -48,7 +49,7 @@ def _script(tmp_path, nome: str, corpo: str) -> Path:
     return caminho
 
 
-def _rodar(tmp_path, spec: dict, ferramentas: dict):
+def _rodar(tmp_path, spec: dict, ferramentas: dict, ferramentas_permitidas=None):
     def roteador(papel: str, prompt: str):
         if papel == "evaluator":
             return json.dumps({"aprovado": True, "lacunas": []})
@@ -64,6 +65,7 @@ def _rodar(tmp_path, spec: dict, ferramentas: dict):
         politica=PoliticaGates(overrides={"plano": "prosseguir", "cobertura": "prosseguir"}),
         workspace_base=tmp_path / "runs",
         ferramentas=ferramentas,
+        ferramentas_permitidas=ferramentas_permitidas,
     )
     resultado = grafo.invoke({"spec": spec}, {"configurable": {"thread_id": "ferramenta"}})
     eventos = [
@@ -256,6 +258,85 @@ def test_ferramenta_nao_registrada_ou_executavel_ausente_falha_explicita(tmp_pat
     assert any(e["evento"] == "ferramenta.indisponivel" for e in eventos_sem_exec)
 
 
+def test_ferramenta_bloqueia_executavel_fora_da_allowlist_sem_subprocess(tmp_path, monkeypatch):
+    def subprocess_proibido(*args, **kwargs):
+        raise AssertionError("subprocess.run não deveria ser chamado")
+
+    monkeypatch.setattr("motor.grafo.subprocess.run", subprocess_proibido)
+    ferramentas = {"fake": {"comando": "bash -c 'echo nao-roda'", "interpreta_saida": "exit_code"}}
+
+    resultado, eventos = _rodar(
+        tmp_path,
+        _spec(_tool_sub()),
+        ferramentas,
+        ferramentas_permitidas=["python3"],
+    )
+
+    item = resultado["resultados"][0]
+    assert item["aprovado"] is False
+    assert item["motivo"] == "executável não permitido: bash"
+    assert any(
+        e["evento"] == "ferramenta.indisponivel"
+        and e["motivo"] == "executável não permitido: bash"
+        for e in eventos
+    )
+
+
+def test_ferramenta_allowlist_permite_executavel_configurado(tmp_path):
+    script = _script(tmp_path, "ok.py", "print('ok')\n")
+    ferramentas = {"fake": {"comando": f"{sys.executable} {script}", "interpreta_saida": "exit_code"}}
+
+    resultado, _ = _rodar(
+        tmp_path,
+        _spec(_tool_sub()),
+        ferramentas,
+        ferramentas_permitidas=[Path(sys.executable).name],
+    )
+
+    assert resultado["resultados"][0]["aprovado"] is True
+    assert resultado["resultados"][0]["saida"] == "ok"
+
+
+def test_ferramenta_allowlist_ausente_mantem_comportamento_atual(tmp_path):
+    script = _script(tmp_path, "ok.py", "print('ok')\n")
+    ferramentas = {"fake": {"comando": f"{sys.executable} {script}", "interpreta_saida": "exit_code"}}
+
+    resultado, _ = _rodar(tmp_path, _spec(_tool_sub()), ferramentas)
+
+    assert resultado["resultados"][0]["aprovado"] is True
+
+
+def test_cli_propaga_ferramentas_permitidas_da_config(tmp_path, monkeypatch):
+    spec_path = tmp_path / "spec.json"
+    spec_path.write_text(json.dumps(_spec(_tool_sub())), encoding="utf-8")
+    cfg_path = tmp_path / "modelos.json"
+    cfg_path.write_text(json.dumps({"ferramentas_permitidas": ["python3"]}), encoding="utf-8")
+    capturado = {}
+
+    class LogFake:
+        def __init__(self, caminho):
+            self.caminho = caminho
+
+        def fechar(self):
+            pass
+
+    class GrafoFake:
+        def invoke(self, entrada, config):
+            return {"resposta_final": "ok"}
+
+    def construir_fake(*args, **kwargs):
+        capturado["ferramentas_permitidas"] = kwargs.get("ferramentas_permitidas")
+        return GrafoFake()
+
+    monkeypatch.setattr(sys, "argv", ["motor", "--modelos", str(cfg_path), "--spec", str(spec_path)])
+    monkeypatch.setattr(cli, "LogEventos", LogFake)
+    monkeypatch.setattr(cli, "construir_cliente", lambda *args, **kwargs: ClienteStub(lambda p, prompt: "ok"))
+    monkeypatch.setattr(cli, "construir_grafo", construir_fake)
+
+    assert cli.main() == 0
+    assert capturado["ferramentas_permitidas"] == ["python3"]
+
+
 def test_ferramenta_que_escreve_arquivo_registra_ref(tmp_path):
     script = _script(
         tmp_path,
@@ -288,6 +369,7 @@ def test_ferramentas_de_registro_carrega_entidade_md(tmp_path):
             "nome: fake",
             f"comando: \"{sys.executable} {script}\"",
             "interpreta_saida: exit_code",
+            "ferramentas_permitidas: [python3, pytest]",
             "produz: [{\"nome\":\"saida.txt\",\"tipo\":\"txt\",\"de_placeholder\":\"saida\"}]",
             "---",
             "Ferramenta fake.",
@@ -299,3 +381,4 @@ def test_ferramentas_de_registro_carrega_entidade_md(tmp_path):
 
     assert ferramentas["fake"]["interpreta_saida"] == "exit_code"
     assert ferramentas["fake"]["produz"][0]["nome"] == "saida.txt"
+    assert ferramentas_permitidas_de_registro(tmp_path) == ["python3", "pytest"]

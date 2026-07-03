@@ -43,7 +43,12 @@ from .caixa import CaixaFundador, rodar_com_caixa
 from .eventos import LogEventos
 from .grafo import construir_grafo
 from .modelos import ClienteClaudeCLI, ClienteModelo, ProvedorIndisponivel, cliente_de_config
-from .registro import cliente_de_registro, ferramentas_de_registro, rotas_de_registro
+from .registro import (
+    cliente_de_registro,
+    ferramentas_de_registro,
+    ferramentas_permitidas_de_registro,
+    rotas_de_registro,
+)
 
 
 def _merge_cfg(base: dict, over: dict) -> dict:
@@ -53,6 +58,14 @@ def _merge_cfg(base: dict, over: dict) -> dict:
     for k, v in over.items():
         out[k] = {**out[k], **v} if isinstance(v, dict) and isinstance(out.get(k), dict) else v
     return out
+
+
+def _lista_str(valor) -> list[str]:
+    if not valor:
+        return []
+    if isinstance(valor, list):
+        return [str(item) for item in valor if str(item).strip()]
+    return [str(valor)]
 
 
 def construir_cliente(cfg_modelos: dict | None, dir_registro: str | None,
@@ -196,6 +209,9 @@ def main() -> int:
     log = LogEventos(raiz / "log.jsonl")
     config = {"configurable": {"thread_id": "cli"}}
     ferramentas = ferramentas_de_registro(dir_registro) if dir_registro is not None else {}
+    ferramentas_permitidas = _lista_str((cfg_modelos or {}).get("ferramentas_permitidas"))
+    if not ferramentas_permitidas and dir_registro is not None:
+        ferramentas_permitidas = ferramentas_permitidas_de_registro(dir_registro)
     if cfg_modelos and cfg_modelos.get("pins") and not (
         "provedores" in cfg_modelos or "base_url" in cfg_modelos
     ):
@@ -227,7 +243,8 @@ def main() -> int:
                                 rota=rota, rotas=rotas,
                                 escalar_em_retry=escalar_em_retry,
                                 max_rodadas_reconciliacao=max_rodadas_reconciliacao,
-                                perfil_execucao=perfil_execucao)
+                                perfil_execucao=perfil_execucao,
+                                ferramentas_permitidas=ferramentas_permitidas)
         caixa = CaixaFundador(dir_caixa, log)
         resultado = rodar_com_caixa(grafo, entrada, config, caixa, log)
         conn.close()
@@ -238,7 +255,8 @@ def main() -> int:
                                 rota=rota, rotas=rotas,
                                 escalar_em_retry=escalar_em_retry,
                                 max_rodadas_reconciliacao=max_rodadas_reconciliacao,
-                                perfil_execucao=perfil_execucao)
+                                perfil_execucao=perfil_execucao,
+                                ferramentas_permitidas=ferramentas_permitidas)
         resultado = grafo.invoke(entrada, config)
         while "__interrupt__" in resultado:  # gate do fundador
             pedido = resultado["__interrupt__"][0].value
