@@ -73,22 +73,36 @@ def _eventos_observador():
     ]
 
 
-def _eventos_modelo(papel, tier, modelo, aprovados, total, latencia=5.0, inicio=0.0, prefixo="exec"):
+def _eventos_modelo(
+    papel,
+    tier,
+    modelo,
+    aprovados,
+    total,
+    latencia=5.0,
+    inicio=0.0,
+    prefixo="exec",
+    template=None,
+    versao_template=None,
+):
     eventos = []
     t = inicio
     for i in range(total):
         executor = f"{prefixo}-{i}"
-        eventos.append(
-            {
-                "t": t,
-                "evento": "executor.chamado",
-                "executor": executor,
-                "papel": papel,
-                "tier": tier,
-                "tentativa": 1,
-                "modelo": modelo,
-            }
-        )
+        chamado = {
+            "t": t,
+            "evento": "executor.chamado",
+            "executor": executor,
+            "papel": papel,
+            "tier": tier,
+            "tentativa": 1,
+            "modelo": modelo,
+        }
+        if template is not None:
+            chamado["template"] = template
+        if versao_template is not None:
+            chamado["versao_template"] = versao_template
+        eventos.append(chamado)
         eventos.append({"t": t + latencia, "evento": "executor.respondeu", "executor": executor, "tentativa": 1})
         if i < aprovados:
             eventos.append({"t": t + latencia + 0.1, "evento": "portao.aprovado", "portao": f"verifier:{executor}", "ciclo": 1})
@@ -311,6 +325,48 @@ def test_analisar_agrega_por_slot_modelo(tmp_path):
     assert set(perfil["por_slot_modelo"]) == {"arquiteto/complexa", "especificador/media"}
     assert perfil["por_slot_modelo"]["especificador/media"]["kimi"]["verifier_julgados"] == 1
     assert perfil["por_slot_modelo"]["arquiteto/complexa"]["codex"]["verifier_aprovados_primeira"] == 1
+
+
+def test_analisar_agrega_por_template_versao_e_desconhecido(tmp_path):
+    log = _jsonl(
+        tmp_path,
+        "templates.jsonl",
+        [
+            *_eventos_modelo(
+                "executor",
+                "simples",
+                "modelo-a",
+                1,
+                1,
+                inicio=0.0,
+                prefixo="v1",
+                template="pesquisa",
+                versao_template="v1",
+            ),
+            *_eventos_modelo(
+                "executor",
+                "simples",
+                "modelo-a",
+                0,
+                1,
+                inicio=20.0,
+                prefixo="v2",
+                template="pesquisa",
+                versao_template="v2",
+            ),
+            *_eventos_modelo("executor", "simples", "modelo-a", 1, 1, inicio=40.0, prefixo="sem-template"),
+        ],
+    )
+
+    perfil = analisar([log])
+
+    assert set(perfil["por_template_versao"]) == {"desconhecido", "pesquisa@v1", "pesquisa@v2"}
+    assert perfil["por_template_versao"]["pesquisa@v1"]["taxa_aprovacao_primeira"] == 1.0
+    assert perfil["por_template_versao"]["pesquisa@v2"]["reprovacoes"] == 1
+    assert perfil["por_template_versao"]["desconhecido"]["chamadas"] == 1
+    markdown = formatar_markdown(perfil)
+    assert "## Aptidao por template/versao" in markdown
+    assert "- pesquisa@v1:" in markdown
 
 
 def test_propor_ranqueia_desempata_e_respeita_amostras(tmp_path):

@@ -60,6 +60,7 @@ def analisar(
         "por_papel_tier": por_papel_tier,
         "por_modelo": por_modelo,
         "por_slot_modelo": por_slot_modelo,
+        "por_template_versao": agregador.finalizar_template_versao(),
         "custo": _LedgerCusto(precos).consumir_runs(runs),
         "runs": [_analisar_run(run) for run in runs],
     }
@@ -101,6 +102,25 @@ def formatar_markdown(perfil: dict[str, Any]) -> str:
         m, lat = modelos[modelo], modelos[modelo]["latencia"]
         linhas.append(
             f"- {modelo}: chamadas {m['chamadas']}, respostas {m['respostas']}, "
+            f"erros {m['erros']} ({_pct(m['taxa_erro'])}), "
+            f"incompletas {m['incompletas']} ({_pct(m['taxa_incompletas'])}), "
+            f"falhas internas {m['falhas_internas']}, "
+            f"aprovacao verifier 1a tentativa {_pct(m['taxa_aprovacao_primeira'])}, "
+            f"reprovacoes {m['reprovacoes']}, escaladas {m['escaladas']} "
+            f"(convergencia {_pct(m['taxa_convergencia_pos_escalada'])}), "
+            f"latencia mediana {_seg(lat['mediana'])}, p90 {_seg(lat['p90'])}"
+        )
+        if m["amostras_motivos"]:
+            linhas.append(f"  motivos: {'; '.join(m['amostras_motivos'])}")
+
+    linhas += ["", "## Aptidao por template/versao"]
+    templates = perfil["por_template_versao"]
+    if not templates:
+        linhas.append("- sem eventos agregaveis")
+    for template_versao in sorted(templates):
+        m, lat = templates[template_versao], templates[template_versao]["latencia"]
+        linhas.append(
+            f"- {template_versao}: chamadas {m['chamadas']}, respostas {m['respostas']}, "
             f"erros {m['erros']} ({_pct(m['taxa_erro'])}), "
             f"incompletas {m['incompletas']} ({_pct(m['taxa_incompletas'])}), "
             f"falhas internas {m['falhas_internas']}, "
@@ -358,6 +378,7 @@ class _Agregador:
         self.por_papel_tier: dict[str, dict[str, dict[str, Any]]] = defaultdict(lambda: defaultdict(_metricas))
         self.por_modelo: dict[str, dict[str, Any]] = defaultdict(_metricas)
         self.por_slot_modelo: dict[tuple[str, str, str], dict[str, Any]] = defaultdict(_metricas)
+        self.por_template_versao: dict[str, dict[str, Any]] = defaultdict(_metricas)
 
     def consumir_runs(
         self,
@@ -396,6 +417,7 @@ class _Agregador:
                     "papel": papel,
                     "tier": tier,
                     "modelo": modelo,
+                    "template_versao": _template_versao(ev),
                     "t": tempo,
                 }
                 chamadas[(executor, tentativa)] = info
@@ -421,6 +443,7 @@ class _Agregador:
                     "papel": papel,
                     "tier": tier_por_papel.get(papel, SEM_TIER),
                     "modelo": _str(ev.get("modelo")) or modelo_por_papel.get(papel, DESCONHECIDO),
+                    "template_versao": _template_versao(ev),
                 }
                 self._inc(info, "falhas_internas")
             elif tipo == "executor.escalado":
@@ -482,12 +505,22 @@ class _Agregador:
             saida[slot][modelo] = _finalizar_metricas(self.por_slot_modelo[(papel, tier, modelo)])
         return saida
 
-    def _metricas(self, info: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    def finalizar_template_versao(self) -> dict[str, dict[str, Any]]:
+        return {
+            template_versao: _finalizar_metricas(self.por_template_versao[template_versao])
+            for template_versao in sorted(self.por_template_versao)
+        }
+
+    def _metricas(
+        self,
+        info: dict[str, Any],
+    ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]]:
         modelo = info.get("modelo") or DESCONHECIDO
         return (
             self.por_papel_tier[info["papel"]][info["tier"]],
             self.por_modelo[modelo],
             self.por_slot_modelo[(info["papel"], info["tier"], modelo)],
+            self.por_template_versao[info.get("template_versao") or DESCONHECIDO],
         )
 
     def _inc(self, info: dict[str, Any], campo: str) -> None:
@@ -828,6 +861,14 @@ def _perfil_run(eventos: list[dict[str, Any]]) -> str:
         if ev.get("evento") == "run.perfil":
             return "rascunho" if ev.get("perfil") == "rascunho" else "certificado"
     return "certificado"
+
+
+def _template_versao(ev: dict[str, Any]) -> str:
+    template = _str(ev.get("template"))
+    versao = _str(ev.get("versao_template"))
+    if not template or not versao:
+        return DESCONHECIDO
+    return f"{template}@{versao}"
 
 
 def _adicionar_run(

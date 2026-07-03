@@ -354,6 +354,15 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
     def workspace_de(state: EstadoMotor) -> Path:
         return workspace_base / state["run_id"] / "artefatos"
 
+    def _template_evento(spec: dict[str, Any]) -> dict[str, str]:
+        missao = spec.get("missao") or {}
+        dados = {}
+        if missao.get("template"):
+            dados["template"] = str(missao["template"])
+        if missao.get("versao_template"):
+            dados["versao_template"] = str(missao["versao_template"])
+        return dados
+
     def _descricao_modelo(papel: str, tier: str | None = None,
                           ferramentas: str | None = None,
                           capacidades: list[str] | None = None) -> str | None:
@@ -520,7 +529,8 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                        modelo=_descricao_modelo(
                            sub["papel"], tier_atual, sub.get("ferramentas"),
                            capacidades=sub.get("capacidades_requeridas"),
-                       ))
+                       ),
+                       **_template_evento(spec))
             prompt_subagente = contexto_rag + PROMPT_SUBAGENTE.format(
                 id=sub["id"], papel=sub["papel"],
                 missao_objetivo=missao["objetivo"], missao_contexto=missao["contexto"],
@@ -784,7 +794,8 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
             if not r["aprovado"]
         ]
         log.evento("executor.chamado", executor="global_evaluator",
-                   modelo=_descricao_modelo("evaluator"))
+                   modelo=_descricao_modelo("evaluator"),
+                   **_template_evento(spec))
         veredito = extrai_json(cliente.chamar("evaluator", PROMPT_EVALUATOR.format(
             missao_objetivo=spec["missao"]["objetivo"],
             criterios="\n".join(f"- {c}" for c in spec["missao"]["criterios_cobertura"]),
@@ -926,7 +937,8 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
     def sintetizar(state: EstadoMotor) -> dict:
         spec = state["spec"]
         log.evento("executor.chamado", executor="synthesizer",
-                   modelo=_descricao_modelo("synthesizer"))
+                   modelo=_descricao_modelo("synthesizer"),
+                   **_template_evento(spec))
         resposta = cliente.chamar("synthesizer", PROMPT_SYNTHESIZER.format(
             missao_objetivo=spec["missao"]["objetivo"],
             instrucao=spec["sintese"]["instrucao"], formato=spec["sintese"]["formato"],

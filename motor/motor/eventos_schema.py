@@ -55,7 +55,7 @@ ESQUEMA: dict[str, dict[str, Any]] = {
     },
     "executor.chamado": {
         "categoria": "ciclo",
-        "campos": ["executor", "papel", "tier", "tentativa", "modelo"],
+        "campos": ["executor", "papel", "tier", "tentativa", "modelo", "template", "versao_template"],
         "descricao": "Sinaliza início de chamada a executor, planner, avaliador ou sintetizador.",
     },
     "executor.erro": {

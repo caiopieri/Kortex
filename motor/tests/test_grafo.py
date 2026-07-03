@@ -788,6 +788,20 @@ def test_executor_chamado_loga_modelo_resolvido_com_roteador(tmp_path):
     assert next(e for e in chamados if e["executor"] == "synthesizer")["modelo"] == "nv-qwen/qwen/qwen3-coder"
 
 
+def test_executor_chamado_carrega_template_versao_quando_presentes(tmp_path):
+    spec = json.loads(json.dumps(_spec_um_subagente(max_tentativas=1)))
+    spec["missao"]["template"] = "pesquisa"
+    spec["missao"]["versao_template"] = "v3"
+
+    _, _, _, _ = roda(tmp_path, faz_roteador(), {"spec": spec})
+
+    chamados = [e for e in eventos_de(tmp_path) if e["evento"] == "executor.chamado"]
+    assert next(e for e in chamados if e["executor"] == spec["subagentes"][0]["id"])["template"] == "pesquisa"
+    assert next(e for e in chamados if e["executor"] == spec["subagentes"][0]["id"])["versao_template"] == "v3"
+    assert next(e for e in chamados if e["executor"] == "global_evaluator")["template"] == "pesquisa"
+    assert next(e for e in chamados if e["executor"] == "synthesizer")["versao_template"] == "v3"
+
+
 def test_executor_chamado_modelo_none_com_cliente_single_sem_identidade(tmp_path):
     _, _, _, _ = roda(tmp_path, faz_roteador(), {"spec": _spec_um_subagente(max_tentativas=1)})
 

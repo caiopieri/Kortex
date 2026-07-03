@@ -62,6 +62,8 @@ class Missao(BaseModel):
     objetivo: str = Field(min_length=1)
     contexto: str = ""
     criterios_cobertura: list[str] = Field(min_length=1, description="o que precisa estar coberto antes da síntese")
+    template: Optional[str] = Field(default=None, description="nome do template de workflow que originou a missão")
+    versao_template: Optional[str] = Field(default=None, description="versão do template de workflow usado")
 
 
 class Sintese(BaseModel):

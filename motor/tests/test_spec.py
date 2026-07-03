@@ -19,6 +19,18 @@ def test_exemplo_valido():
     assert WorkflowSpec.model_validate(spec.model_dump()).model_dump() == spec.model_dump()
 
 
+def test_missao_aceita_template_e_versao_template_opcionais():
+    com_template = json.loads(json.dumps(EXEMPLO))
+    com_template["missao"]["template"] = "pesquisa"
+    com_template["missao"]["versao_template"] = "v2"
+
+    spec = WorkflowSpec.model_validate(com_template)
+
+    assert spec.missao.template == "pesquisa"
+    assert spec.missao.versao_template == "v2"
+    assert WorkflowSpec.model_validate(EXEMPLO).missao.template is None
+
+
 def test_versao_nao_suportada():
     ruim = {**EXEMPLO, "versao": "9.9"}
     with pytest.raises(ValidationError, match="não suportada"):
