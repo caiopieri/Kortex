@@ -1,0 +1,30 @@
+{
+  "versao": "0.1",
+  "padrao": "grafo_dependencias",
+  "missao": {"id": "especialista-csv-json", "objetivo": "Converter CSV pequeno de pedido em JSON com totais por linha.", "contexto": "Experimento item 13: especialista barato+RAG contra generalista topo sem RAG.", "criterios_cobertura": ["schema_json aprovado"]},
+  "restricoes": {"teto_custo": 2.0, "max_subagentes": 2, "max_tentativas": 1},
+  "subagentes": [
+    {
+      "id": "transformador-csv-json", "tipo": "modelo", "papel": "executor",
+      "objetivo": "Converta o CSV em JSON. Responda APENAS o array JSON, sem markdown.",
+      "entradas": {"csv": "sku,nome,quantidade,preco_unitario\nA-001,Cabo USB-C,3,19.90\nB-002,Mouse sem fio,1,89.50\nC-003,Suporte notebook,2,149.00", "regras": ["quantidade inteiro", "preco_unitario numero", "total = quantidade * preco_unitario", "preserve a ordem"]},
+      "resultado_esperado": "Array JSON com sku, nome, quantidade, preco_unitario e total.",
+      "rubrica": ["retorna JSON parseavel", "preserva o CSV", "converte numericos", "calcula total"],
+      "fonte_rag": "exemplos/rag-csv-json-transformador.jsonl", "rag_k": 3, "tier": "simples", "capacidades_requeridas": ["codigo"]
+    },
+    {
+      "id": "valida-csv-json", "tipo": "validador", "valida": "transformador-csv-json",
+      "validador": {"kind": "schema_json", "config": {"schema": {
+        "type": "array", "minItems": 3, "maxItems": 3,
+        "prefixItems": [
+          {"type": "object", "required": ["sku", "nome", "quantidade", "preco_unitario", "total"], "additionalProperties": false, "properties": {"sku": {"const": "A-001"}, "nome": {"const": "Cabo USB-C"}, "quantidade": {"const": 3}, "preco_unitario": {"const": 19.9}, "total": {"const": 59.7}}},
+          {"type": "object", "required": ["sku", "nome", "quantidade", "preco_unitario", "total"], "additionalProperties": false, "properties": {"sku": {"const": "B-002"}, "nome": {"const": "Mouse sem fio"}, "quantidade": {"const": 1}, "preco_unitario": {"const": 89.5}, "total": {"const": 89.5}}},
+          {"type": "object", "required": ["sku", "nome", "quantidade", "preco_unitario", "total"], "additionalProperties": false, "properties": {"sku": {"const": "C-003"}, "nome": {"const": "Suporte notebook"}, "quantidade": {"const": 2}, "preco_unitario": {"const": 149.0}, "total": {"const": 298.0}}}
+        ]
+      }}},
+      "objetivo": "Validar mecanicamente a conversao.", "entradas": {}, "resultado_esperado": "Veredito schema_json.", "depende_de": ["transformador-csv-json"]
+    }
+  ],
+  "gates": [],
+  "sintese": {"instrucao": "Retorne somente o JSON validado.", "formato": "json"}
+}

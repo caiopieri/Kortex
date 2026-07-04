@@ -1,0 +1,5 @@
+{
+  "_comentario": "Tabela manual do experimento item 13. Os tokens sao estimados localmente por caracteres/4 para CLIs sem usage real; estes valores nao sao fatura do provedor.",
+  "codex/gpt-5.4-mini": {"in_por_1k": 0.00025, "out_por_1k": 0.002},
+  "claude": {"in_por_1k": 0.003, "out_por_1k": 0.015}
+}
