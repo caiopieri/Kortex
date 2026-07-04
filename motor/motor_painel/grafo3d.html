@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Meta-fabrica v0.5 - grafo 3D</title>
+<link rel="preconnect" href="https://unpkg.com">
+<script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+<script src="https://unpkg.com/3d-force-graph@1.73.4/dist/3d-force-graph.min.js"></script>
+<style>
+  :root{
+    --bg:#060708;--surface:#121417;--surface2:#17191D;--border:#26292E;--focus:#3E434A;
+    --text:#E8E6E1;--text2:#8A8F98;--text3:#5A5F66;--amber:#E8A33D;--green:#30A46C;--blue:#3E63DD;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+  #root{position:fixed;inset:0;background:radial-gradient(circle at 50% 50%,#101319 0,#060708 58%,#030405 100%)}
+  #graph{position:absolute;inset:0}
+  .hud{position:absolute;left:0;right:0;z-index:3;display:flex;align-items:center;gap:14px;padding:12px 22px;pointer-events:none}
+  .hud>*{pointer-events:auto}
+  .top{top:0}.bottom{bottom:0}
+  .eyebrow,.pill,.legend,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  .eyebrow{font-size:10px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:var(--text3)}
+  .title{font-size:14px;font-weight:650;letter-spacing:.1px;color:var(--text)}
+  .pill{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:5px 9px;border:1px solid var(--border);border-radius:2px;background:rgba(11,12,14,.74);color:var(--text2);font-size:10px;font-weight:700;letter-spacing:.9px;text-transform:uppercase;text-decoration:none;cursor:pointer;backdrop-filter:blur(5px)}
+  .pill.on{color:var(--text);border-color:var(--focus);background:rgba(23,25,29,.88)}
+  .pill.amber{color:var(--amber);border-color:var(--amber)}
+  .legend{display:inline-flex;align-items:center;gap:6px;font-size:9.5px;letter-spacing:.45px;text-transform:uppercase;color:var(--text2);white-space:nowrap}
+  .dot{width:8px;height:8px;border-radius:50%;flex:none}
+  .corner{position:absolute;width:14px;height:14px;border-color:var(--focus);border-style:solid;border-width:0;z-index:4;pointer-events:none}
+  .card{position:absolute;right:20px;top:64px;width:min(300px,calc(100vw - 40px));z-index:4;display:none;flex-direction:column;gap:8px;padding:13px;background:rgba(18,20,23,.93);border:1px solid var(--border);border-radius:2px;backdrop-filter:blur(7px)}
+  .card.open{display:flex}
+  .card .node-id{font-size:16px;font-weight:650;line-height:1.25;overflow-wrap:anywhere}
+  .mono{font-size:10.5px;color:var(--text2);line-height:1.5}
+  input[type=range]{-webkit-appearance:none;width:110px;height:2px;background:var(--border);outline:none}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:10px;height:10px;border-radius:50%;background:var(--amber);cursor:pointer}
+  .status-line{font-size:10px}
+  .spacer{flex:1}
+  .divider{width:1px;height:16px;background:var(--border)}
+  @media (max-width:820px){
+    .top{align-items:flex-start}.top .legend{display:none}.title{font-size:12px}.bottom{flex-wrap:wrap;padding-bottom:14px}.card{top:88px}
+  }
+</style>
+</head>
+<body>
+<div id="root">
+  <div class="corner" style="left:12px;top:12px;border-left-width:1px;border-top-width:1px"></div>
+  <div class="corner" style="right:12px;top:12px;border-right-width:1px;border-top-width:1px"></div>
+  <div class="corner" style="left:12px;bottom:12px;border-left-width:1px;border-bottom-width:1px"></div>
+  <div class="corner" style="right:12px;bottom:12px;border-right-width:1px;border-bottom-width:1px"></div>
+
+  <div class="hud top">
+    <a class="pill" href="/">← 2D</a>
+    <div style="display:flex;flex-direction:column;gap:2px">
+      <span class="eyebrow">Mapa geral · 3D · ao vivo</span>
+      <span class="title" id="summary">carregando sinal do motor</span>
+    </div>
+    <div class="spacer"></div>
+    <span class="legend"><span class="dot" style="background:#3E63DD"></span>motor/executor</span>
+    <span class="legend"><span class="dot" style="background:#E8E6E1"></span>subagente</span>
+    <span class="legend"><span class="dot" style="background:#30A46C"></span>portão aprovado</span>
+    <span class="legend"><span class="dot" style="background:#E8A33D"></span>precisa de você</span>
+    <span class="legend"><span class="dot" style="background:#5A5F66"></span>sem evento recente</span>
+  </div>
+
+  <div id="graph"></div>
+
+  <div class="card" id="nodeCard">
+    <span class="eyebrow" id="cardType"></span>
+    <span class="node-id" id="cardId"></span>
+    <span class="mono" id="cardEvent"></span>
+    <span class="mono status-line" id="cardStatus"></span>
+    <button class="pill" id="closeCard" type="button" style="align-self:flex-start;margin-top:4px">fechar</button>
+  </div>
+
+  <div class="hud bottom">
+    <button class="pill" id="togglePhysics" type="button">⏸ pausar física</button>
+    <button class="pill on" id="toggleFlow" type="button">⚡ fluxo</button>
+    <div class="divider"></div>
+    <span class="eyebrow">arestas</span>
+    <input id="linkOpacity" type="range" min="0.05" max="0.6" step="0.05" value="0.25">
+    <div class="spacer"></div>
+    <span class="mono" id="counts">nós 0 · arestas 0 · fluxo só onde há run ativo</span>
+  </div>
+</div>
+
+<script>
+const RECENT_WINDOW = 24;
+const COLORS = {
+  blue: "#3E63DD",
+  white: "#E8E6E1",
+  green: "#30A46C",
+  amber: "#E8A33D",
+  gray: "#5A5F66",
+  border: "#26292E"
+};
+
+let Graph = null;
+let graphData = {nodes: [], links: []};
+let selectedNode = null;
+let flowEnabled = true;
+let physicsPaused = false;
+let linkOpacity = 0.25;
+
+const els = {
+  graph: document.getElementById("graph"),
+  summary: document.getElementById("summary"),
+  counts: document.getElementById("counts"),
+  card: document.getElementById("nodeCard"),
+  cardType: document.getElementById("cardType"),
+  cardId: document.getElementById("cardId"),
+  cardEvent: document.getElementById("cardEvent"),
+  cardStatus: document.getElementById("cardStatus"),
+  togglePhysics: document.getElementById("togglePhysics"),
+  toggleFlow: document.getElementById("toggleFlow"),
+  linkOpacity: document.getElementById("linkOpacity"),
+  closeCard: document.getElementById("closeCard")
+};
+
+function eventTargets(ev) {
+  const out = [];
+  if (ev.executor) out.push(String(ev.executor));
+  if (ev.portao) out.push(String(ev.portao));
+  if (Array.isArray(ev.subagentes)) ev.subagentes.forEach(id => out.push(String(id)));
+  if (ev.evento === "escalado" || String(ev.evento || "").startsWith("decisao.")) out.push("fundador");
+  if (String(ev.evento || "").startsWith("spec.") || String(ev.evento || "").startsWith("tarefa.")) out.push("motor");
+  return out;
+}
+
+function eventLabel(ev) {
+  if (!ev) return "sem evento registrado";
+  const meta = Object.entries(ev)
+    .filter(([k]) => !["t", "evento"].includes(k))
+    .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
+    .join(" ");
+  const t = ev.t !== undefined && Number.isFinite(Number(ev.t)) ? `${Number(ev.t).toFixed(2)}s` : "tempo n/d";
+  return `${t} · ${ev.evento || "evento"}${meta ? " · " + meta : ""}`;
+}
+
+function deriveState(payload) {
+  const events = Array.isArray(payload.eventos) ? payload.eventos : [];
+  const recent = events.slice(-RECENT_WINDOW);
+  const lastByNode = new Map();
+  const lastPortaoByNode = new Map();
+  const lastFundadorNeed = new Map();
+  const recentNodes = new Set();
+  events.forEach(ev => {
+    eventTargets(ev).forEach(id => lastByNode.set(id, ev));
+    if ((ev.evento === "portao.aprovado" || ev.evento === "portao.reprovado") && ev.portao) {
+      lastPortaoByNode.set(String(ev.portao), ev);
+    }
+    if (ev.evento === "decisao.pendente" || ev.evento === "escalado") {
+      lastFundadorNeed.set("fundador", ev);
+    }
+  });
+  recent.forEach(ev => eventTargets(ev).forEach(id => recentNodes.add(id)));
+
+  const nodes = (payload.nos || []).map(node => {
+    const last = lastByNode.get(node.id) || null;
+    const portaoStatus = lastPortaoByNode.get(node.id) || null;
+    const fundadorNeed = lastFundadorNeed.get(node.id) || null;
+    const recentHit = recentNodes.has(node.id);
+    const statusEvent = portaoStatus || fundadorNeed || last;
+    const evName = statusEvent ? String(statusEvent.evento || "") : "";
+    let status = recentHit ? "ativo" : "sem evento recente";
+    let color = recentHit ? colorForType(node.tipo) : COLORS.gray;
+
+    if (node.id === "motor") {
+      color = COLORS.blue;
+      status = events.length ? "observando log real" : "sem eventos";
+    }
+    if (node.tipo === "portao" && evName === "portao.aprovado") {
+      color = COLORS.green;
+      status = "portão aprovado";
+    }
+    if (node.tipo === "portao" && evName === "portao.reprovado") {
+      color = COLORS.amber;
+      status = "portão reprovado";
+    }
+    if (node.id === "fundador" && (evName === "decisao.pendente" || evName === "escalado")) {
+      color = COLORS.amber;
+      status = "precisa de você";
+    }
+    return {...node, lastEvent: last, status, color, recent: recentHit};
+  });
+
+  const byId = new Map(nodes.map(n => [n.id, n]));
+  const links = (payload.arestas || []).map(link => {
+    const target = String(link.para);
+    return {source: String(link.de), target, live: recentNodes.has(target)};
+  });
+  return {nodes, links, events, byId};
+}
+
+function colorForType(tipo) {
+  if (tipo === "nucleo" || tipo === "executor") return COLORS.blue;
+  if (tipo === "subagente") return COLORS.white;
+  if (tipo === "portao") return COLORS.green;
+  if (tipo === "decisor") return COLORS.amber;
+  return COLORS.gray;
+}
+
+function glowSprite(hex, size) {
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = 128;
+  const ctx = canvas.getContext("2d");
+  const grad = ctx.createRadialGradient(64, 64, 4, 64, 64, 64);
+  grad.addColorStop(0, hex);
+  grad.addColorStop(0.25, hex + "cc");
+  grad.addColorStop(0.58, hex + "33");
+  grad.addColorStop(1, hex + "00");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 128, 128);
+  const tex = new THREE.CanvasTexture(canvas);
+  const mat = new THREE.SpriteMaterial({map: tex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending});
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(size, size, 1);
+  return sprite;
+}
+
+function nodeObject(node) {
+  const group = new THREE.Group();
+  const radius = node.tipo === "nucleo" ? 5.4 : node.tipo === "subagente" ? 3.6 : 4.2;
+  const core = new THREE.Mesh(
+    new THREE.SphereGeometry(radius, 28, 28),
+    new THREE.MeshBasicMaterial({color: node.color})
+  );
+  group.add(core);
+  group.add(glowSprite(node.color, node.recent || node.id === "motor" ? radius * 8 : radius * 4));
+  return group;
+}
+
+function ensureGraph() {
+  if (Graph || typeof ForceGraph3D === "undefined") return;
+  Graph = ForceGraph3D()(els.graph)
+    .width(window.innerWidth)
+    .height(window.innerHeight)
+    .backgroundColor("#060708")
+    .showNavInfo(false)
+    .nodeLabel(n => `<div style="font-family:ui-monospace,Menlo,monospace;font-size:10px;letter-spacing:.4px;color:#E8E6E1;background:rgba(11,12,14,.88);border:1px solid #3E434A;padding:4px 7px;border-radius:2px">${n.id} · ${n.tipo}</div>`)
+    .nodeThreeObject(nodeObject)
+    .linkColor(l => l.live ? COLORS.blue : COLORS.border)
+    .linkOpacity(linkOpacity)
+    .linkWidth(l => l.live ? 0.7 : 0.25)
+    .linkDirectionalParticles(l => l.live && flowEnabled ? 3 : 0)
+    .linkDirectionalParticleSpeed(0.004)
+    .linkDirectionalParticleWidth(1.5)
+    .linkDirectionalParticleColor(() => COLORS.amber)
+    .onNodeClick(n => showNode(n))
+    .onBackgroundClick(() => hideNode())
+    .graphData(graphData);
+  Graph.d3Force("charge").strength(-155);
+}
+
+function applyGraph(payload) {
+  const derived = deriveState(payload);
+  graphData = {nodes: derived.nodes, links: derived.links};
+  ensureGraph();
+  if (Graph) {
+    Graph.graphData(graphData)
+      .linkOpacity(linkOpacity)
+      .linkDirectionalParticles(l => l.live && flowEnabled ? 3 : 0);
+    if (physicsPaused) Graph.pauseAnimation();
+  }
+  els.summary.textContent = `${derived.nodes.length} nós · ${derived.links.length} arestas · ${derived.events.length} eventos reais`;
+  els.counts.innerHTML = `nós <b style="color:var(--text)">${derived.nodes.length}</b> · arestas <b style="color:var(--text)">${derived.links.length}</b> · fluxo só onde há run ativo`;
+  if (selectedNode) {
+    const node = derived.byId.get(selectedNode.id);
+    node ? showNode(node) : hideNode();
+  }
+}
+
+async function refresh() {
+  try {
+    const res = await fetch("/dados", {cache: "no-store"});
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    applyGraph(await res.json());
+  } catch (err) {
+    els.summary.textContent = `sem sinal de /dados · ${err.message}`;
+    applyGraph({nos: [], arestas: [], eventos: []});
+  }
+}
+
+function showNode(node) {
+  selectedNode = node;
+  els.card.classList.add("open");
+  els.cardType.textContent = node.tipo || "?";
+  els.cardId.textContent = node.id || "?";
+  els.cardEvent.textContent = eventLabel(node.lastEvent);
+  els.cardStatus.textContent = node.status || "sem status";
+  els.cardStatus.style.color = node.color || COLORS.gray;
+}
+
+function hideNode() {
+  selectedNode = null;
+  els.card.classList.remove("open");
+}
+
+els.closeCard.addEventListener("click", hideNode);
+els.togglePhysics.addEventListener("click", () => {
+  physicsPaused = !physicsPaused;
+  els.togglePhysics.className = physicsPaused ? "pill amber" : "pill";
+  els.togglePhysics.textContent = physicsPaused ? "▶ retomar" : "⏸ pausar física";
+  if (Graph) physicsPaused ? Graph.pauseAnimation() : Graph.resumeAnimation();
+});
+els.toggleFlow.addEventListener("click", () => {
+  flowEnabled = !flowEnabled;
+  els.toggleFlow.className = flowEnabled ? "pill on" : "pill";
+  if (Graph) Graph.linkDirectionalParticles(l => l.live && flowEnabled ? 3 : 0);
+});
+els.linkOpacity.addEventListener("input", event => {
+  linkOpacity = Number(event.target.value);
+  if (Graph) Graph.linkOpacity(linkOpacity);
+});
+window.addEventListener("resize", () => {
+  if (Graph) Graph.width(window.innerWidth).height(window.innerHeight);
+});
+
+refresh();
+setInterval(refresh, 3000);
+</script>
+</body>
+</html>

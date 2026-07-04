@@ -25,6 +25,7 @@ import os
 import sys
 import http.server
 import socketserver
+from urllib.parse import urlparse
 from pathlib import Path
 
 PORTA = 8378
@@ -158,6 +159,7 @@ def dados_painel(log_path: str | Path | None = None) -> dict:
 # ---------------------------------------------------------------------------
 
 HTML_PATH = BASE / "painel.html"
+GRAFO3D_HTML_PATH = BASE / "grafo3d.html"
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -182,11 +184,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
-        if self.path == "/dados":
+        path = urlparse(self.path).path
+        if path == "/dados":
             return self._json(dados_painel(self.log_path))
-        if self.path == "/healthz":
+        if path == "/healthz":
             return self._json({"ok": True})
-        html = HTML_PATH.read_bytes()
+        html = GRAFO3D_HTML_PATH.read_bytes() if path == "/grafo3d" else HTML_PATH.read_bytes()
         self._html(html)
 
 

@@ -13,6 +13,9 @@ import json
 import sys
 from pathlib import Path
 import importlib
+import socketserver
+import threading
+import urllib.request
 
 import pytest
 
@@ -222,3 +225,63 @@ def test_dados_painel_estrutura(tmp_path):
 def test_dados_painel_sem_log(tmp_path):
     d = dados_painel(tmp_path / "inexistente.jsonl")
     assert d == {"nos": [{"id": "motor", "tipo": "nucleo"}], "arestas": [], "eventos": []}
+
+
+# ---------------------------------------------------------------------------
+# Rotas HTTP
+# ---------------------------------------------------------------------------
+
+class _TCPServerTeste(socketserver.TCPServer):
+    allow_reuse_address = True
+
+
+def _http_get(path: str, log_path: Path) -> tuple[int, str, str]:
+    painel.Handler.log_path = log_path
+    with _TCPServerTeste(("127.0.0.1", 0), painel.Handler) as server:
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with urllib.request.urlopen(
+                f"http://127.0.0.1:{server.server_address[1]}{path}",
+                timeout=3,
+            ) as resp:
+                body = resp.read().decode("utf-8")
+                content_type = resp.headers.get("Content-Type", "")
+                return resp.status, content_type, body
+        finally:
+            server.shutdown()
+            thread.join(timeout=3)
+
+
+def test_rota_grafo3d_responde_html_com_forcegraph(tmp_path):
+    log = tmp_path / "log.jsonl"
+    log.write_text(
+        json.dumps({"t": 0.0, "evento": "spec.recebida", "missao": "x"}) + "\n",
+        encoding="utf-8",
+    )
+
+    status, content_type, body = _http_get("/grafo3d", log)
+
+    assert status == 200
+    assert "text/html" in content_type
+    assert "ForceGraph3D" in body
+    assert "fetch(\"/dados\"" in body
+
+
+def test_rotas_dados_e_painel_2d_intactas(tmp_path):
+    log = tmp_path / "log.jsonl"
+    log.write_text(
+        json.dumps({"t": 0.0, "evento": "paralelo.iniciado", "subagentes": ["a"]}) + "\n",
+        encoding="utf-8",
+    )
+
+    status_dados, content_type_dados, body_dados = _http_get("/dados", log)
+    status_home, content_type_home, body_home = _http_get("/", log)
+
+    payload = json.loads(body_dados)
+    assert status_dados == 200
+    assert "application/json" in content_type_dados
+    assert payload["nos"]
+    assert status_home == 200
+    assert "text/html" in content_type_home
+    assert "Meta-fábrica v0.5" in body_home
