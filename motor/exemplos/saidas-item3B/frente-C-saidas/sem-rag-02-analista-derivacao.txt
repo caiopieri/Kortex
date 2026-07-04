@@ -1,0 +1,1 @@
+{"fase_c_pilares":["prevenção (rota de dependência em ondas)","escalada de tier","reconciliação na fonte em loop bounded"],"selo_validador_honesto":"Este selo mostra o que foi checado por este validador e a evidência usada.","nao_deve_prometer":"verdade objetiva geral ou garantia absoluta de acerto"}

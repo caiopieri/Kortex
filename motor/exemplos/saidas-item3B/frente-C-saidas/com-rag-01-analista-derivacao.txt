@@ -1,0 +1,1 @@
+{"fase_c_pilares":["Flywheel de especialistas (curador)","Camada de dados / conhecimento","Medição de custo"],"selo_validador_honesto":"Checado por validador determinístico: esta saída passou na regra/campo/teste indicado.","nao_deve_prometer":"Não promete verdade objetiva; só conformidade com a checagem executada."}

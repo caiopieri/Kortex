@@ -123,6 +123,7 @@ def _resumir(resultado):
         "id": r.get("id"),
         "aprovado": bool(r.get("aprovado")),
         "motivo": r.get("motivo", "ok" if r.get("aprovado") else "sem motivo"),
+        "saida": r.get("saida", ""),
     } for r in resultado.get("resultados", [])]
     validadores = [
         validador
@@ -152,17 +153,19 @@ def executar_rodada(spec, cliente, log_path, thread_id, workspace_base):
         log.fechar()
 
 
-def _rodar_condicao(nome, spec, repeticoes, cliente_factory, workspace):
-    rodadas = [
-        executar_rodada(
+def _rodar_condicao(nome, spec, repeticoes, cliente_factory, workspace, dump_saidas=None):
+    rodadas = []
+    for i in range(1, repeticoes + 1):
+        rodada = executar_rodada(
             spec,
             cliente_factory(),
             workspace / f"{nome}-{i}.jsonl",
             f"experimento-rag-{nome}-{i}",
             workspace / "runs",
         )
-        for i in range(1, repeticoes + 1)
-    ]
+        rodadas.append(rodada)
+        if dump_saidas:
+            _dump_saidas_rodada(rodada, dump_saidas, nome, i)
     aprovadas = sum(1 for r in rodadas if r["aprovado"])
     validadores_por_kind = _resumir_validadores_por_kind(rodadas)
     return {"nome": nome, "aprovadas": aprovadas, "repeticoes": repeticoes,
@@ -173,6 +176,16 @@ def _rodar_condicao(nome, spec, repeticoes, cliente_factory, workspace):
                 {"aprovadas": 0, "repeticoes": 0, "taxa_aprovacao": None},
             ),
             "rodadas": rodadas}
+
+
+def _dump_saidas_rodada(rodada, destino, condicao, repeticao):
+    destino = Path(destino)
+    destino.mkdir(parents=True, exist_ok=True)
+    for sub in rodada.get("subagentes", []):
+        if not sub.get("id") or sub.get("saida") is None:
+            continue
+        nome = f"{_slug(condicao)}-{repeticao:02d}-{_slug(sub['id'])}.txt"
+        (destino / nome).write_text(str(sub.get("saida", "")), encoding="utf-8")
 
 
 def _resumir_validadores_por_kind(rodadas):
@@ -198,23 +211,23 @@ def _resumir_validadores_por_kind(rodadas):
     return resumo
 
 
-def rodar_experimento(spec, *, fonte_rag, repeticoes, cliente_factory, workspace_base):
+def rodar_experimento(spec, *, fonte_rag, repeticoes, cliente_factory, workspace_base, dump_saidas=None):
     if repeticoes < 1:
         raise ValueError("--repeticoes precisa ser >= 1")
     workspace = Path(workspace_base)
     workspace.mkdir(parents=True, exist_ok=True)
     return {
         "sem_rag": _rodar_condicao(
-            "sem-rag", preparar_spec(spec, fonte_rag, False), repeticoes, cliente_factory, workspace
+            "sem-rag", preparar_spec(spec, fonte_rag, False), repeticoes, cliente_factory, workspace, dump_saidas
         ),
         "com_rag": _rodar_condicao(
-            "com-rag", preparar_spec(spec, fonte_rag, True), repeticoes, cliente_factory, workspace
+            "com-rag", preparar_spec(spec, fonte_rag, True), repeticoes, cliente_factory, workspace, dump_saidas
         ),
         "workspace": str(workspace),
     }
 
 
-def rodar_condicao_unica(spec, *, fonte_rag, repeticoes, cliente_factory, workspace_base, com_rag):
+def rodar_condicao_unica(spec, *, fonte_rag, repeticoes, cliente_factory, workspace_base, com_rag, dump_saidas=None):
     if repeticoes < 1:
         raise ValueError("--repeticoes precisa ser >= 1")
     workspace = Path(workspace_base)
@@ -223,7 +236,7 @@ def rodar_condicao_unica(spec, *, fonte_rag, repeticoes, cliente_factory, worksp
     chave = "com_rag" if com_rag else "sem_rag"
     return {
         chave: _rodar_condicao(
-            nome, preparar_spec(spec, fonte_rag, com_rag), repeticoes, cliente_factory, workspace
+            nome, preparar_spec(spec, fonte_rag, com_rag), repeticoes, cliente_factory, workspace, dump_saidas
         ),
         "workspace": str(workspace),
     }
@@ -303,6 +316,10 @@ def _parse_args(argv):
         help="diretorio para salvar o prompt cru de cada chamada ao cliente",
     )
     p.add_argument(
+        "--dump-saidas",
+        help="diretorio para salvar a saida crua de cada subagente por rodada",
+    )
+    p.add_argument(
         "--saida-json",
         help="arquivo para salvar o resultado bruto resumido do experimento em JSON",
     )
@@ -336,6 +353,7 @@ def main(argv=None):
             repeticoes=args.repeticoes,
             cliente_factory=cliente_factory,
             workspace_base=workspace,
+            dump_saidas=args.dump_saidas,
         )
     else:
         resultado = rodar_condicao_unica(
@@ -345,6 +363,7 @@ def main(argv=None):
             cliente_factory=cliente_factory,
             workspace_base=workspace,
             com_rag=args.condicao == "com-rag",
+            dump_saidas=args.dump_saidas,
         )
     if args.saida_json:
         Path(args.saida_json).parent.mkdir(parents=True, exist_ok=True)

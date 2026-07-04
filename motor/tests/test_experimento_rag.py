@@ -161,6 +161,34 @@ def test_experimento_roda_condicao_unica(tmp_path):
     assert "rodada 1: SEM RAG aprovado=False" in relatorio
 
 
+def test_experimento_dump_saidas_salva_saida_crua(tmp_path):
+    dataset = tmp_path / "dataset.jsonl"
+    dataset.write_text(
+        json.dumps({"id": "interno", "conteudo": "ownership move borrow token-rag"}) + "\n",
+        encoding="utf-8",
+    )
+
+    def roteador(papel: str, prompt: str):
+        if papel == "executor":
+            return "SAIDA CRUA DO EXECUTOR"
+        if papel == "verifier":
+            return json.dumps({"aprovado": True, "motivo": "ok"})
+        if papel == "evaluator":
+            return json.dumps({"aprovado": True, "lacunas": [], "nos_a_refazer": []})
+        if papel == "synthesizer":
+            return "FINAL"
+        raise AssertionError(f"papel inesperado: {papel}")
+
+    resultado = rodar_condicao_unica(
+        _spec_experimento(), fonte_rag=str(dataset), repeticoes=1,
+        cliente_factory=lambda: ClienteStub(roteador), workspace_base=tmp_path / "exp-dump",
+        com_rag=False, dump_saidas=tmp_path / "saidas",
+    )
+
+    assert resultado["sem_rag"]["rodadas"][0]["subagentes"][0]["saida"] == "SAIDA CRUA DO EXECUTOR"
+    assert (tmp_path / "saidas" / "sem-rag-01-rust.txt").read_text(encoding="utf-8") == "SAIDA CRUA DO EXECUTOR"
+
+
 def test_experimento_reporta_taxa_do_validador_schema_json(tmp_path):
     dataset = tmp_path / "dataset.jsonl"
     dataset.write_text(

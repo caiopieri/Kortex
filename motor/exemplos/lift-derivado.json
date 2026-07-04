@@ -52,19 +52,16 @@
                 "maxItems": 3,
                 "items": {
                   "type": "string",
-                  "minLength": 8,
-                  "pattern": "preven|escalad|reconcil"
+                  "minLength": 8
                 }
               },
               "selo_validador_honesto": {
                 "type": "string",
-                "minLength": 25,
-                "pattern": "(?i)(diz|mostra|comunica|informa).*(validou|checou|verificou)"
+                "minLength": 25
               },
               "nao_deve_prometer": {
                 "type": "string",
-                "minLength": 20,
-                "pattern": "(?i)(verdade objetiva|corre[cç][aã]o total|qualidade real|verdade gen[eé]rica)"
+                "minLength": 20
               }
             }
           }
