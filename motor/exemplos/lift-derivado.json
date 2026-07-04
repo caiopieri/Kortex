@@ -1,0 +1,84 @@
+{
+  "versao": "0.1",
+  "padrao": "grafo_dependencias",
+  "missao": {
+    "id": "lift-derivado",
+    "objetivo": "Medir se o RAG permite derivar uma resposta cruzando docs internos, nao apenas repetir jargoes.",
+    "contexto": "Experimento item 3 red-team: a resposta precisa combinar a descricao da Fase C nos docs de produto com a regra de honestidade visual do validador no brief de design.",
+    "criterios_cobertura": ["JSON validado por schema_json com campos derivados"]
+  },
+  "restricoes": {"teto_custo": 2.0, "max_subagentes": 2, "max_tentativas": 1},
+  "subagentes": [
+    {
+      "id": "analista-derivacao",
+      "tipo": "modelo",
+      "papel": "executor",
+      "objetivo": "Cruze os docs internos recuperados e responda APENAS JSON valido. Relacione os tres pilares da Fase C com a regra de UI que impede vender validador deterministico como verdade objetiva.",
+      "entradas": {
+        "pergunta": "Com base nos docs internos, quais sao os tres pilares da Fase C e qual texto honesto um selo de validador deve comunicar na interface?",
+        "formato_obrigatorio": {
+          "fase_c_pilares": ["string", "string", "string"],
+          "selo_validador_honesto": "string",
+          "nao_deve_prometer": "string"
+        }
+      },
+      "resultado_esperado": "Somente um objeto JSON. Os pilares devem vir dos docs de produto/motor. O selo deve expressar que o validador diz o que checou, e nao verdade objetiva generica.",
+      "rubrica": [
+        "retorna apenas JSON parseavel",
+        "combina informacao da Fase C com regra de honestidade do selo de validador",
+        "nao responde com lista solta de jargoes",
+        "nao promete verdade objetiva generica para validador deterministico"
+      ],
+      "fonte_rag": "exemplos/rag-docs-metafabrica.jsonl",
+      "rag_k": 12,
+      "tier": "media",
+      "capacidades_requeridas": ["redacao", "raciocinio-longo"]
+    },
+    {
+      "id": "valida-json-derivado",
+      "tipo": "validador",
+      "valida": "analista-derivacao",
+      "validador": {
+        "kind": "schema_json",
+        "config": {
+          "schema": {
+            "type": "object",
+            "required": ["fase_c_pilares", "selo_validador_honesto", "nao_deve_prometer"],
+            "additionalProperties": false,
+            "properties": {
+              "fase_c_pilares": {
+                "type": "array",
+                "minItems": 3,
+                "maxItems": 3,
+                "items": {
+                  "type": "string",
+                  "minLength": 8,
+                  "pattern": "preven|escalad|reconcil"
+                }
+              },
+              "selo_validador_honesto": {
+                "type": "string",
+                "minLength": 25,
+                "pattern": "(?i)(diz|mostra|comunica|informa).*(validou|checou|verificou)"
+              },
+              "nao_deve_prometer": {
+                "type": "string",
+                "minLength": 20,
+                "pattern": "(?i)(verdade objetiva|corre[cç][aã]o total|qualidade real|verdade gen[eé]rica)"
+              }
+            }
+          }
+        }
+      },
+      "objetivo": "Validar que a resposta estruturada contem os campos derivados esperados.",
+      "entradas": {},
+      "resultado_esperado": "Veredito schema_json sobre a resposta do analista.",
+      "depende_de": ["analista-derivacao"]
+    }
+  ],
+  "gates": [],
+  "sintese": {
+    "instrucao": "Sintetize somente o JSON validado.",
+    "formato": "json"
+  }
+}

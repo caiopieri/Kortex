@@ -124,6 +124,59 @@ def test_experimento_reporta_taxa_do_validador_contem(tmp_path):
     assert "contem SEM=False COM=True" in relatorio
 
 
+def test_experimento_reporta_taxa_do_validador_schema_json(tmp_path):
+    dataset = tmp_path / "dataset.jsonl"
+    dataset.write_text(
+        json.dumps({"id": "interno", "conteudo": "ownership move borrow responder JSON com status ok"}) + "\n",
+        encoding="utf-8",
+    )
+    spec = _spec_experimento()
+    spec["padrao"] = "grafo_dependencias"
+    spec["restricoes"]["max_subagentes"] = 2
+    spec["subagentes"].append({
+        "id": "valida-json",
+        "tipo": "validador",
+        "valida": "rust",
+        "validador": {
+            "kind": "schema_json",
+            "config": {
+                "schema": {
+                    "type": "object",
+                    "required": ["status"],
+                    "properties": {"status": {"const": "ok"}},
+                }
+            },
+        },
+        "objetivo": "Validar JSON",
+        "entradas": {},
+        "resultado_esperado": "Veredito",
+        "depende_de": ["rust"],
+    })
+
+    def roteador(papel: str, prompt: str):
+        if papel == "executor":
+            return '{"status":"ok"}' if "CONTEXTO RECUPERADO" in prompt else '{"status":"sem_rag"}'
+        if papel == "verifier":
+            return json.dumps({"aprovado": True, "motivo": "ok"})
+        if papel == "evaluator":
+            return json.dumps({"aprovado": True, "lacunas": [], "nos_a_refazer": []})
+        if papel == "synthesizer":
+            return "FINAL"
+        raise AssertionError(f"papel inesperado: {papel}")
+
+    resultado = rodar_experimento(
+        spec, fonte_rag=str(dataset), repeticoes=2,
+        cliente_factory=lambda: ClienteStub(roteador), workspace_base=tmp_path / "exp-schema",
+    )
+
+    assert resultado["sem_rag"]["validadores"]["schema_json"]["aprovadas"] == 0
+    assert resultado["com_rag"]["validadores"]["schema_json"]["aprovadas"] == 2
+    relatorio = formatar_relatorio(resultado)
+    assert "SEM RAG schema_json: 0/2 aprovadas" in relatorio
+    assert "COM RAG schema_json: 2/2 aprovadas" in relatorio
+    assert "schema_json SEM=False COM=True" in relatorio
+
+
 def test_cliente_metrica_deterministica_delega_so_executor():
     chamadas = []
 
@@ -181,3 +234,20 @@ def test_spec_lift_docs_metafabrica_valida():
     validador = next(sub for sub in validada.subagentes if sub.tipo == "validador")
     assert validador.validador["kind"] == "contem"
     assert validador.validador["config"]["min"] == 5
+
+
+def test_specs_item3_validam():
+    base = Path(__file__).resolve().parents[1] / "exemplos"
+    specs = [
+        base / "lift-controle-negativo.json",
+        base / "lift-derivado.json",
+    ]
+
+    validadas = [
+        WorkflowSpec.model_validate(json.loads(path.read_text(encoding="utf-8")))
+        for path in specs
+    ]
+
+    assert [spec.missao.id for spec in validadas] == ["lift-controle-negativo", "lift-derivado"]
+    assert validadas[0].subagentes[1].validador["kind"] == "contem"
+    assert validadas[1].subagentes[1].validador["kind"] == "schema_json"

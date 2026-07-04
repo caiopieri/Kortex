@@ -134,19 +134,38 @@ def _rodar_condicao(nome, spec, repeticoes, cliente_factory, workspace):
         for i in range(1, repeticoes + 1)
     ]
     aprovadas = sum(1 for r in rodadas if r["aprovado"])
-    rodadas_com_contem = [
-        [v for v in r.get("validadores", []) if v.get("kind") == "contem"]
-        for r in rodadas
-    ]
-    rodadas_com_contem = [validadores for validadores in rodadas_com_contem if validadores]
-    contem_aprovadas = sum(1 for validadores in rodadas_com_contem if all(v["aprovado"] for v in validadores))
+    validadores_por_kind = _resumir_validadores_por_kind(rodadas)
     return {"nome": nome, "aprovadas": aprovadas, "repeticoes": repeticoes,
             "taxa_aprovacao": aprovadas / repeticoes,
-            "contem": {"aprovadas": contem_aprovadas,
-                       "repeticoes": len(rodadas_com_contem),
-                       "taxa_aprovacao": (contem_aprovadas / len(rodadas_com_contem)
-                                          if rodadas_com_contem else None)},
+            "validadores": validadores_por_kind,
+            "contem": validadores_por_kind.get(
+                "contem",
+                {"aprovadas": 0, "repeticoes": 0, "taxa_aprovacao": None},
+            ),
             "rodadas": rodadas}
+
+
+def _resumir_validadores_por_kind(rodadas):
+    kinds = sorted({
+        v.get("kind")
+        for rodada in rodadas
+        for v in rodada.get("validadores", [])
+        if v.get("kind")
+    })
+    resumo = {}
+    for kind in kinds:
+        rodadas_com_kind = [
+            [v for v in rodada.get("validadores", []) if v.get("kind") == kind]
+            for rodada in rodadas
+        ]
+        rodadas_com_kind = [validadores for validadores in rodadas_com_kind if validadores]
+        aprovadas = sum(1 for validadores in rodadas_com_kind if all(v["aprovado"] for v in validadores))
+        resumo[kind] = {
+            "aprovadas": aprovadas,
+            "repeticoes": len(rodadas_com_kind),
+            "taxa_aprovacao": (aprovadas / len(rodadas_com_kind) if rodadas_com_kind else None),
+        }
+    return resumo
 
 
 def rodar_experimento(spec, *, fonte_rag, repeticoes, cliente_factory, workspace_base):
@@ -170,31 +189,42 @@ def formatar_relatorio(resultado):
         item = resultado[chave]
         return f"{rotulo}: {item['aprovadas']}/{item['repeticoes']} aprovadas ({item['taxa_aprovacao'] * 100:.0f}%)"
 
-    def linha_contem(chave, rotulo):
-        item = resultado[chave]["contem"]
+    def linha_validador(chave, rotulo, kind):
+        item = resultado[chave]["validadores"].get(kind)
+        if item is None and kind == "contem":
+            item = resultado[chave].get("contem")
         if item["taxa_aprovacao"] is None:
-            return f"{rotulo} contem: sem validador contem"
+            return f"{rotulo} {kind}: sem validador {kind}"
         return (
-            f"{rotulo} contem: {item['aprovadas']}/{item['repeticoes']} aprovadas "
+            f"{rotulo} {kind}: {item['aprovadas']}/{item['repeticoes']} aprovadas "
             f"({item['taxa_aprovacao'] * 100:.0f}%)"
         )
 
     linhas = [
         linha("sem_rag", "SEM RAG"),
         linha("com_rag", "COM RAG"),
-        linha_contem("sem_rag", "SEM RAG"),
-        linha_contem("com_rag", "COM RAG"),
-        f"logs: {resultado['workspace']}",
     ]
+    kinds = sorted(
+        set(resultado["sem_rag"].get("validadores", {})) |
+        set(resultado["com_rag"].get("validadores", {})) |
+        {"contem"}
+    )
+    for kind in kinds:
+        linhas.append(linha_validador("sem_rag", "SEM RAG", kind))
+        linhas.append(linha_validador("com_rag", "COM RAG", kind))
+    linhas.append(f"logs: {resultado['workspace']}")
     for i, (sem, com) in enumerate(zip(resultado["sem_rag"]["rodadas"], resultado["com_rag"]["rodadas"]), 1):
-        sem_contem = [v for v in sem.get("validadores", []) if v.get("kind") == "contem"]
-        com_contem = [v for v in com.get("validadores", []) if v.get("kind") == "contem"]
-        sem_contem_ok = all(v["aprovado"] for v in sem_contem) if sem_contem else None
-        com_contem_ok = all(v["aprovado"] for v in com_contem) if com_contem else None
+        status_validadores = []
+        for kind in kinds:
+            sem_validadores = [v for v in sem.get("validadores", []) if v.get("kind") == kind]
+            com_validadores = [v for v in com.get("validadores", []) if v.get("kind") == kind]
+            sem_ok = all(v["aprovado"] for v in sem_validadores) if sem_validadores else None
+            com_ok = all(v["aprovado"] for v in com_validadores) if com_validadores else None
+            status_validadores.append(f"{kind} SEM={sem_ok} COM={com_ok}")
         linhas.append(
             f"rodada {i}: SEM RAG aprovado={sem['aprovado']} motivo={sem['motivo']} | "
             f"COM RAG aprovado={com['aprovado']} motivo={com['motivo']} | "
-            f"contem SEM={sem_contem_ok} COM={com_contem_ok}"
+            f"{' | '.join(status_validadores)}"
         )
     return "\n".join(linhas)
 
