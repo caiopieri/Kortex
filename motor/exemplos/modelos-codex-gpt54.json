@@ -1,0 +1,17 @@
+{
+  "_comentario": "Generalista maior nao-Claude para matriz item 3B/E. Tudo no Codex gpt-5.4 para manter um modelo pinado por celula.",
+  "provedores": {
+    "codex": { "tipo": "codex" }
+  },
+  "tiers": {
+    "simples":  "codex/gpt-5.4",
+    "media":    "codex/gpt-5.4",
+    "complexa": "codex/gpt-5.4"
+  },
+  "pins": {
+    "planner":     "codex/gpt-5.4",
+    "verifier":    "codex/gpt-5.4",
+    "evaluator":   "codex/gpt-5.4",
+    "synthesizer": "codex/gpt-5.4"
+  }
+}
