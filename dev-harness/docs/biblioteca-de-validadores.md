@@ -96,6 +96,17 @@ você intercepta. Por isso o esquema de eventos motor→superfície (item do roa
 mesma coisa vista de dois lados: o validador produz a verdade; o evento a torna visível e interceptável.
 É o controle do Paperclip — e mais, porque aqui o que você vê não é só "agente fez", é "evidência passou".
 
+### Quando `contem` mede algo (anti-tautologia — aprendido no red-team item 3, 2026-07-04)
+
+1. O termo exigido deve ser **não-adivinhável** (nome próprio arbitrário, não palavra comum) e
+   **ausente de tudo que o executor vê** (pergunta, rubrica, contexto, feedback de retry).
+2. Se o termo está no contexto injetado (RAG/deps), `contem` mede **transporte de substring**, não
+   conhecimento. Isso ainda é útil (mede recuperação), mas nomeie a claim corretamente.
+3. Nunca alegue lift sem braço de controle SEM-fonte com **n≥5 e baseline estável** — um 0/3 de
+   amostra pequena é ruído, não piso.
+4. `schema_json` com `pattern` regex sobre **texto livre** é frágil (falso-reprova prosa correta);
+   regex só sobre valores mecânicos (IDs, enums, formatos).
+
 ## Onde isto pode dar errado
 
 - **Gate determinístico mal escrito vira falso conforto.** Teste que não testa, schema frouxo, SAST com
