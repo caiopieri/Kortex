@@ -24,6 +24,32 @@ from motor.politica import PoliticaGates
 from motor.spec import WorkflowSpec
 
 
+class ClienteDumpPrompts:
+    """Delegador que salva prompts crus antes de chamar o cliente real."""
+
+    def __init__(self, base, destino):
+        self.base = base
+        self.destino = Path(destino)
+        self.contadores = {}
+        self.destino.mkdir(parents=True, exist_ok=True)
+
+    def __getattr__(self, nome):
+        return getattr(self.base, nome)
+
+    def chamar(self, papel, prompt, **kwargs):
+        indice = self._proximo_indice(papel)
+        self.contadores[papel] = indice
+        nome = f"{_slug(papel)}-{indice:02d}.txt"
+        (self.destino / nome).write_text(prompt, encoding="utf-8")
+        return self.base.chamar(papel, prompt, **kwargs)
+
+    def _proximo_indice(self, papel):
+        indice = self.contadores.get(papel, 0) + 1
+        while (self.destino / f"{_slug(papel)}-{indice:02d}.txt").exists():
+            indice += 1
+        return indice
+
+
 class ClienteMetricaDeterministica:
     """Delegador que mede o executor + validadores sem depender de juiz/sintese LLM."""
 
@@ -41,6 +67,10 @@ class ClienteMetricaDeterministica:
         if papel == "synthesizer":
             return "FINAL"
         return self.base.chamar(papel, prompt, **kwargs)
+
+
+def _slug(valor):
+    return "".join(c if c.isalnum() or c in "-_" else "-" for c in str(valor)).strip("-") or "papel"
 
 
 def carregar_spec(path):
@@ -242,6 +272,10 @@ def _parse_args(argv):
         action="store_true",
         help="usa modelo real so nos executores; verifier/evaluator/synthesizer viram respostas neutras",
     )
+    p.add_argument(
+        "--dump-prompts",
+        help="diretorio para salvar o prompt cru de cada chamada ao cliente",
+    )
     return p.parse_args(argv)
 
 
@@ -252,6 +286,8 @@ def main(argv=None):
 
     def cliente_factory():
         cliente = construir_cliente(cfg, args.registro)
+        if args.dump_prompts:
+            cliente = ClienteDumpPrompts(cliente, args.dump_prompts)
         if args.somente_metrica_deterministica:
             return ClienteMetricaDeterministica(cliente)
         return cliente

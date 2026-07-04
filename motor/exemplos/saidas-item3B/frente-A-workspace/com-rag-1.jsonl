@@ -1,0 +1,19 @@
+{"t": 0.027, "evento": "run.perfil", "perfil": "certificado"}
+{"t": 0.027, "evento": "spec.recebida", "missao": "lift-controle-negativo", "subagentes": 2}
+{"t": 0.028, "evento": "gate.auto", "portao": "plano", "decisao": "prosseguir"}
+{"t": 0.029, "evento": "grafo_dep.iniciado", "subagentes": ["especialista-docs", "valida-jargao-metafabrica"]}
+{"t": 0.029, "evento": "onda.iniciada", "ids": ["especialista-docs"]}
+{"t": 0.029, "evento": "rag.consultado", "subagente": "especialista-docs", "fonte": "exemplos/rag-controle-negativo-jargoes.jsonl", "k": 2, "recuperados": 2, "ids": ["negativo-1", "negativo-2"]}
+{"t": 0.029, "evento": "executor.chamado", "executor": "especialista-docs", "papel": "executor", "tier": "media", "tentativa": 1, "modelo": "codex/gpt-5.4-mini"}
+{"t": 72.246, "evento": "executor.respondeu", "executor": "especialista-docs", "tentativa": 1}
+{"t": 72.246, "evento": "portao.aprovado", "portao": "verifier:especialista-docs", "ciclo": 1}
+{"t": 72.246, "evento": "onda.concluida", "ids": ["especialista-docs"]}
+{"t": 72.246, "evento": "onda.iniciada", "ids": ["valida-jargao-metafabrica"]}
+{"t": 72.246, "evento": "aresta.fluxo", "de": "especialista-docs", "para": "valida-jargao-metafabrica"}
+{"t": 72.246, "evento": "validador.rodou", "id": "valida-jargao-metafabrica", "alvo": "especialista-docs", "kind": "contem", "aprovado": true, "motivo": "contem aprovado"}
+{"t": 72.247, "evento": "onda.concluida", "ids": ["valida-jargao-metafabrica"]}
+{"t": 72.248, "evento": "paralelo.concluido", "commitados": 2}
+{"t": 72.249, "evento": "executor.chamado", "executor": "global_evaluator", "modelo": "codex/gpt-5.4-mini"}
+{"t": 72.249, "evento": "portao.aprovado", "portao": "cobertura"}
+{"t": 72.25, "evento": "executor.chamado", "executor": "synthesizer", "modelo": "codex/gpt-5.4-mini"}
+{"t": 72.25, "evento": "tarefa.concluida", "missao": "lift-controle-negativo"}

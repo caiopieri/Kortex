@@ -4,7 +4,12 @@ from pathlib import Path
 from motor.modelos import ClienteStub
 from motor.spec import WorkflowSpec
 from scripts.docs_para_rag import gerar_registros
-from scripts.experimento_rag import ClienteMetricaDeterministica, formatar_relatorio, rodar_experimento
+from scripts.experimento_rag import (
+    ClienteDumpPrompts,
+    ClienteMetricaDeterministica,
+    formatar_relatorio,
+    rodar_experimento,
+)
 
 
 def _spec_experimento() -> dict:
@@ -196,6 +201,29 @@ def test_cliente_metrica_deterministica_delega_so_executor():
     assert json.loads(cliente.chamar("evaluator", "prompt"))["aprovado"] is True
     assert cliente.chamar("synthesizer", "prompt") == "FINAL"
     assert chamadas == [("executor", "prompt")]
+
+
+def test_cliente_dump_prompts_salva_prompt_cru(tmp_path):
+    cliente = ClienteDumpPrompts(ClienteStub(lambda papel, prompt: f"ok {papel}"), tmp_path)
+
+    assert cliente.chamar("executor", "PROMPT 1") == "ok executor"
+    assert cliente.chamar("executor", "PROMPT 2") == "ok executor"
+    assert cliente.chamar("verifier:abc", "PROMPT 3") == "ok verifier:abc"
+
+    assert (tmp_path / "executor-01.txt").read_text(encoding="utf-8") == "PROMPT 1"
+    assert (tmp_path / "executor-02.txt").read_text(encoding="utf-8") == "PROMPT 2"
+    assert (tmp_path / "verifier-abc-01.txt").read_text(encoding="utf-8") == "PROMPT 3"
+
+
+def test_cliente_dump_prompts_nao_sobrescreve_entre_instancias(tmp_path):
+    primeiro = ClienteDumpPrompts(ClienteStub(lambda papel, prompt: "ok"), tmp_path)
+    segundo = ClienteDumpPrompts(ClienteStub(lambda papel, prompt: "ok"), tmp_path)
+
+    primeiro.chamar("executor", "SEM RAG")
+    segundo.chamar("executor", "COM RAG")
+
+    assert (tmp_path / "executor-01.txt").read_text(encoding="utf-8") == "SEM RAG"
+    assert (tmp_path / "executor-02.txt").read_text(encoding="utf-8") == "COM RAG"
 
 
 def test_spec_rag_rust_ownership_valida():
