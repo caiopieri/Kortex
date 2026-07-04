@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import argparse
+import os
 import json
+import shutil
 import sys
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
 REPO = Path(__file__).parent.parent
+PROJECT_ROOT = REPO.parent
 sys.path.insert(0, str(REPO))
 
 from motor.__main__ import construir_cliente
@@ -18,6 +22,34 @@ from scripts.experimento_especialista import carregar_json, carregar_spec, execu
 
 def _factory_modelos(cfg: dict[str, Any]):
     return lambda: construir_cliente(cfg, None)
+
+
+def _assert_cwd_fora_repo(cwd: Path) -> Path:
+    resolvido = cwd.resolve()
+    repo = PROJECT_ROOT.resolve()
+    if resolvido == repo or resolvido.is_relative_to(repo):
+        raise ValueError(f"cwd isolado esta dentro do repo: {resolvido}")
+    return resolvido
+
+
+@contextmanager
+def _chdir(path: Path):
+    anterior = Path.cwd()
+    os.chdir(path)
+    try:
+        yield
+    finally:
+        os.chdir(anterior)
+
+
+def _preparar_cwd_celula(nome: str, fonte_rag: str | None) -> tuple[Path, str | None, list[str]]:
+    cwd = _assert_cwd_fora_repo(Path(tempfile.mkdtemp(prefix=f"item3B-{nome}-")))
+    fonte_para_spec = None
+    if fonte_rag is not None:
+        destino = cwd / "fonte.jsonl"
+        shutil.copyfile(Path(fonte_rag).resolve(), destino)
+        fonte_para_spec = destino.name
+    return cwd, fonte_para_spec, sorted(item.name for item in cwd.iterdir())
 
 
 def rodar_matriz(
@@ -31,29 +63,32 @@ def rodar_matriz(
     workspace_base: str | Path,
     precos: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    workspace = Path(workspace_base)
+    workspace = Path(workspace_base).resolve()
     workspace.mkdir(parents=True, exist_ok=True)
     modelos = [
         ("pequeno", pequeno_modelos),
         ("generalista", generalista_modelos),
     ]
     rags = [("sem_rag", None), ("com_rag", fonte_rag)]
-    resultado: dict[str, Any] = {"workspace": str(workspace), "celulas": {}}
+    resultado: dict[str, Any] = {"workspace": str(workspace), "celulas": {}, "isolamento": {}}
     for modelo_nome, cfg in modelos:
         for rag_nome, fonte in rags:
             nome = f"{modelo_nome}_{rag_nome}"
-            spec_celula = preparar_spec(spec, alvo, fonte)
+            cwd, fonte_para_spec, conteudo_cwd = _preparar_cwd_celula(nome, fonte)
+            spec_celula = preparar_spec(spec, alvo, fonte_para_spec)
             logs = [workspace / f"{nome}-{i}.jsonl" for i in range(1, repeticoes + 1)]
             factory = _factory_modelos(cfg)
-            rodadas = [
-                executar(
-                    spec_celula,
-                    factory,
-                    logs[i - 1],
-                    workspace / "runs",
-                )
-                for i in range(1, repeticoes + 1)
-            ]
+            resultado["isolamento"][nome] = {"cwd": str(cwd), "ls": conteudo_cwd}
+            with _chdir(cwd):
+                rodadas = [
+                    executar(
+                        spec_celula,
+                        factory,
+                        logs[i - 1],
+                        workspace / "runs",
+                    )
+                    for i in range(1, repeticoes + 1)
+                ]
             resultado["celulas"][nome] = resumir(nome, rodadas, logs, precos)
     return resultado
 
@@ -72,6 +107,11 @@ def formatar_relatorio(resultado: dict[str, Any]) -> str:
             f"{item['latencia_p90_s']:.3f}s |"
         )
     linhas += ["", f"logs: {resultado['workspace']}"]
+    if resultado.get("isolamento"):
+        linhas += ["", "| celula | cwd | ls |", "| --- | --- | --- |"]
+        for chave in ["pequeno_sem_rag", "pequeno_com_rag", "generalista_sem_rag", "generalista_com_rag"]:
+            info = resultado["isolamento"][chave]
+            linhas.append(f"| {chave} | {info['cwd']} | {', '.join(info['ls']) or '(vazio)'} |")
     for chave in ["pequeno_sem_rag", "pequeno_com_rag", "generalista_sem_rag", "generalista_com_rag"]:
         for i, rodada in enumerate(resultado["celulas"][chave]["rodadas"], 1):
             vals = ",".join(f"{v['kind']}={v['aprovado']}" for v in rodada["validadores"])

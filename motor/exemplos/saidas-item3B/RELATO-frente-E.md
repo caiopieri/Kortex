@@ -1,5 +1,7 @@
 # Item 3B - Frente E - matriz 2x2 especialista pequeno
 
+Corrigido em 2026-07-04. O relato anterior desta frente foi suspenso porque a coleta não estava isolada de forma auditável. A versão abaixo é a reprodução com isolamento estrutural no script.
+
 Data dos runs: 2026-07-04
 
 Modelos/provedores sob teste:
@@ -7,7 +9,7 @@ Modelos/provedores sob teste:
 - Pequeno: `codex/gpt-5.4-mini`
 - Generalista maior nao-Claude: `codex/gpt-5.4`
 
-Todos os runs foram executados em cwd temporario fora do repo; nos bracos COM RAG, o cwd continha apenas a copia do JSONL usado como fonte.
+Todos os runs foram executados em cwd temporario fora do repo; o script imprime e valida esse cwd por célula. Nos bracos COM RAG, o cwd continha apenas a copia do JSONL usado como fonte.
 
 Nota de custo: os tokens sao estimados localmente por caracteres/4 via `ClienteUsoEstimado`. USD so foi calculado para `codex/gpt-5.4-mini`, porque `exemplos/precos-especialista-ab.json` nao tem preco local para `codex/gpt-5.4`.
 
@@ -31,33 +33,42 @@ Rodadas cruas:
 
 Leitura: o pequeno passa ate SEM RAG. Nesta tarefa, o ganho do item 13 nao pode ser atribuido a RAG; e roteamento por tier/modelo em tarefa mecanica.
 
-## Tarefa 2 - fatos nao-adivinhaveis (`lift-v3-fatos.json`)
+## Tarefa 2 - fatos nao-adivinhaveis (`lift-v3-fatos.json`, isolada)
 
 | celula | aprovacao | latencia p50 | latencia p90 | tokens/run | prompt/run | completion/run | USD/run |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| pequeno SEM RAG | 5/5 | 28.988s | 41.870s | 353 | 322 | 31 | 0.00014250 |
-| pequeno COM RAG | 5/5 | 29.760s | 44.510s | 3086 | 3040 | 46 | 0.00085200 |
-| generalista SEM RAG | 5/5 | 19.982s | 26.961s | 346 | 322 | 24 | n/d |
-| generalista COM RAG | 2/5 | 20.434s | 314.264s | 3078 | 3040 | 38 | n/d |
+| pequeno SEM RAG | 0/5 | 45.809s | 303.389s | 353 | 322 | 31 | 0.00014250 |
+| pequeno COM RAG | 2/5 | 47.107s | 396.022s | 3086 | 3040 | 46 | 0.00085200 |
+| generalista SEM RAG | 0/5 | 40.676s | 44.082s | 346 | 322 | 24 | n/d |
+| generalista COM RAG | 0/5 | 36.452s | 52.175s | 3078 | 3040 | 38 | n/d |
 
 Rodadas cruas:
 
 | celula | r1 | r2 | r3 | r4 | r5 |
 |---|---:|---:|---:|---:|---:|
-| pequeno SEM RAG | ok 41.870s | ok 25.380s | ok 28.680s | ok 33.727s | ok 28.988s |
-| pequeno COM RAG | ok 43.297s | ok 27.053s | ok 23.576s | ok 44.510s | ok 29.760s |
-| generalista SEM RAG | ok 26.106s | ok 26.961s | ok 18.703s | ok 19.982s | ok 18.726s |
-| generalista COM RAG | falha 314.264s | ok 31.278s | falha 12.423s | ok 20.434s | falha 16.272s |
+| pequeno SEM RAG | falha 303.389s | falha 40.398s | falha 47.107s | falha 45.809s | falha 44.900s |
+| pequeno COM RAG | falha 35.510s | falha 47.107s | ok 49.455s | ok 396.022s | falha 35.424s |
+| generalista SEM RAG | falha 40.247s | falha 39.319s | falha 41.519s | falha 40.676s | falha 44.082s |
+| generalista COM RAG | falha 33.725s | falha 36.146s | falha 52.175s | falha 36.646s | falha 36.452s |
 
-Nas falhas do `generalista COM RAG`, o validador `contem` registrou `presentes 0/4` e faltantes: `auto_esgotar`, `aresta.fluxo`, `custo.tick`, `sem_secrets_no_diff`, `teste_permissao_cross_tenant`.
+Evidência de isolamento por célula:
+
+| celula | cwd | ls |
+| --- | --- | --- |
+| pequeno SEM RAG | `/private/var/folders/k8/pp6b77px7xx16bx55wd3mkz40000gn/T/item3B-pequeno_sem_rag-8v4ikgyg` | `(vazio)` |
+| pequeno COM RAG | `/private/var/folders/k8/pp6b77px7xx16bx55wd3mkz40000gn/T/item3B-pequeno_com_rag-8_qqpjqk` | `fonte.jsonl` |
+| generalista SEM RAG | `/private/var/folders/k8/pp6b77px7xx16bx55wd3mkz40000gn/T/item3B-generalista_sem_rag-qjcm9aur` | `(vazio)` |
+| generalista COM RAG | `/private/var/folders/k8/pp6b77px7xx16bx55wd3mkz40000gn/T/item3B-generalista_com_rag-7mflfiz8` | `fonte.jsonl` |
+
+Nas falhas do `pequeno COM RAG`, o validador `contem` registrou `presentes 0/4` em duas rodadas e `presentes 5/5` em duas rodadas; no agregado da célula, a aprovação ficou em 2/5. Nas falhas do `generalista COM RAG`, o validador `contem` registrou `presentes 0/4` e faltantes: `auto_esgotar`, `aresta.fluxo`, `custo.tick`, `sem_secrets_no_diff`, `teste_permissao_cross_tenant`.
 
 ## Leitura pre-registrada
 
-A tese "especialista barato + RAG" **nao avanca** nesta matriz:
+A tese "especialista barato + RAG" **nao avanca** nesta reprodução isolada:
 
-- Na tarefa 1, o pequeno SEM RAG ja resolve tudo: isso mede tier/roteamento, nao RAG.
-- Na tarefa 2, o pequeno SEM RAG tambem passou 5/5. Portanto o ganho nao pode ser atribuido a RAG.
-- O pequeno COM RAG foi mais caro em tokens que o pequeno SEM RAG na tarefa 2 (3086 vs 353 tokens/run estimados), sem ganho de aprovacao.
-- O generalista COM RAG foi instavel nesta amostra (2/5, com uma rodada de 314.264s), apesar de usar o corpus relevante.
+- Na tarefa 1, o pequeno SEM RAG ja resolve tudo: isso continua medindo tier/roteamento, nao RAG.
+- Na tarefa 2, a reproducao isolada derruba o `pequeno SEM RAG` para 0/5 e o `pequeno COM RAG` para 2/5.
+- O `pequeno COM RAG` continua mais caro em tokens que o `pequeno SEM RAG` na tarefa 2 (3086 vs 353 tokens/run estimados), sem bater o piso 4/5.
+- O `generalista COM RAG` ficou em 0/5 nesta reproducao isolada.
 
-Resultado bruto: inconclusivo/negativo para a tese especialista barato + RAG. O achado mais forte e que `lift-v3-fatos` ainda nao e uma boa tarefa para separar "sem conhecimento" na matriz E quando o sujeito e Codex CLI; o SEM RAG passou 5/5 mesmo isolado do repo.
+Resultado bruto: **negativo/inconclusivo para a tese especialista barato + RAG**. A reproduçao isolada contradiz o relato anterior e passa a ser o dado valido. A tarefa 2 ainda não separa bem os braços quando o sujeito é Codex CLI; o efeito de RAG não fecha o critério pré-registrado.

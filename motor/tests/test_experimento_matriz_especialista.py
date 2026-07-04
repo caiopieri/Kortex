@@ -1,7 +1,8 @@
 import json
+from pathlib import Path
 
 from motor.modelos import ClienteStub
-from scripts.experimento_matriz_especialista import formatar_relatorio, rodar_matriz
+from scripts.experimento_matriz_especialista import _assert_cwd_fora_repo, formatar_relatorio, rodar_matriz
 from tests.test_experimento_especialista import _spec_minima
 
 
@@ -41,6 +42,20 @@ def test_rodar_matriz_agrega_2x2(tmp_path, monkeypatch):
     assert resultado["celulas"]["pequeno_com_rag"]["aprovadas"] == 2
     assert resultado["celulas"]["generalista_sem_rag"]["aprovadas"] == 2
     assert resultado["celulas"]["generalista_com_rag"]["aprovadas"] == 2
+    assert resultado["isolamento"]["pequeno_sem_rag"]["ls"] == []
+    assert resultado["isolamento"]["pequeno_com_rag"]["ls"] == ["fonte.jsonl"]
     relatorio = formatar_relatorio(resultado)
     assert "| pequeno_com_rag | 2/2 (100%) |" in relatorio
+    assert "| pequeno_com_rag |" in relatorio
     assert "generalista_sem_rag rodada 1" in relatorio
+
+
+def test_assert_cwd_fora_repo_rejeita_repo():
+    repo = Path(__file__).resolve().parents[2]
+
+    try:
+        _assert_cwd_fora_repo(repo)
+    except ValueError as exc:
+        assert "dentro do repo" in str(exc)
+    else:
+        raise AssertionError("cwd dentro do repo deveria falhar")
