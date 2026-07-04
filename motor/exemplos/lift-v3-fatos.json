@@ -1,0 +1,65 @@
+{
+  "versao": "0.1",
+  "padrao": "grafo_dependencias",
+  "missao": {
+    "id": "lift-v3-fatos",
+    "objetivo": "Medir recuperacao RAG de nomes proprios internos arbitrarios ausentes do prompt executor.",
+    "contexto": "Experimento v3 do item 3B: os fatos exigidos devem vir do corpus recuperado, nao de fluencia generica.",
+    "criterios_cobertura": ["resposta validada pelo validador deterministico contem"]
+  },
+  "restricoes": {"teto_custo": 2.0, "max_subagentes": 2, "max_tentativas": 1},
+  "subagentes": [
+    {
+      "id": "especialista-fatos-internos",
+      "tipo": "modelo",
+      "papel": "executor",
+      "objetivo": "Responder cinco perguntas curtas sobre nomes internos arbitrarios do projeto usando os docs recuperados.",
+      "entradas": {
+        "perguntas": [
+          "Qual e o nome interno da politica de failover por custo no roteamento de modelos?",
+          "No esquema de eventos motor-superficie, qual evento registra o fluxo entre etapas?",
+          "No esquema de eventos motor-superficie, qual evento registra a medicao de custo?",
+          "No contrato de evidencias, qual marcador comprova ausencia de segredo no diff?",
+          "No contrato de evidencias, qual marcador cobre permissao entre tenants?"
+        ]
+      },
+      "resultado_esperado": "Lista curta com cinco nomes exatos, um por pergunta, sem explicar alem do necessario.",
+      "rubrica": [
+        "responde as cinco perguntas com nomes internos exatos quando estiverem nos docs recuperados",
+        "nao substitui nomes internos por descricoes genericas",
+        "mantem a resposta curta e verificavel"
+      ],
+      "fonte_rag": "__SUBSTITUIR_PELO_CAMINHO_DO_DATASET_JSONL__",
+      "rag_k": 8,
+      "tier": "media",
+      "capacidades_requeridas": ["redacao"]
+    },
+    {
+      "id": "valida-fatos-internos",
+      "tipo": "validador",
+      "valida": "especialista-fatos-internos",
+      "validador": {
+        "kind": "contem",
+        "config": {
+          "requer": [
+            "auto_esgotar",
+            "aresta.fluxo",
+            "custo.tick",
+            "sem_secrets_no_diff",
+            "teste_permissao_cross_tenant"
+          ],
+          "min": 4
+        }
+      },
+      "objetivo": "Medir presenca dos nomes internos arbitrarios recuperados.",
+      "entradas": {},
+      "resultado_esperado": "Veredito deterministico sobre presenca dos nomes internos.",
+      "depende_de": ["especialista-fatos-internos"]
+    }
+  ],
+  "gates": [],
+  "sintese": {
+    "instrucao": "Sintetize somente a resposta validada e mencione se o validador deterministico passou.",
+    "formato": "markdown"
+  }
+}

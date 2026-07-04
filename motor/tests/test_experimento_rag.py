@@ -8,6 +8,7 @@ from scripts.experimento_rag import (
     ClienteDumpPrompts,
     ClienteMetricaDeterministica,
     formatar_relatorio,
+    rodar_condicao_unica,
     rodar_experimento,
 )
 
@@ -127,6 +128,37 @@ def test_experimento_reporta_taxa_do_validador_contem(tmp_path):
     assert "SEM RAG contem: 0/2 aprovadas" in relatorio
     assert "COM RAG contem: 2/2 aprovadas" in relatorio
     assert "contem SEM=False COM=True" in relatorio
+
+
+def test_experimento_roda_condicao_unica(tmp_path):
+    dataset = tmp_path / "dataset.jsonl"
+    dataset.write_text(
+        json.dumps({"id": "interno", "conteudo": "ownership move borrow token-rag"}) + "\n",
+        encoding="utf-8",
+    )
+
+    def roteador(papel: str, prompt: str):
+        if papel == "executor":
+            return "resposta generica"
+        if papel == "verifier":
+            return json.dumps({"aprovado": True, "motivo": "ok"})
+        if papel == "evaluator":
+            return json.dumps({"aprovado": True, "lacunas": [], "nos_a_refazer": []})
+        if papel == "synthesizer":
+            return "FINAL"
+        raise AssertionError(f"papel inesperado: {papel}")
+
+    resultado = rodar_condicao_unica(
+        _spec_experimento_com_contem(), fonte_rag=str(dataset), repeticoes=1,
+        cliente_factory=lambda: ClienteStub(roteador), workspace_base=tmp_path / "exp-unica",
+        com_rag=False,
+    )
+
+    assert "sem_rag" in resultado
+    assert "com_rag" not in resultado
+    relatorio = formatar_relatorio(resultado)
+    assert "SEM RAG: 0/1 aprovadas" in relatorio
+    assert "rodada 1: SEM RAG aprovado=False" in relatorio
 
 
 def test_experimento_reporta_taxa_do_validador_schema_json(tmp_path):
@@ -269,6 +301,7 @@ def test_specs_item3_validam():
     specs = [
         base / "lift-controle-negativo.json",
         base / "lift-derivado.json",
+        base / "lift-v3-fatos.json",
     ]
 
     validadas = [
@@ -276,6 +309,11 @@ def test_specs_item3_validam():
         for path in specs
     ]
 
-    assert [spec.missao.id for spec in validadas] == ["lift-controle-negativo", "lift-derivado"]
+    assert [spec.missao.id for spec in validadas] == [
+        "lift-controle-negativo",
+        "lift-derivado",
+        "lift-v3-fatos",
+    ]
     assert validadas[0].subagentes[1].validador["kind"] == "contem"
     assert validadas[1].subagentes[1].validador["kind"] == "schema_json"
+    assert validadas[2].subagentes[1].validador["config"]["min"] == 4

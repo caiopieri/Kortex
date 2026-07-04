@@ -214,6 +214,21 @@ def rodar_experimento(spec, *, fonte_rag, repeticoes, cliente_factory, workspace
     }
 
 
+def rodar_condicao_unica(spec, *, fonte_rag, repeticoes, cliente_factory, workspace_base, com_rag):
+    if repeticoes < 1:
+        raise ValueError("--repeticoes precisa ser >= 1")
+    workspace = Path(workspace_base)
+    workspace.mkdir(parents=True, exist_ok=True)
+    nome = "com-rag" if com_rag else "sem-rag"
+    chave = "com_rag" if com_rag else "sem_rag"
+    return {
+        chave: _rodar_condicao(
+            nome, preparar_spec(spec, fonte_rag, com_rag), repeticoes, cliente_factory, workspace
+        ),
+        "workspace": str(workspace),
+    }
+
+
 def formatar_relatorio(resultado):
     def linha(chave, rotulo):
         item = resultado[chave]
@@ -230,19 +245,30 @@ def formatar_relatorio(resultado):
             f"({item['taxa_aprovacao'] * 100:.0f}%)"
         )
 
-    linhas = [
-        linha("sem_rag", "SEM RAG"),
-        linha("com_rag", "COM RAG"),
-    ]
+    condicoes = [("sem_rag", "SEM RAG"), ("com_rag", "COM RAG")]
+    condicoes = [(chave, rotulo) for chave, rotulo in condicoes if chave in resultado]
+    linhas = [linha(chave, rotulo) for chave, rotulo in condicoes]
     kinds = sorted(
-        set(resultado["sem_rag"].get("validadores", {})) |
-        set(resultado["com_rag"].get("validadores", {})) |
+        set().union(*(set(resultado[chave].get("validadores", {})) for chave, _ in condicoes)) |
         {"contem"}
     )
     for kind in kinds:
-        linhas.append(linha_validador("sem_rag", "SEM RAG", kind))
-        linhas.append(linha_validador("com_rag", "COM RAG", kind))
+        for chave, rotulo in condicoes:
+            linhas.append(linha_validador(chave, rotulo, kind))
     linhas.append(f"logs: {resultado['workspace']}")
+    if "sem_rag" not in resultado or "com_rag" not in resultado:
+        for chave, rotulo in condicoes:
+            for i, rodada in enumerate(resultado[chave]["rodadas"], 1):
+                status_validadores = []
+                for kind in kinds:
+                    validadores = [v for v in rodada.get("validadores", []) if v.get("kind") == kind]
+                    ok = all(v["aprovado"] for v in validadores) if validadores else None
+                    status_validadores.append(f"{kind}={ok}")
+                linhas.append(
+                    f"rodada {i}: {rotulo} aprovado={rodada['aprovado']} motivo={rodada['motivo']} | "
+                    f"{' | '.join(status_validadores)}"
+                )
+        return "\n".join(linhas)
     for i, (sem, com) in enumerate(zip(resultado["sem_rag"]["rodadas"], resultado["com_rag"]["rodadas"]), 1):
         status_validadores = []
         for kind in kinds:
@@ -276,6 +302,16 @@ def _parse_args(argv):
         "--dump-prompts",
         help="diretorio para salvar o prompt cru de cada chamada ao cliente",
     )
+    p.add_argument(
+        "--saida-json",
+        help="arquivo para salvar o resultado bruto resumido do experimento em JSON",
+    )
+    p.add_argument(
+        "--condicao",
+        choices=["ambas", "sem-rag", "com-rag"],
+        default="ambas",
+        help="condicao a executar; use sem-rag/com-rag para isolar cwd/corpus por braco",
+    )
     return p.parse_args(argv)
 
 
@@ -292,13 +328,27 @@ def main(argv=None):
             return ClienteMetricaDeterministica(cliente)
         return cliente
 
-    resultado = rodar_experimento(
-        carregar_spec(args.spec),
-        fonte_rag=args.fonte_rag,
-        repeticoes=args.repeticoes,
-        cliente_factory=cliente_factory,
-        workspace_base=workspace,
-    )
+    spec = carregar_spec(args.spec)
+    if args.condicao == "ambas":
+        resultado = rodar_experimento(
+            spec,
+            fonte_rag=args.fonte_rag,
+            repeticoes=args.repeticoes,
+            cliente_factory=cliente_factory,
+            workspace_base=workspace,
+        )
+    else:
+        resultado = rodar_condicao_unica(
+            spec,
+            fonte_rag=args.fonte_rag,
+            repeticoes=args.repeticoes,
+            cliente_factory=cliente_factory,
+            workspace_base=workspace,
+            com_rag=args.condicao == "com-rag",
+        )
+    if args.saida_json:
+        Path(args.saida_json).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.saida_json).write_text(json.dumps(resultado, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(formatar_relatorio(resultado))
     return 0
 
