@@ -488,7 +488,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         if sub.get("tipo", "modelo") == "ferramenta":
             return executar_ferramenta(sub, payload["workspace"])
         if sub.get("tipo", "modelo") == "validador":
-            return executar_validador(sub, deps)
+            return executar_validador(sub, deps, payload["workspace"])
 
         # Guard de independência: o verifier deve evitar o provedor DO executor desta
         # tarefa (cross-model anti-auto-aprovação). Só quando o cliente sabe rotear.
@@ -590,6 +590,60 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         return {"resultados": [{"id": sub["id"], "saida": ultima or "",
                                 "tentativas": max_t, "aprovado": False, "motivo": feedback}]}
 
+    def executar_comando_seguro(
+        comando_tpl: str,
+        valores: dict[str, Any],
+        timeout_s: int,
+        *,
+        cwd: Path | None = None,
+    ) -> dict[str, Any]:
+        try:
+            partes_tpl = shlex.split(comando_tpl)
+        except ValueError as ex:
+            return {"ok": False, "erro": "comando_invalido", "motivo": f"comando inválido: {ex}", "saida": ""}
+        valores_fmt = {chave: str(valor) for chave, valor in valores.items()}
+        try:
+            partes = [parte.format_map(valores_fmt) for parte in partes_tpl]
+        except KeyError as ex:
+            return {"ok": False, "erro": "placeholder", "motivo": f"placeholder sem entrada: {ex.args[0]}", "saida": ""}
+        if not partes:
+            return {"ok": False, "erro": "executavel_ausente", "motivo": "executável ausente: ", "saida": ""}
+        executavel = Path(partes[0]).name
+        if executaveis_permitidos and executavel not in executaveis_permitidos:
+            return {
+                "ok": False,
+                "erro": "executavel_nao_permitido",
+                "motivo": f"executável não permitido: {executavel}",
+                "saida": "",
+            }
+        if shutil.which(partes[0]) is None:
+            return {
+                "ok": False,
+                "erro": "executavel_ausente",
+                "motivo": f"executável ausente: {partes[0]}",
+                "saida": "",
+            }
+        try:
+            proc = subprocess.run(
+                partes,
+                capture_output=True,
+                text=True,
+                timeout=timeout_s,
+                stdin=subprocess.DEVNULL,
+                cwd=cwd,
+            )
+        except FileNotFoundError:
+            return {
+                "ok": False,
+                "erro": "executavel_ausente",
+                "motivo": f"executável ausente: {partes[0]}",
+                "saida": "",
+            }
+        except subprocess.TimeoutExpired:
+            return {"ok": False, "erro": "timeout", "motivo": "timeout ao executar comando", "saida": ""}
+        saida = "\n".join(p for p in [proc.stdout.strip(), proc.stderr.strip()] if p)
+        return {"ok": True, "proc": proc, "saida": saida, "partes": partes}
+
     def executar_ferramenta(sub: dict[str, Any], workspace: Path) -> dict:
         nome_ferramenta = str(sub.get("ferramenta") or "")
         ferramenta = ferramentas.get(nome_ferramenta)
@@ -604,7 +658,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         if not isinstance(produz, list):
             produz = []
         workspace.mkdir(parents=True, exist_ok=True)
-        valores = {chave: str(valor) for chave, valor in sub.get("entradas", {}).items()}
+        valores = dict(sub.get("entradas", {}))
         saidas_por_placeholder: dict[str, dict[str, str]] = {}
         for item in produz:
             if not isinstance(item, dict):
@@ -616,104 +670,76 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                 caminho_saida = workspace / f"{sub['id']}__{nome}"
                 valores[placeholder] = str(caminho_saida)
                 saidas_por_placeholder[placeholder] = {"nome": nome, "tipo": tipo, "caminho": str(caminho_saida)}
-        try:
-            comando = comando_tpl.format_map(valores)
-        except KeyError as ex:
-            motivo = f"placeholder sem entrada: {ex.args[0]}"
-            log.evento("ferramenta.indisponivel", ferramenta=nome_ferramenta, motivo=motivo)
-            return {"resultados": [{"id": sub["id"], "saida": "", "tentativas": 1,
-                                    "aprovado": False, "motivo": motivo}]}
-
-        try:
-            partes = shlex.split(comando)
-        except ValueError as ex:
-            motivo = f"comando inválido: {ex}"
-            log.evento("ferramenta.indisponivel", ferramenta=nome_ferramenta, motivo=motivo)
-            return {"resultados": [{"id": sub["id"], "saida": "", "tentativas": 1,
-                                    "aprovado": False, "motivo": motivo}]}
-        if not partes or shutil.which(partes[0]) is None:
-            executavel = partes[0] if partes else ""
-            motivo = f"executável ausente: {executavel}"
-            log.evento("ferramenta.indisponivel", ferramenta=nome_ferramenta, motivo=motivo)
-            return {"resultados": [{"id": sub["id"], "saida": "", "tentativas": 1,
-                                    "aprovado": False, "motivo": motivo}]}
-        executavel = Path(partes[0]).name
-        if executaveis_permitidos and executavel not in executaveis_permitidos:
-            motivo = f"executável não permitido: {executavel}"
-            log.evento("ferramenta.indisponivel", ferramenta=nome_ferramenta, motivo=motivo)
-            return {"resultados": [{"id": sub["id"], "saida": "", "tentativas": 1,
-                                    "aprovado": False, "motivo": motivo}]}
-
-        try:
-            timeout_s = int(ferramenta.get("timeout", 300))
-            proc = subprocess.run(partes, capture_output=True, text=True, timeout=timeout_s, stdin=subprocess.DEVNULL)
-            saida = "\n".join(p for p in [proc.stdout.strip(), proc.stderr.strip()] if p)
-            modo = ferramenta.get("interpreta_saida")
-            metricas: dict[str, Any] = {}
-            motivo_json = ""
-            if modo == "exit_code":
-                aprovado = proc.returncode == 0
-            elif modo == "json":
-                try:
-                    dados = json.loads(proc.stdout)
-                    if not isinstance(dados, dict) or "aprovado" not in dados:
-                        raise ValueError("json sem 'aprovado'")
-                    aprovado = bool(dados["aprovado"])
-                    metricas = dados.get("metricas") or {}
-                    if not isinstance(metricas, dict):
-                        metricas = {}
-                    motivo_json = str(dados.get("motivo") or "")
-                except (json.JSONDecodeError, ValueError) as ex:
-                    aprovado = False
-                    motivo_json = f"saída inválida: {ex}"
-                    log.evento("ferramenta.saida_invalida", ferramenta=nome_ferramenta,
-                               subagente=sub["id"], motivo=motivo_json)
+        timeout_s = int(ferramenta.get("timeout", 300))
+        execucao = executar_comando_seguro(comando_tpl, valores, timeout_s)
+        if not execucao["ok"]:
+            motivo = str(execucao["motivo"])
+            if execucao.get("erro") == "timeout":
+                motivo = "timeout ao executar ferramenta"
+                log.evento("ferramenta.executada", ferramenta=nome_ferramenta,
+                           subagente=sub["id"], aprovado=False)
             else:
-                aprovado = False
-            motivo = "" if aprovado else (motivo_json or saida or f"exit_code={proc.returncode}")
-            artefatos = []
-            if aprovado:
-                for ref in saidas_por_placeholder.values():
-                    caminho = Path(ref["caminho"])
-                    if not caminho.exists():
-                        aprovado = False
-                        motivo = f"artefato não produzido: {ref['nome']}"
-                        break
-                    artefato = referenciar_artefato(caminho, ref["nome"], ref["tipo"])
-                    artefatos.append(artefato)
-                    log.evento(
-                        "artefato.atualizou",
-                        nome=artefato["nome"],
-                        tipo=artefato["tipo"],
-                        subagente=sub["id"],
-                        caminho=artefato["caminho"],
-                    )
-            dados_evento = {"ferramenta": nome_ferramenta, "subagente": sub["id"], "aprovado": aprovado}
-            if metricas:
-                dados_evento["metricas"] = metricas
-            log.evento("ferramenta.executada", **dados_evento)
-            resultado = {"id": sub["id"], "saida": saida, "tentativas": 1,
-                         "aprovado": aprovado}
-            if motivo:
-                resultado["motivo"] = motivo
-            if metricas:
-                resultado["metricas"] = metricas
-            if artefatos:
-                resultado["artefatos"] = artefatos
-            return {"resultados": [resultado]}
-        except FileNotFoundError:
-            motivo = f"executável ausente: {partes[0]}"
-            log.evento("ferramenta.indisponivel", ferramenta=nome_ferramenta, motivo=motivo)
-            return {"resultados": [{"id": sub["id"], "saida": "", "tentativas": 1,
-                                    "aprovado": False, "motivo": motivo}]}
-        except subprocess.TimeoutExpired:
-            motivo = "timeout ao executar ferramenta"
-            log.evento("ferramenta.executada", ferramenta=nome_ferramenta,
-                       subagente=sub["id"], aprovado=False)
+                log.evento("ferramenta.indisponivel", ferramenta=nome_ferramenta, motivo=motivo)
             return {"resultados": [{"id": sub["id"], "saida": "", "tentativas": 1,
                                     "aprovado": False, "motivo": motivo}]}
 
-    def executar_validador(sub: dict[str, Any], deps: dict[str, str]) -> dict:
+        proc = execucao["proc"]
+        saida = str(execucao["saida"])
+        modo = ferramenta.get("interpreta_saida")
+        metricas: dict[str, Any] = {}
+        motivo_json = ""
+        if modo == "exit_code":
+            aprovado = proc.returncode == 0
+        elif modo == "json":
+            try:
+                dados = json.loads(proc.stdout)
+                if not isinstance(dados, dict) or "aprovado" not in dados:
+                    raise ValueError("json sem 'aprovado'")
+                aprovado = bool(dados["aprovado"])
+                metricas = dados.get("metricas") or {}
+                if not isinstance(metricas, dict):
+                    metricas = {}
+                motivo_json = str(dados.get("motivo") or "")
+            except (json.JSONDecodeError, ValueError) as ex:
+                aprovado = False
+                motivo_json = f"saída inválida: {ex}"
+                log.evento("ferramenta.saida_invalida", ferramenta=nome_ferramenta,
+                           subagente=sub["id"], motivo=motivo_json)
+        else:
+            aprovado = False
+        motivo = "" if aprovado else (motivo_json or saida or f"exit_code={proc.returncode}")
+        artefatos = []
+        if aprovado:
+            for ref in saidas_por_placeholder.values():
+                caminho = Path(ref["caminho"])
+                if not caminho.exists():
+                    aprovado = False
+                    motivo = f"artefato não produzido: {ref['nome']}"
+                    break
+                artefato = referenciar_artefato(caminho, ref["nome"], ref["tipo"])
+                artefatos.append(artefato)
+                log.evento(
+                    "artefato.atualizou",
+                    nome=artefato["nome"],
+                    tipo=artefato["tipo"],
+                    subagente=sub["id"],
+                    caminho=artefato["caminho"],
+                )
+        dados_evento = {"ferramenta": nome_ferramenta, "subagente": sub["id"], "aprovado": aprovado}
+        if metricas:
+            dados_evento["metricas"] = metricas
+        log.evento("ferramenta.executada", **dados_evento)
+        resultado = {"id": sub["id"], "saida": saida, "tentativas": 1,
+                     "aprovado": aprovado}
+        if motivo:
+            resultado["motivo"] = motivo
+        if metricas:
+            resultado["metricas"] = metricas
+        if artefatos:
+            resultado["artefatos"] = artefatos
+        return {"resultados": [resultado]}
+
+    def executar_validador(sub: dict[str, Any], deps: dict[str, str], workspace: Path) -> dict:
         alvo = str(sub.get("valida") or "")
         spec_validador = sub.get("validador") or {}
         kind = str(spec_validador.get("kind") or "")
@@ -729,6 +755,21 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
             aprovado, motivo, evidencia = _validar_schema_json(saida_alvo, config)
         elif kind == "contem":
             aprovado, motivo, evidencia = _validar_contem(saida_alvo, config)
+        elif kind == "comando":
+            workspace.mkdir(parents=True, exist_ok=True)
+            timeout_s = int(config.get("timeout", 30))
+            comando_tpl = str(config.get("comando") or "")
+            execucao = executar_comando_seguro(comando_tpl, sub.get("entradas", {}), timeout_s, cwd=workspace)
+            if execucao["ok"]:
+                proc = execucao["proc"]
+                saida_cmd = str(execucao["saida"])
+                aprovado = proc.returncode == 0
+                motivo = "" if aprovado else (saida_cmd or f"exit_code={proc.returncode}")
+                evidencia = {"exit_code": proc.returncode, "saida": saida_cmd}
+            else:
+                aprovado = False
+                motivo = str(execucao["motivo"])
+                evidencia = {"erro": execucao.get("erro"), "saida": execucao.get("saida", "")}
         else:
             aprovado = False
             motivo = f"validador kind inválido: {kind}"

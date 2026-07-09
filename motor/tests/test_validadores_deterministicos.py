@@ -1,4 +1,6 @@
 import json
+import sys
+from pathlib import Path
 
 import pytest
 
@@ -63,7 +65,13 @@ def _eventos(tmp_path):
     ]
 
 
-def _rodar(tmp_path, spec: dict, saidas: list[str], cobertura: str = "prosseguir"):
+def _rodar(
+    tmp_path,
+    spec: dict,
+    saidas: list[str],
+    cobertura: str = "prosseguir",
+    ferramentas_permitidas: list[str] | None = None,
+):
     estado = {"executor": 0}
 
     def roteador(papel: str, prompt: str):
@@ -86,6 +94,8 @@ def _rodar(tmp_path, spec: dict, saidas: list[str], cobertura: str = "prosseguir
         log,
         checkpointer=InMemorySaver(),
         politica=PoliticaGates(overrides={"plano": "prosseguir", "cobertura": cobertura}),
+        workspace_base=tmp_path / "runs",
+        ferramentas_permitidas=ferramentas_permitidas,
     )
     resultado = grafo.invoke({"spec": spec}, {"configurable": {"thread_id": "validadores"}})
     return resultado, estado, _eventos(tmp_path)
@@ -148,6 +158,99 @@ def test_contem_aprova_e_reprova_por_substring_case_insensitive(tmp_path):
     assert validador["aprovado"] is False
     assert "Result" in validador["motivo"]
     assert any(e["evento"] == "validador.rodou" and e["kind"] == "contem" and not e["aprovado"] for e in eventos)
+
+
+def test_comando_aprova_com_exit_zero_e_roda_no_workspace(tmp_path):
+    comando = (
+        f"{sys.executable} -c "
+        "\"from pathlib import Path; import sys; print(Path.cwd()); "
+        "sys.exit(0 if Path.cwd().name == 'artefatos' and sys.argv[1] == 'ok value' else 1)\" "
+        "{marcador}"
+    )
+    validador = _sub_validador("comando", {"comando": comando})
+    validador["entradas"] = {"marcador": "ok value"}
+    spec = _spec(validador)
+
+    resultado, _, eventos = _rodar(
+        tmp_path,
+        spec,
+        ["saida qualquer"],
+        ferramentas_permitidas=[Path(sys.executable).name],
+    )
+
+    item = next(r for r in resultado["resultados"] if r["id"] == "valida-comando")
+    assert item["aprovado"] is True
+    assert "artefatos" in item["saida"]
+    evento = next(e for e in eventos if e["evento"] == "validador.rodou" and e["kind"] == "comando")
+    assert evento["aprovado"] is True
+
+
+def test_comando_reprova_com_stdout_e_refaz_alvo(tmp_path):
+    comando = f"{sys.executable} -c \"import sys; print('falha objetiva'); sys.exit(7)\""
+    spec = _spec(_sub_validador("comando", {"comando": comando}))
+
+    resultado, _, eventos = _rodar(
+        tmp_path,
+        spec,
+        ["saida qualquer"],
+        ferramentas_permitidas=[Path(sys.executable).name],
+    )
+
+    item = next(r for r in resultado["resultados"] if r["id"] == "valida-comando")
+    assert item["aprovado"] is False
+    assert item["refazer"] == "produtor"
+    assert "falha objetiva" in item["motivo"]
+    assert resultado["avaliacao"]["nos_a_refazer"] == ["produtor"]
+    assert any(e["evento"] == "validador.rodou" and e["kind"] == "comando" and not e["aprovado"] for e in eventos)
+
+
+def test_comando_bloqueia_executavel_fora_da_allowlist_sem_subprocess(tmp_path, monkeypatch):
+    def subprocess_proibido(*args, **kwargs):
+        raise AssertionError("subprocess.run não deveria ser chamado")
+
+    monkeypatch.setattr("motor.grafo.subprocess.run", subprocess_proibido)
+    spec = _spec(_sub_validador("comando", {"comando": "bash -c 'echo nao-roda'"}))
+
+    resultado, _, eventos = _rodar(
+        tmp_path,
+        spec,
+        ["saida qualquer"],
+        ferramentas_permitidas=[Path(sys.executable).name],
+    )
+
+    item = next(r for r in resultado["resultados"] if r["id"] == "valida-comando")
+    assert item["aprovado"] is False
+    assert item["refazer"] == "produtor"
+    assert item["motivo"] == "executável não permitido: bash"
+    assert any(
+        e["evento"] == "validador.rodou"
+        and e["kind"] == "comando"
+        and e["motivo"] == "executável não permitido: bash"
+        for e in eventos
+    )
+
+
+def test_comando_respeita_timeout_configurado(tmp_path):
+    comando = f"{sys.executable} -c \"import time; time.sleep(0.1)\""
+    spec = _spec(_sub_validador("comando", {"comando": comando, "timeout": 0}))
+
+    resultado, _, eventos = _rodar(
+        tmp_path,
+        spec,
+        ["saida qualquer"],
+        ferramentas_permitidas=[Path(sys.executable).name],
+    )
+
+    item = next(r for r in resultado["resultados"] if r["id"] == "valida-comando")
+    assert item["aprovado"] is False
+    assert item["refazer"] == "produtor"
+    assert item["motivo"] == "timeout ao executar comando"
+    assert any(
+        e["evento"] == "validador.rodou"
+        and e["kind"] == "comando"
+        and e["motivo"] == "timeout ao executar comando"
+        for e in eventos
+    )
 
 
 def test_reconciliacao_refaz_alvo_validado_nao_so_o_validador(tmp_path):
