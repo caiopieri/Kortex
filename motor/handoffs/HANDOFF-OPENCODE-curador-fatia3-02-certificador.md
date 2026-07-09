@@ -17,6 +17,7 @@ Se qualquer custo for `None`, nao certifica por custo incomparavel.
 - Candidato mais barato mas com qualidade menor => rejeitado.
 - Candidato qualidade igual e custo menor => rejeitado.
 - Custo ausente => rejeitado.
+- Regressao carregada da fatia 3.1: `rodar_sombra` com `custo_usd=None` nao transforma custo em zero.
 
 ## Eventos
 Emitir `curador.certificou` quando passar e `curador.rejeitou` quando falhar, via callback opcional.
@@ -29,3 +30,4 @@ Emitir `curador.certificou` quando passar e `curador.rejeitou` quando falhar, vi
 ## Onde isto pode dar errado
 - Usar economia de custo como criterio suficiente viola o anti-Goodhart.
 - Aceitar empate de qualidade como "bateu" enfraquece a catraca.
+- Tratar custo ausente como zero certifica economia ficticia.
