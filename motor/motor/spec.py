@@ -27,7 +27,7 @@ class Subagente(BaseModel):
     valida: Optional[str] = Field(default=None, description="id do subagente cuja saída este nó valida")
     validador: Optional[dict[str, Any]] = Field(
         default=None,
-        description="{'kind': 'schema_json'|'contem', 'config': {...}}",
+        description="{'kind': 'schema_json'|'contem'|'comando', 'config': {...}}",
     )
     objetivo: str = Field(min_length=1)
     entradas: dict[str, Any] = Field(default_factory=dict)
@@ -110,8 +110,17 @@ class WorkflowSpec(BaseModel):
                 if not isinstance(s.validador, dict):
                     raise ValueError(f"subagente '{s.id}' do tipo validador exige validador")
                 kind = s.validador.get("kind")
-                if kind not in {"schema_json", "contem"}:
+                if kind not in {"schema_json", "contem", "comando"}:
                     raise ValueError(f"subagente '{s.id}' usa validador kind inválido: {kind}")
+                if kind == "comando":
+                    config = s.validador.get("config")
+                    if not isinstance(config, dict):
+                        raise ValueError(f"subagente '{s.id}' validador comando exige config")
+                    comando = config.get("comando")
+                    if not isinstance(comando, str):
+                        raise ValueError(f"subagente '{s.id}' validador comando exige config.comando string")
+                    if "timeout" in config and not isinstance(config["timeout"], int):
+                        raise ValueError(f"subagente '{s.id}' validador comando exige timeout inteiro")
             if len(s.produz_artefatos) > 1:
                 raise ValueError(f"subagente '{s.id}' declara mais de um artefato")
             for artefato in [*s.produz_artefatos, *s.produz]:
