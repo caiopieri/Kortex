@@ -2,7 +2,7 @@ import json
 import subprocess
 import sys
 
-from motor.curador import analisar, carregar_runs, formatar_custo_markdown, formatar_markdown, propor
+from motor.curador import analisar, carregar_runs, formatar_custo_markdown, formatar_markdown, propor, rodar_sombra
 
 
 def _jsonl(tmp_path, nome, eventos, corrompida=False):
@@ -763,3 +763,110 @@ def test_markdown_e_cli_json(tmp_path):
     )
     assert "# Livro-razão de Custo" in ledger.stdout
     assert "| nvidia/modelo-a | 1 | 100 | 50 | 150 | 1.000s | 0.002500 |" in ledger.stdout
+
+
+def test_rodar_sombra_agrega_titular_e_candidato():
+    proposta = {"slot": "executor/simples", "titular": "modelo-atual", "candidato": "modelo-novo"}
+    casos = [
+        {
+            "id": "caso-1",
+            "slot": "executor/simples",
+            "entrada": {"prompt": "..."},
+            "titular": {"modelo": "modelo-atual", "aprovado": True, "custo_usd": 0.02},
+        },
+        {
+            "id": "caso-2",
+            "slot": "executor/simples",
+            "entrada": {"prompt": "..."},
+            "titular": {"modelo": "modelo-atual", "aprovado": False, "custo_usd": 0.02},
+        },
+    ]
+
+    respostas = {
+        "caso-1": {"aprovado": True, "custo_usd": 0.01, "saida": "ok", "motivo": ""},
+        "caso-2": {"aprovado": False, "custo_usd": 0.01, "saida": "n/d", "motivo": "raso"},
+    }
+
+    def runner(caso, modelo):
+        assert modelo == "modelo-novo"
+        return respostas[caso["id"]]
+
+    evidencia = rodar_sombra(proposta, casos, runner)
+
+    assert evidencia["status"] == "sombra_concluida"
+    assert evidencia["slot"] == "executor/simples"
+    assert evidencia["titular"] == {
+        "modelo": "modelo-atual",
+        "aprovados": 1,
+        "total": 2,
+        "taxa_aprovacao": 0.5,
+        "custo_medio_usd": 0.02,
+    }
+    assert evidencia["candidato"] == {
+        "modelo": "modelo-novo",
+        "aprovados": 1,
+        "total": 2,
+        "taxa_aprovacao": 0.5,
+        "custo_medio_usd": 0.01,
+    }
+    assert len(evidencia["casos"]) == 2
+    assert evidencia["casos"][0]["candidato"]["aprovado"] is True
+    assert evidencia["casos_ignorados"] == 0
+
+
+def test_rodar_sombra_nao_quebra_com_excecao_do_runner():
+    proposta = {"slot": "s", "titular": "t", "candidato": "c"}
+    casos = [
+        {"id": "a", "slot": "s", "entrada": {}, "titular": {"modelo": "t", "aprovado": True}},
+        {"id": "b", "slot": "s", "entrada": {}, "titular": {"modelo": "t", "aprovado": True}},
+    ]
+
+    def runner(caso, modelo):
+        if caso["id"] == "b":
+            raise RuntimeError("boom")
+        return {"aprovado": True, "custo_usd": 0.01}
+
+    evidencia = rodar_sombra(proposta, casos, runner)
+
+    assert evidencia["candidato"]["total"] == 2
+    assert evidencia["candidato"]["aprovados"] == 1
+    caso_b = evidencia["casos"][1]["candidato"]
+    assert caso_b["aprovado"] is False
+    assert "RuntimeError" in caso_b["motivo"]
+
+
+def test_rodar_sombra_emite_evento_read_only():
+    proposta = {"slot": "executor/simples", "titular": "t", "candidato": "c"}
+    casos = [
+        {
+            "id": "x",
+            "slot": "executor/simples",
+            "entrada": {},
+            "titular": {"modelo": "t", "aprovado": True, "custo_usd": 0.02},
+        },
+    ]
+
+    def runner(caso, modelo):
+        return {"aprovado": True, "custo_usd": 0.01}
+
+    eventos = []
+
+    def capturar(nome, payload):
+        eventos.append((nome, payload))
+
+    proposta_antes = json.loads(json.dumps(proposta))
+    casos_antes = json.loads(json.dumps(casos))
+
+    evidencia = rodar_sombra(proposta, casos, runner, emitir_evento=capturar)
+
+    assert eventos
+    nome, payload = eventos[0]
+    assert nome == "curador.sombra"
+    assert payload["slot"] == "executor/simples"
+    assert payload["titular"] == "t"
+    assert payload["candidato"] == "c"
+    assert payload["aprovados_titular"] == 1
+    assert payload["aprovados_candidato"] == 1
+    assert proposta == proposta_antes
+    assert casos == casos_antes
+    assert evidencia["status"] == "sombra_concluida"

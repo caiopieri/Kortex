@@ -8,7 +8,7 @@ import statistics
 import sys
 from collections import defaultdict
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 SEM_TIER = "sem-tier"
 DESCONHECIDO = "desconhecido"
@@ -211,6 +211,122 @@ def propor(
         "limiar_falha": limiar_falha,
         "slots": slots,
     }
+
+
+def rodar_sombra(
+    proposta: dict[str, Any],
+    casos: list[dict[str, Any]],
+    runner: Callable[[dict[str, Any], str], dict[str, Any]],
+    emitir_evento: Callable[[str, Any], None] | None = None,
+) -> dict[str, Any]:
+    """Roda um modelo candidato em sombra sobre casos held-out, read-only.
+
+    Recebe casos cujo campo ``titular`` carrega o resultado ja observado do modelo atual.
+    Executa o candidato via runner injetado e retorna evidencia comparativa serializavel,
+    sem alterar catalogo, config, roteamento ou logs originais. Se ``emitir_evento`` for
+    informado, emite ``curador.sombra`` com o resumo da sombra.
+    """
+    slot = str(proposta.get("slot"))
+    modelo_titular = str(proposta.get("titular"))
+    modelo_candidato = str(proposta.get("candidato"))
+
+    casos_eval: list[dict[str, Any]] = []
+    casos_ignorados = 0
+    for caso in casos:
+        if str(caso.get("slot")) != slot:
+            casos_ignorados += 1
+            continue
+        casos_eval.append(caso)
+
+    titular = _ContadorSombra(modelo_titular)
+    candidato = _ContadorSombra(modelo_candidato)
+    evidencias: list[dict[str, Any]] = []
+
+    for caso in casos_eval:
+        titular.registrar(caso.get("titular"))
+        resultado_cand = _executar_runner(runner, caso, modelo_candidato)
+        candidato.registrar(resultado_cand)
+        evidencias.append({
+            "id": caso.get("id"),
+            "titular": _resumo_caso(caso.get("titular"), modelo_titular),
+            "candidato": resultado_cand,
+        })
+
+    evidencia = {
+        "status": "sombra_concluida",
+        "slot": slot,
+        "titular": titular.resumo(),
+        "candidato": candidato.resumo(),
+        "casos": evidencias,
+        "casos_ignorados": casos_ignorados,
+    }
+
+    if emitir_evento is not None:
+        emitir_evento("curador.sombra", {
+            "slot": slot,
+            "titular": modelo_titular,
+            "candidato": modelo_candidato,
+            "casos": len(casos_eval),
+            "aprovados_titular": titular.aprovados,
+            "aprovados_candidato": candidato.aprovados,
+        })
+
+    return evidencia
+
+
+def _executar_runner(
+    runner: Callable[[dict[str, Any], str], dict[str, Any]],
+    caso: dict[str, Any],
+    modelo: str,
+) -> dict[str, Any]:
+    try:
+        resultado = runner(caso, modelo)
+    except Exception as exc:
+        return {"aprovado": False, "motivo": f"{type(exc).__name__}: {exc}"}
+    if not isinstance(resultado, dict):
+        return {"aprovado": False, "motivo": f"runner devolveu {type(resultado).__name__}, esperado dict"}
+    saida = dict(resultado)
+    saida.setdefault("aprovado", False)
+    saida.setdefault("motivo", "")
+    return saida
+
+
+def _resumo_caso(titular: Any, modelo: str) -> dict[str, Any]:
+    if not isinstance(titular, dict):
+        return {"modelo": modelo, "aprovado": False, "motivo": "titular ausente"}
+    return dict(titular)
+
+
+class _ContadorSombra:
+    def __init__(self, modelo: str) -> None:
+        self.modelo = modelo
+        self.aprovados = 0
+        self.total = 0
+        self._custos: list[float | None] = []
+
+    def registrar(self, resultado: Any) -> None:
+        if not isinstance(resultado, dict):
+            self.total += 1
+            self._custos.append(None)
+            return
+        self.total += 1
+        if resultado.get("aprovado"):
+            self.aprovados += 1
+        self._custos.append(resultado.get("custo_usd"))
+
+    def resumo(self) -> dict[str, Any]:
+        custos_validos = [c for c in self._custos if c is not None]
+        return {
+            "modelo": self.modelo,
+            "aprovados": self.aprovados,
+            "total": self.total,
+            "taxa_aprovacao": _ratio(self.aprovados, self.total),
+            "custo_medio_usd": (
+                None
+                if not custos_validos
+                else round(float(sum(custos_validos)) / len(custos_validos), 6)
+            ),
+        }
 
 
 def formatar_proposta_markdown(proposta: dict[str, Any]) -> str:
