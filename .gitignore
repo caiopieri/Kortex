@@ -16,10 +16,25 @@ venv/
 
 # Runtime do motor (logs vivos, banco de checkpoint, workspaces de run)
 log.jsonl
+log 2.jsonl
 motor.db
 motor.db-*
 runs/
 .langgraph_api/
+motor/motor_painel/_testdel
 
 # Node (futuros consumidores/superfícies)
 node_modules/
+
+# Segredos — NUNCA commitar chaves de API (LiteLLM, provedores, etc.)
+.env
+*.env
+!*.env.example
+
+# graphify (saída local do /graphify, não pertence ao repo)
+graphify-out/
+
+# Estado local de agentes/navegador
+.agents/
+.claude/
+.browser-profile/

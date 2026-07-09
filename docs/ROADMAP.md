@@ -43,21 +43,25 @@ curador**. Detalhe em `LEIA-PRIMEIRO.md` §3.
   (OpenAI-compat/Codex/OpenCode/claude; roteamento papel/tier/pin/capacidade + failover por custo).
   Suíte ~262+ verde. **Fase C COMPLETA** (loop de auto-correção): prevenção (rota de dependência em
   ondas) + escalada de tier (subtarefa difícil sobe de degrau e converge) + reconciliação na fonte em
-  loop bounded (avaliador nomeia o nó culpado → re-dispara ele + dependentes até aprovar/teto). Validado
-  em run real (`cobertura` reprovado→aprovado).
-- **Curador — FUNDAÇÃO COMPLETA** (read-only): observador + telemetria-por-modelo + propositor por slot
+  loop bounded (avaliador nomeia o nó culpado → re-dispara ele + dependentes até aprovar/teto). Gate de CI
+  externo fechado e validador `kind:"comando"` integrado ao motor com execução segura, allowlist, cwd
+  isolado e evento `validador.rodou`. Validado em run real (`cobertura` reprovado→aprovado).
+- **Curador — FUNDAÇÃO + FATIA 3 FECHADAS**: observador + telemetria-por-modelo + propositor por slot
   (ranqueia modelo por papel/tier, com piso de qualidade, ciente de travas/timeouts, **usando custo_usd
-  real no desempate**) + **livro-razão de custo** (tokens+tempo+$). O cérebro de medição e alocação. Falta
-  a fatia 3 (ele *agir*: sombra + certificação).
+  real no desempate**) + **livro-razão de custo** (tokens+tempo+$). Fatia 3 fechada: sombra read-only,
+  certificação anti-Goodhart e promoção gated como **intenção aprovada pelo humano**, sem aplicar catálogo
+  automaticamente.
 - **Eventos + V1 FEITOS:** **48 eventos tipados** (`eventos_schema.py`, guard anti-drift) + superfície MCP
   (`despachar/status/responder_gate/resumo/eventos`); **validadores determinísticos V1** (`schema_json`/
-  `contem`); **RAG com lift de recuperação provado** (0/3→3/3 por métrica de substring — prova recuperação, não síntese). Ver `LOG-VERIFICACAO.md`.
+  `contem`); **RAG: lift de recuperação provado (medidor v3, 2026-07-04)** — a evidência v2 caiu no
+  red-team item 3, a régua foi refeita (fatos não-adivinháveis, 3 braços, tempdir isolado) e bateu o
+  critério pré-registrado (1/5 · 0/5 · 5/5). Síntese: não medida. Ver `LOG-VERIFICACAO.md`.
 - **Ciclo de vida do workflow — DECIDIDO** (doc `DECISAO-ciclo-de-vida-workflow.md`): catálogo de templates
   versionados, autoria-como-run, versionamento com evidência, execução parcial/MVP (run não-certificado
   fora do flywheel), composição entre casas com contrato tipado. Construção da UI/registro é Now/Next.
 - **dev-harness** — metodologia madura (FIC, tiers T0/T1/T2, DoD, anti-bajulação, security-DoD,
-  spec-kit decidido). **Lacuna principal:** o gate ainda é auto-reportado pelo agente; o CI mecânico
-  que bloqueia merge (Fase 4, passo 1) ainda não foi fiado. Estreia prevista no Logisti.
+  spec-kit decidido). Gate externo de CI fechado (Fase 4, passo 1): a lacuna de gate auto-reportado foi
+  substituída por bloqueio mecânico de merge; Logisti vira o estresse real do fluxo.
 - **Jarvis v0.1** — assistente local (Ollama/Qwen, voz, memória em duas camadas, MCP). Consome a
   meta-fábrica como motor headless.
 - **Flint** — app de notas do dono (substituto do Obsidian); **projeto separado** que *pode* integrar a
@@ -70,8 +74,8 @@ curador**. Detalhe em `LEIA-PRIMEIRO.md` §3.
 
 | Pilar | Eixo | Onde está |
 |---|---|---|
-| Processo / gates de evidência | boa + segura | dev-harness forte; Fase C completa no motor; gate CI externo pendente (Fase 4 p1) |
-| Auto-evolução (curador / flywheel) | segura + barata | **fundação read-only completa** (observador+propositor+custo); falta fatia 3 (agir: sombra+certificação) |
+| Processo / gates de evidência | boa + segura | dev-harness forte; Fase C completa no motor; gate CI externo fechado (Fase 4 p1) |
+| Auto-evolução (curador / flywheel) | segura + barata | **fundação read-only + fatia 3 fechadas** (observador+propositor+custo+sombra+certificação+promoção gated como intenção humana) |
 | Eficiência (modelos pequenos especialistas) | barata | telemetria-por-modelo **feita** (perfil de aptidão por slot); fábrica de especialistas é Later |
 | Camada de dados / conhecimento | boa | só a semente md (memória/Obsidian); grafo de conhecimento é Next |
 | Custo (medição) | barata | **livro-razão feito** (tokens+tempo+$ **estimado**: tabela manual, sem reconciliação vs fatura — item 15); propositor usa custo_usd no desempate |
@@ -91,14 +95,21 @@ curador**. Detalhe em `LEIA-PRIMEIRO.md` §3.
 - [x] **Esquema de eventos motor→superfície** — FEITO. 48 eventos tipados + guard anti-drift + superfície
   MCP. É o gancho da interface viva e o ponto de interceptação; instrumenta tudo. ✅
 - [x] **Validadores determinísticos como primitiva da spec** (motor V1) — FEITO. A WorkflowSpec declara nós
-  validadores (`schema_json`/`contem`; test/compile = nó ferramenta); reprovação re-dispara via reconciliação. RAG com lift
-  provado por essa métrica. ✅
+  validadores (`schema_json`/`contem`; test/compile = nó ferramenta); reprovação re-dispara via reconciliação. ✅
+  *(A alegação "RAG com lift provado por essa métrica" foi invalidada em 2026-07-04 — red-team item 3.)*
+- [x] **Medidor de lift v3** — FEITO e FECHADO (2026-07-04). Lift de recuperação provado com régua
+  honesta e execução isolada (Frente B); gate da data-house satisfeito → ela entra no Next. Frente E
+  (matriz do especialista) corrigida com coleta auditável e **negativa**: "especialista barato+RAG"
+  não avança (pequeno+RAG 2/5 < piso 4/5) — fábrica de especialistas segue no Later, sem mudança.
+  Ressalva honesta: a magnitude do lift variou entre harnesses (B 5/5 vs E 2/5, mesma spec/modelo) —
+  o escopo "config única" dos docs cobre isso. ✅
 - [ ] **Interface viva — P0** (board de missões + Grafo 2D com editor de workflow + Caixa do Fundador).
   Construída sobre os eventos já emitidos. Ver `design/BRIEF-DESIGN-interface-meta-fabrica.md` e
   `DECISAO-ciclo-de-vida-workflow.md`.
-- [ ] **Gate externo de CI** (Fase 4, passo 1) — T1. A máquina bloqueia merge (lint · type · test ·
-  SAST · secrets · build); o agente propõe, a máquina decide. **Estreia no Logisti.** É o tijolo que
-  tira o gate da mão do agente.
+- [x] **Gate externo de CI** (Fase 4, passo 1) — FEITO/FECHADO. A máquina bloqueia merge (lint · type ·
+  test · SAST · secrets · build); o agente propõe, a máquina decide. No motor, o validador
+  `kind:"comando"` roda comandos com execução segura, allowlist e `cwd` isolado, reprova com feedback
+  determinístico e emite `validador.rodou`. ✅
 
 ## Next (entra quando o Now esvaziar — ordenado por valor × risco)
 
@@ -108,11 +119,9 @@ curador**. Detalhe em `LEIA-PRIMEIRO.md` §3.
    versionados (metadados "quando usar"); criar workflow novo = uma run do motor (pesquisa→síntese→spec);
    cada versão carrega sua telemetria (certificação = versão + evidência). Ver
    `DECISAO-ciclo-de-vida-workflow.md`. Casa com o editor de workflow da interface.
-3. **Curador fatia 3** — teste em sombra + certificação antes de aplicar qualquer mudança de catálogo.
-   **É também o guardrail do "melhor/pior é dado, não opinião"** na edição de workflow (o agente suspeita;
-   a sombra decide).
-   O ponto onde a auto-evolução começa a *agir*, com trava. **Timing:** casa com a troca de provedor do
-   Caio (Codex→Ollama/OpenRouter) — é o cenário exato de "testar um modelo novo antes de confiar".
+3. ~~**Curador fatia 3**~~ — FEITO/FECHADO ✅. Sombra read-only + certificação anti-Goodhart antes de
+   qualquer promoção; a mudança de catálogo vira intenção gated com evidência e aprovação humana, não
+   aplicação automática.
 4. **spec-kit + constituição rodando no Logisti** — decisão já tomada; falta o estresse real.
 5. **Semente da camada de conhecimento** — grafo md dos próprios outputs/decisões do harness, com
    **proveniência + confiança + licença em cada nó**. Dobra como visão de aprendizado (Obsidian/Flint),
@@ -123,7 +132,10 @@ curador**. Detalhe em `LEIA-PRIMEIRO.md` §3.
    - **Gap map** — registrar também o que o agente *tentou usar e não achou*. O negativo do grafo é tão
      valioso quanto o positivo: é ele que dá norte ao que coletar/ingerir e à estratégia de consumo de
      dados pro treino. É o que o curador opera.
-6. **NFRs na spec + estratégia de testes** (Fase 4, passos 2-3) — escala como requisito a montante.
+6. **Data-house (semente)** — despausada em 2026-07-04: o medidor v3 provou lift de recuperação.
+   Começar pequeno (corpus que o base ignora, com proveniência/licença), guiada pelo gap map (#5);
+   a claim de **síntese** continua não medida — o escopo do investimento respeita isso.
+7. **NFRs na spec + estratégia de testes** (Fase 4, passos 2-3) — escala como requisito a montante.
 
 > O **esquema de eventos motor→superfície** já saiu daqui e do Now — está **FEITO** (48 eventos tipados
 > incluindo `aresta.fluxo`, `custo.tick`, `artefato.atualizou`, `validador.rodou`). O próximo consumidor
