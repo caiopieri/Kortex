@@ -65,6 +65,12 @@ def _eventos(tmp_path):
     ]
 
 
+def _script(tmp_path, nome: str, corpo: str) -> Path:
+    caminho = tmp_path / nome
+    caminho.write_text(corpo, encoding="utf-8")
+    return caminho
+
+
 def _rodar(
     tmp_path,
     spec: dict,
@@ -160,7 +166,7 @@ def test_contem_aprova_e_reprova_por_substring_case_insensitive(tmp_path):
     assert any(e["evento"] == "validador.rodou" and e["kind"] == "contem" and not e["aprovado"] for e in eventos)
 
 
-def test_comando_aprova_com_exit_zero_e_roda_no_workspace(tmp_path):
+def test_validador_comando_sucesso(tmp_path):
     comando = (
         f"{sys.executable} -c "
         "\"from pathlib import Path; import sys; print(Path.cwd()); "
@@ -185,6 +191,41 @@ def test_comando_aprova_com_exit_zero_e_roda_no_workspace(tmp_path):
     assert evento["aprovado"] is True
 
 
+def test_validador_comando_falha_redispara_alvo(tmp_path):
+    script = _script(
+        tmp_path,
+        "valida_artefato.py",
+        "import pathlib, sys\n"
+        "texto = pathlib.Path(sys.argv[1]).read_text(encoding='utf-8')\n"
+        "print(texto)\n"
+        "sys.exit(0 if 'PASSOU' in texto else 1)\n",
+    )
+    validador = _sub_validador("comando", {"comando": f"{sys.executable} {script} {{arquivo}}"})
+    validador["entradas"] = {"arquivo": {"ref_artefato": {"de": "produtor", "nome": "saida.txt"}}}
+    spec = _spec(validador)
+    spec["subagentes"][0]["produz_artefatos"] = [{"nome": "saida.txt", "tipo": "txt"}]
+
+    resultado, estado, eventos = _rodar(
+        tmp_path,
+        spec,
+        ["primeira versao INVALIDA", "segunda versao PASSOU"],
+        cobertura="preencher",
+        ferramentas_permitidas=[Path(sys.executable).name],
+    )
+
+    item = next(r for r in resultado["resultados"] if r["id"] == "valida-comando")
+    assert item["aprovado"] is True
+    assert estado["executor"] == 2
+    assert [e["aprovado"] for e in eventos if e["evento"] == "validador.rodou" and e["kind"] == "comando"] == [
+        False,
+        True,
+    ]
+    assert [e["subagente"] for e in eventos if e["evento"] == "lacuna.preenchida"] == [
+        "produtor",
+        "valida-comando",
+    ]
+
+
 def test_comando_reprova_com_stdout_e_refaz_alvo(tmp_path):
     comando = f"{sys.executable} -c \"import sys; print('falha objetiva'); sys.exit(7)\""
     spec = _spec(_sub_validador("comando", {"comando": comando}))
@@ -204,7 +245,7 @@ def test_comando_reprova_com_stdout_e_refaz_alvo(tmp_path):
     assert any(e["evento"] == "validador.rodou" and e["kind"] == "comando" and not e["aprovado"] for e in eventos)
 
 
-def test_comando_bloqueia_executavel_fora_da_allowlist_sem_subprocess(tmp_path, monkeypatch):
+def test_validador_comando_bloqueado_por_allowlist(tmp_path, monkeypatch):
     def subprocess_proibido(*args, **kwargs):
         raise AssertionError("subprocess.run não deveria ser chamado")
 
