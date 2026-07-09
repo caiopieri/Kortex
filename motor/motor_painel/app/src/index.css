@@ -1,0 +1,191 @@
+/* Meta-fábrica · estilos base
+ * Todo cor via var(--token) — definido em theme.js inline no <html>.
+ * Layout: topbar 52px + sidebar 238px + main.
+ */
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+.mf-root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  transition: background-color 0.32s ease, color 0.32s ease;
+}
+
+/* Topbar */
+.mf-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 52px;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  flex: none;
+}
+
+/* Body */
+.mf-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Sidebar */
+.mf-side {
+  width: 238px;
+  flex: none;
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+  overflow: auto;
+  padding: 8px 0;
+}
+
+/* Zone title */
+.zt {
+  padding: 15px 18px 6px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  color: var(--text3);
+}
+
+.zt.fixed { color: var(--accent); }
+
+/* Nav item */
+.ni {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 18px;
+  font-size: 13px;
+  color: var(--text2);
+  cursor: pointer;
+  border-left: 2px solid transparent;
+  text-decoration: none;
+  transition: color 0.2s, background 0.2s;
+}
+
+.ni:hover {
+  color: var(--text);
+  background: var(--surface2);
+}
+
+.ni.on {
+  color: var(--text);
+  background: var(--surface2);
+  border-left-color: var(--accent);
+  font-weight: 600;
+}
+
+.ni.sub {
+  padding-left: 36px;
+  font-size: 12.5px;
+}
+
+/* Main */
+.mf-main {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  padding: 22px 24px 60px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Tipografia */
+.eyebrow {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text3);
+}
+
+.num {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 1.4px;
+  color: var(--text2);
+  text-transform: uppercase;
+}
+
+.mono { font-family: 'IBM Plex Mono', monospace; }
+.title { font-family: 'Space Grotesk', system-ui; font-weight: 600; }
+
+/* Pill */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.9px;
+  text-transform: uppercase;
+  padding: 5px 9px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  color: var(--text2);
+  background: transparent;
+  cursor: pointer;
+}
+
+.pill.on {
+  color: var(--text);
+  border-color: var(--focus);
+  background: var(--surface2);
+}
+
+/* Button */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  font-size: 12px;
+  padding: 8px 13px;
+  border-radius: 2px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.btn:hover { border-color: var(--focus); }
+.btn-primary { background: var(--inv-bg); color: var(--inv-text); border-color: var(--inv-bg); }
+.btn-sm { padding: 5px 10px; font-size: 11px; }
+
+/* Card */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+}
+
+.card.hov { cursor: pointer; }
+.card.hov:hover { border-color: var(--focus); }
+
+/* Status shapes */
+.sh { flex: none; position: relative; display: inline-block; }
+.sh.blue { width: 9px; height: 9px; border-radius: 50%; background: var(--blue); }
+.sh.green { width: 9px; height: 9px; border-radius: 50%; background: var(--green); }
+.sh.amber { width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-bottom: 11px solid var(--amber); }
+.sh.red { width: 11px; height: 11px; background: var(--red); clip-path: polygon(30% 0,70% 0,100% 30%,100% 70%,70% 100%,30% 100%,0 70%,0 30%); }
+.sh.idle { width: 9px; height: 9px; border-radius: 50%; background: var(--text3); }
+

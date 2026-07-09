@@ -118,11 +118,8 @@ function RunList() {
 }
 
 function RunDetalhe({ id }) {
-  const [data, setData] = useState(null);
-  const [error, setError] = useState(null);
+  const { data, error } = usePoll(() => getRun(id), [id]);
 
-  usePoll(() => getRun(id).then(setData).catch((e) => setError(e.message)), [id]);
-  
   if (error) {
     return (
       <div>

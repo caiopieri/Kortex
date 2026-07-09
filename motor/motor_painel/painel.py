@@ -161,11 +161,12 @@ def dados_painel(log_path: str | Path | None = None) -> dict:
     return {"nos": nos, "arestas": arestas, "eventos": eventos}
 
 
-def obter_runs(eventos: list[dict]) -> list[dict]:
+def agrupar_eventos_por_run(eventos: list[dict]) -> list[list[dict]]:
+    """Agrupa a lista de eventos sequenciais em blocos por run.
+    Cada vez que o timestamp `t` diminui, identificamos o início de uma nova run.
+    """
     if not eventos:
         return []
-    
-    # Agrupa eventos por execução (t diminui)
     runs_events = []
     current_run_events = []
     ultimo_t = None
@@ -179,7 +180,11 @@ def obter_runs(eventos: list[dict]) -> list[dict]:
             ultimo_t = t
     if current_run_events:
         runs_events.append(current_run_events)
-        
+    return runs_events
+
+
+def obter_runs(eventos: list[dict]) -> list[dict]:
+    runs_events = agrupar_eventos_por_run(eventos)
     runs_metadata = []
     for idx, run_evs in enumerate(runs_events, start=1):
         # Tenta extrair id da run
@@ -238,24 +243,7 @@ def obter_runs(eventos: list[dict]) -> list[dict]:
 
 
 def obter_gates_pendentes(eventos: list[dict]) -> list[dict]:
-    if not eventos:
-        return []
-        
-    # Agrupa eventos por execução
-    runs_events = []
-    current_run_events = []
-    ultimo_t = None
-    for ev in eventos:
-        t = ev.get("t")
-        if current_run_events and t is not None and ultimo_t is not None and t < ultimo_t:
-            runs_events.append(current_run_events)
-            current_run_events = []
-        current_run_events.append(ev)
-        if t is not None:
-            ultimo_t = t
-    if current_run_events:
-        runs_events.append(current_run_events)
-        
+    runs_events = agrupar_eventos_por_run(eventos)
     gates_pendentes = []
     
     for idx, run_evs in enumerate(runs_events, start=1):
@@ -416,6 +404,10 @@ HTML_PATH = BASE / "painel.html"
 GRAFO3D_HTML_PATH = BASE / "grafo3d.html"
 
 
+class ReaproveitavelTCPServer(socketserver.TCPServer):
+    allow_reuse_address = True
+
+
 class Handler(http.server.BaseHTTPRequestHandler):
     log_path: Path = LOG_PATH  # substituível em testes
     db_path: Path = DB_PATH    # substituível em testes
@@ -462,21 +454,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return
             
             # Filtra eventos desta run
-            # Agrupa eventos por execução
-            runs_events = []
-            current_run_events = []
-            ultimo_t = None
-            for ev in eventos:
-                t = ev.get("t")
-                if current_run_events and t is not None and ultimo_t is not None and t < ultimo_t:
-                    runs_events.append(current_run_events)
-                    current_run_events = []
-                current_run_events.append(ev)
-                if t is not None:
-                    ultimo_t = t
-            if current_run_events:
-                runs_events.append(current_run_events)
-                
+            runs_events = agrupar_eventos_por_run(eventos)
             run_evs = []
             for idx, r_evs in enumerate(runs_events, start=1):
                 rid = None
@@ -546,22 +524,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path == "/dados/custos":
             eventos = parse_eventos(self.log_path)
             precos = carregar_precos()
+            runs_events = agrupar_eventos_por_run(eventos)
             
-            # Agrupa eventos por execução
-            runs_events = []
-            current_run_events = []
-            ultimo_t = None
-            for ev in eventos:
-                t = ev.get("t")
-                if current_run_events and t is not None and ultimo_t is not None and t < ultimo_t:
-                    runs_events.append(current_run_events)
-                    current_run_events = []
-                current_run_events.append(ev)
-                if t is not None:
-                    ultimo_t = t
-            if current_run_events:
-                runs_events.append(current_run_events)
-                
             total_custo = 0.0
             total_tokens = 0
             n_chamadas = 0
@@ -645,7 +609,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if not rel_path:
             rel_path = "index.html"
             
-        target_file = APP_DIST / rel_path
+        try:
+            # Resolve caminhos para evitar path traversal
+            target_file = (APP_DIST / rel_path).resolve()
+            dist_resolved = APP_DIST.resolve()
+            if not target_file.is_relative_to(dist_resolved):
+                self.send_response(403)
+                self.end_headers()
+                self.wfile.write(b"Acesso proibido (Path Traversal)")
+                return
+        except Exception:
+            self.send_response(400)
+            self.end_headers()
+            self.wfile.write(b"Caminho invalido")
+            return
+            
         if not target_file.exists() or target_file.is_dir():
             target_file = APP_DIST / "index.html"
             
@@ -678,6 +656,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         path = urlparse(self.path).path
         if path.startswith("/dados/gates/"):
+            # Validação de Origem para prevenir CSRF
+            origin = self.headers.get("Origin")
+            if origin:
+                host = self.headers.get("Host", "")
+                origin_clean = origin.replace("http://", "").replace("https://", "")
+                if origin_clean != host and not (host.startswith("127.0.0.1") and origin_clean.startswith("localhost")):
+                    self.send_response(403)
+                    self.end_headers()
+                    self.wfile.write(b"Erro CSRF: Origem nao permitida")
+                    return
+
             gate_id = path.split("/")[-1]
             content_length = int(self.headers.get("Content-Length", 0))
             post_data = self.rfile.read(content_length)
@@ -740,8 +729,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 def serve(porta: int = PORTA, log_path: Path = LOG_PATH, db_path: Path = DB_PATH):
     Handler.log_path = log_path
     Handler.db_path = db_path
-    with socketserver.TCPServer(("", porta), Handler) as s:
-        s.allow_reuse_address = True
+    with ReaproveitavelTCPServer(("", porta), Handler) as s:
         print(f"Painel v0.5: http://localhost:{porta}", flush=True)
         s.serve_forever()
 

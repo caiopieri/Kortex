@@ -117,24 +117,27 @@ export function getStoredMode() {
 
 export function applyTheme(themeId, mode) {
   const theme = BUILTINS.find((t) => t.id === themeId) || BUILTINS[0];
-  const vars = mode === 'claro' ? theme.claro : theme.escuro;
-  const root = document.documentElement;
   
-  // Limpa variáveis anteriores
-  root.style.cssText = '';
+  const decl = (obj) => Object.entries(obj).map(([k, v]) => `${k}:${v}`).join(';');
 
-  Object.entries(vars).forEach(([key, val]) => {
-    root.style.setProperty(key, val);
-  });
+  let el = document.getElementById('mf-theme-active-style');
+  if (!el) {
+    el = document.createElement('style');
+    el.id = 'mf-theme-active-style';
+  }
+  document.head.appendChild(el);
   
-  // Aplica classe/data-theme no documentElement
+  el.textContent = `
+    .mf-root { ${decl(theme.escuro)} }
+    .mf-root[data-theme="stark"] { ${decl(theme.claro)} }
+    body { background: ${mode === 'claro' ? theme.claro['--bg'] : theme.escuro['--bg']}; }
+  `;
+
+  const root = document.documentElement;
   root.setAttribute('data-theme', mode === 'claro' ? 'stark' : 'paperclip');
   
   localStorage.setItem(THEME_KEY, themeId);
   localStorage.setItem(MODE_KEY, mode);
-  
-  // Dispara evento global
-  window.dispatchEvent(new CustomEvent('storage', { key: THEME_KEY }));
 }
 
 export { BUILTINS };
