@@ -45,7 +45,7 @@ function App() {
   else Page = <Home />;
 
   return (
-    <div className="mf-root">
+    <div className="mf-root" data-theme={mode === 'claro' ? 'stark' : 'paperclip'}>
       <Topbar theme={mode === 'claro' ? 'stark' : 'paperclip'} onToggleTheme={toggleTheme} />
       <div className="mf-body">
         <Sidebar route={route} />

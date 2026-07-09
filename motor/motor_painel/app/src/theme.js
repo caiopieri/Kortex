@@ -128,8 +128,8 @@ export function applyTheme(themeId, mode) {
   document.head.appendChild(el);
   
   el.textContent = `
-    .mf-root { ${decl(theme.escuro)} }
-    .mf-root[data-theme="stark"] { ${decl(theme.claro)} }
+    :root, .mf-root { ${decl(theme.escuro)} }
+    :root[data-theme="stark"], html[data-theme="stark"], .mf-root[data-theme="stark"] { ${decl(theme.claro)} }
     body { background: ${mode === 'claro' ? theme.claro['--bg'] : theme.escuro['--bg']}; }
   `;
 
