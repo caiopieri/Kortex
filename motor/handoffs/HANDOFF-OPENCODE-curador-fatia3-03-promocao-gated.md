@@ -25,6 +25,7 @@ Retorno minimo:
 - `requer_gate: True`
 
 Se a certificacao nao estiver aprovada, retornar/rejeitar deterministicamente sem promocao.
+Nao parsear o campo textual `motivo`; use `status` e campos estruturados da certificacao.
 
 ## Eventos
 Emitir `curador.promocao_pendente` via callback opcional. Nao emitir `curador.promoveu` nesta fatia.
@@ -37,3 +38,4 @@ Emitir `curador.promocao_pendente` via callback opcional. Nao emitir `curador.pr
 ## Onde isto pode dar errado
 - Escrever catalogo diretamente nesta fatia quebra a lei da run gated.
 - Esconder evidencia impede revisao adversarial.
+- Depender de texto livre de `motivo` acopla promocao a mensagem humana.
