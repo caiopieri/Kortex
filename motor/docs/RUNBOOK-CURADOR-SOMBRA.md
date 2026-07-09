@@ -3,6 +3,9 @@
 Este caminho e read-only. Ele gera evidencia para gate posterior; nao muda catalogo, config ou
 roteamento.
 
+O formato da CLI ainda e beta: use os artefatos JSON como contrato interno da fatia 3, nao como API
+publica estavel.
+
 ## Casos held-out
 
 Arquivo para `--sombra`:
@@ -24,6 +27,10 @@ Arquivo para `--sombra`:
 
 `candidato` e usado apenas pelo runner stub da CLI para evitar chamada real de LLM. Adaptadores reais
 devem continuar injetados por codigo/teste ate existir contrato de replay fiel.
+
+Os casos fornecidos a `--sombra` devem ser held-out e certificados. O filtro de `rascunho` vale para o
+caminho de logs (`python3 -m motor.curador <logs.jsonl>`), mas nao consegue inferir a procedencia de um
+JSON manual.
 
 ## Comandos
 
