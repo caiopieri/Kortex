@@ -17,11 +17,11 @@ try:
 except ImportError:
     from langgraph.checkpoint.memory import MemorySaver as InMemorySaver
 
-from motor.__main__ import construir_cliente
-from motor.eventos import LogEventos
-from motor.grafo import construir_grafo
-from motor.politica import PoliticaGates
-from motor.spec import WorkflowSpec
+from motor.__main__ import construir_cliente  # noqa: E402
+from motor.eventos import LogEventos  # noqa: E402
+from motor.grafo import construir_grafo  # noqa: E402
+from motor.politica import PoliticaGates  # noqa: E402
+from motor.spec import WorkflowSpec  # noqa: E402
 
 
 class ClienteDumpPrompts:
@@ -132,7 +132,7 @@ def _resumir(resultado):
     ]
     cobertura = resultado.get("avaliacao", {})
     aprovado = bool(subs) and all(s["aprovado"] for s in subs) and bool(cobertura.get("aprovado"))
-    motivo = "ok" if aprovado else "; ".join(str(l) for l in cobertura.get("lacunas", [])) or "reprovado"
+    motivo = "ok" if aprovado else "; ".join(str(lac) for lac in cobertura.get("lacunas", [])) or "reprovado"
     return {"aprovado": aprovado, "motivo": motivo, "subagentes": subs, "validadores": validadores,
             "cobertura": {"aprovado": bool(cobertura.get("aprovado")),
                           "lacunas": cobertura.get("lacunas", [])}}

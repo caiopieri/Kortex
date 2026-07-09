@@ -673,7 +673,6 @@ def test_opencode_permissao_vira_env(monkeypatch):
 
 
 def test_opencode_retry_e_provedor(monkeypatch):
-    from motor.modelos import ClienteOpenCode
     log = FakeLog()
     c, cmds, _ = _opencode(monkeypatch, [_proc(1, "", "boom"), _proc(0, "ok")],
                            log=log, provedor="oc")

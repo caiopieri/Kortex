@@ -89,7 +89,7 @@ def roda(tmp_path, roteador, entrada):
 
 def eventos_de(tmp_path):
     linhas = (tmp_path / "log.jsonl").read_text(encoding="utf-8").strip().splitlines()
-    return [json.loads(l) for l in linhas]
+    return [json.loads(linha) for linha in linhas]
 
 
 def spec_rag(fonte_rag=None):
@@ -378,7 +378,7 @@ def test_subagente_esgotado_vira_lacuna(tmp_path):
     grafo, config, _, resultado = roda(tmp_path, roteador, {"spec": SPEC})
     assert "__interrupt__" in resultado  # reprovado força gate, apesar do evaluator stub aprovar
     lacunas = resultado["__interrupt__"][0].value["lacunas"]
-    assert any("pesquisa-alfa" in l for l in lacunas)
+    assert any("pesquisa-alfa" in lac for lac in lacunas)
 
 
 def test_gate_cobertura_preencher_reexecuta_reprovado_uma_vez(tmp_path):

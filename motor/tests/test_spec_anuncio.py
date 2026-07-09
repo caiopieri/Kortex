@@ -7,7 +7,6 @@ import json
 from pathlib import Path
 
 import pytest
-from pydantic import ValidationError
 
 from motor.spec import WorkflowSpec
 

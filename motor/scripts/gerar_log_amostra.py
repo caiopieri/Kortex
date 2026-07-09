@@ -29,11 +29,11 @@ try:
 except ImportError:
     from langgraph.checkpoint.memory import MemorySaver as InMemorySaver
 
-from langgraph.types import Command
+from langgraph.types import Command  # noqa: E402
 
-from motor.eventos import LogEventos
-from motor.grafo import construir_grafo
-from motor.modelos import ClienteStub
+from motor.eventos import LogEventos  # noqa: E402
+from motor.grafo import construir_grafo  # noqa: E402
+from motor.modelos import ClienteStub  # noqa: E402
 
 SPEC = json.loads((REPO / "exemplos" / "missao-pesquisa.json").read_text(encoding="utf-8"))
 LOG_PATH = REPO / "exemplos" / "log-amostra.jsonl"
@@ -95,7 +95,7 @@ def main():
 
     # Valida o log gerado
     linhas = LOG_PATH.read_text(encoding="utf-8").strip().splitlines()
-    eventos = [json.loads(l) for l in linhas]
+    eventos = [json.loads(linha) for linha in linhas]
     tipos = [e["evento"] for e in eventos]
     print(f"[gerar_log_amostra] {len(eventos)} eventos gravados:")
     for ev in eventos:

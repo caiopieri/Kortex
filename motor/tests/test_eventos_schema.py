@@ -1,7 +1,7 @@
 import ast
 from pathlib import Path
 
-from motor.eventos_schema import ESQUEMA, SCHEMA_VERSAO, categoria_de, tipos, valido
+from motor.eventos_schema import SCHEMA_VERSAO, categoria_de, tipos, valido
 
 
 RAIZ_MOTOR = Path(__file__).resolve().parents[1] / "motor"

@@ -16,7 +16,7 @@ import subprocess
 import threading
 import time
 import urllib.request
-from typing import Any, Callable, Optional, Protocol
+from typing import Any, Callable, Optional, Protocol, cast
 
 # Limita chamadas simultâneas ao claude CLI para evitar burst throttle (rc=1).
 # O fan-out do LangGraph pode disparar N subagentes em paralelo; sem este semáforo
@@ -614,7 +614,7 @@ class ClienteOpenAICompat:
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return json.loads(resp.read().decode("utf-8"))
+            return cast(dict[Any, Any], json.loads(resp.read().decode("utf-8")))
 
     def chamar(self, papel: str, prompt: str, ferramentas: Optional[str] = None,
                tier: Optional[str] = None, timeout: int = 300,
@@ -645,7 +645,7 @@ class ClienteOpenAICompat:
         for tentativa in range(1, self.tentativas + 1):
             try:
                 resp = self._post(payload, timeout)
-                conteudo = resp["choices"][0]["message"]["content"].strip()
+                conteudo = cast(str, resp["choices"][0]["message"]["content"].strip())
                 if conteudo:
                     uso = resp.get("usage") or {}
                     if self.log is not None and uso:

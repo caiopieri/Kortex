@@ -11,20 +11,19 @@ from __future__ import annotations
 
 import json
 import sys
-from pathlib import Path
 import importlib
+import importlib.util
 import socketserver
 import threading
+import urllib.error
 import urllib.request
+from pathlib import Path
 
 import pytest
 
 # Adiciona a raiz do repo ao sys.path para import de motor_painel
 REPO = Path(__file__).parent.parent
 sys.path.insert(0, str(REPO))
-
-# Importa as funções públicas do painel
-import importlib.util
 
 def _load_painel():
     spec = importlib.util.spec_from_file_location(
@@ -383,10 +382,6 @@ def test_get_dados_catalogo():
 # ---------------------------------------------------------------------------
 # Gates — GET /dados/gates e POST /dados/gates/<id> (contrato v1)
 # ---------------------------------------------------------------------------
-
-import urllib.error
-
-
 def _http_post(path: str, body: dict, log_path: Path, db_path: Path):
     """POST JSON; devolve (status, content_type, body_text) ou levanta HTTPError em 4xx."""
     painel.Handler.log_path = log_path

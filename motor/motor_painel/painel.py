@@ -4,7 +4,6 @@
 Uso: python3 motor_painel/painel.py  →  http://localhost:8378
 """
 import json
-import os
 import sys
 import http.server
 import socketserver
@@ -13,6 +12,7 @@ from pathlib import Path
 import re
 import time
 import sqlite3
+from typing import Any, Optional, cast
 
 PORTA = 8378
 BASE = Path(__file__).parent.resolve()
@@ -72,7 +72,8 @@ def parse_linha(linha: str) -> dict | None:
     linha = linha.strip()
     if not linha:
         return None
-    return json.loads(linha)  # levanta JSONDecodeError se inválido
+    res = json.loads(linha)  # levanta JSONDecodeError se inválido
+    return cast(Optional[dict[Any, Any]], res) if isinstance(res, dict) else None
 
 
 def parse_eventos(log_path: str | Path | None = None) -> list[dict]:
@@ -168,7 +169,7 @@ def agrupar_eventos_por_run(eventos: list[dict]) -> list[list[dict]]:
     if not eventos:
         return []
     runs_events = []
-    current_run_events = []
+    current_run_events: list[dict] = []
     ultimo_t = None
     for ev in eventos:
         t = ev.get("t")
@@ -224,9 +225,9 @@ def obter_runs(eventos: list[dict]) -> list[dict]:
                 if model in precos:
                     custo += (prompt / 1000.0) * precos[model]["in_por_1k"] + (completion / 1000.0) * precos[model]["out_por_1k"]
         else:
-            acumulados = [ev.get("acumulado") for ev in run_evs if ev.get("acumulado") is not None]
+            acumulados = [float(ev["acumulado"]) for ev in run_evs if ev.get("acumulado") is not None]
             if acumulados:
-                custo = float(max(acumulados))
+                custo = max(acumulados)
                 
         inicio = run_evs[0].get("t", 0.0) if run_evs else 0.0
         
@@ -244,7 +245,7 @@ def obter_runs(eventos: list[dict]) -> list[dict]:
 
 def obter_gates_pendentes(eventos: list[dict]) -> list[dict]:
     runs_events = agrupar_eventos_por_run(eventos)
-    gates_pendentes = []
+    gates_pendentes: list[dict] = []
     
     for idx, run_evs in enumerate(runs_events, start=1):
         run_id = None

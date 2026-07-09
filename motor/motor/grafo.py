@@ -20,7 +20,7 @@ import shutil
 import subprocess
 from datetime import datetime
 from pathlib import Path
-from typing import Annotated, Any, TypedDict
+from typing import Annotated, Any, Optional, TypedDict, cast
 from uuid import uuid4
 
 from langgraph.graph import END, START, StateGraph
@@ -373,7 +373,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                           ferramentas: str | None = None,
                           capacidades: list[str] | None = None) -> str | None:
         if hasattr(cliente, "descricao_de"):
-            return cliente.descricao_de(papel, tier, ferramentas, capacidades=capacidades)
+            return cast(Optional[str], cliente.descricao_de(papel, tier, ferramentas, capacidades=capacidades))
         prov = getattr(cliente, "provedor", None)
         mapa = getattr(cliente, "mapa_papeis", None)
         modelo = mapa.get(papel) if isinstance(mapa, dict) and papel in mapa else getattr(cliente, "modelo", None)
@@ -869,7 +869,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         restantes = set(closure_set)
         concluidos = {r["id"]: r for r in resultados if r["id"] not in closure_set}
         por_id_resultado = {r["id"]: r for r in resultados}
-        lacunas = [str(l) for l in veredito.get("lacunas", [])]
+        lacunas = [str(lac) for lac in veredito.get("lacunas", [])]
         novos: list[dict[str, Any]] = []
         ordem_recomputada: list[str] = []
         log.evento("reconciliacao.iniciada", nos=sorted(closure_set))
@@ -884,7 +884,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
             for sid in onda:
                 sub = {**por_id[sid], "entradas": resolver_refs_artefato(por_id[sid].get("entradas", {}), concluidos)}
                 deps = {d: texto_dependencia(concluidos[d]) for d in sub.get("depende_de", [])}
-                feedback_lacunas = [l for l in lacunas if sid in l] or lacunas[:]
+                feedback_lacunas = [lac for lac in lacunas if sid in lac] or lacunas[:]
                 if sid not in alvo_set:
                     feedback_lacunas.append("uma dependência foi revista; realinhe-se a ela")
                 feedback = "; ".join(feedback_lacunas)

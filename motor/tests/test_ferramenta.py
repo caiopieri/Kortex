@@ -69,9 +69,9 @@ def _rodar(tmp_path, spec: dict, ferramentas: dict, ferramentas_permitidas=None)
     )
     resultado = grafo.invoke({"spec": spec}, {"configurable": {"thread_id": "ferramenta"}})
     eventos = [
-        json.loads(l)
-        for l in (tmp_path / "log.jsonl").read_text(encoding="utf-8").splitlines()
-        if l.strip()
+        json.loads(linha)
+        for linha in (tmp_path / "log.jsonl").read_text(encoding="utf-8").splitlines()
+        if linha.strip()
     ]
     return resultado, eventos
 

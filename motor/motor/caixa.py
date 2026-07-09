@@ -20,7 +20,7 @@ from __future__ import annotations
 import re
 import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from langgraph.types import Command
 
@@ -132,7 +132,7 @@ def rodar_com_caixa(grafo, entrada, config, caixa: CaixaFundador, log: Any) -> d
         pedido = resultado["__interrupt__"][0].value
         portao = pedido.get("portao", "decisao")
         lacunas = pedido.get("lacunas", [])
-        contexto = "; ".join(str(l) for l in lacunas) if lacunas else "(sem lacunas detalhadas)"
+        contexto = "; ".join(str(lac) for lac in lacunas) if lacunas else "(sem lacunas detalhadas)"
         caixa.escrever_nota(
             portao=portao,
             pergunta=pedido.get("pergunta", "Decisão necessária."),
@@ -141,4 +141,4 @@ def rodar_com_caixa(grafo, entrada, config, caixa: CaixaFundador, log: Any) -> d
         )
         decisao = caixa.aguardar_decisao(portao)
         resultado = grafo.invoke(Command(resume=decisao), config)
-    return resultado
+    return cast(dict[Any, Any], resultado)

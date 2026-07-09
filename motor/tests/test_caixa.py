@@ -34,7 +34,7 @@ from tests.test_grafo import SPEC, faz_roteador
 
 def eventos_de(path: Path):
     linhas = path.read_text(encoding="utf-8").strip().splitlines()
-    return [json.loads(l) for l in linhas]
+    return [json.loads(linha) for linha in linhas]
 
 
 def _grafo_sqlite(tmp_path, log, roteador, nome_db="motor.db"):

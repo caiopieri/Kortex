@@ -20,14 +20,14 @@ try:
 except ImportError:
     from langgraph.checkpoint.memory import MemorySaver as InMemorySaver
 
-from motor.__main__ import construir_cliente
-from motor.curador import analisar
-from motor.eventos import LogEventos
-from motor.grafo import construir_grafo
-from motor.modelos import ClienteModelo
-from motor.politica import PoliticaGates
-from motor.spec import WorkflowSpec
-from scripts.experimento_rag import ClienteMetricaDeterministica
+from motor.__main__ import construir_cliente  # noqa: E402
+from motor.curador import analisar  # noqa: E402
+from motor.eventos import LogEventos  # noqa: E402
+from motor.grafo import construir_grafo  # noqa: E402
+from motor.modelos import ClienteModelo  # noqa: E402
+from motor.politica import PoliticaGates  # noqa: E402
+from motor.spec import WorkflowSpec  # noqa: E402
+from scripts.experimento_rag import ClienteMetricaDeterministica  # noqa: E402
 
 
 class ClienteUsoEstimado:
@@ -154,9 +154,13 @@ def formatar_relatorio(resultado: dict[str, Any]) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description="A/B especialista barato+RAG vs topo sem RAG.")
-    p.add_argument("--spec", required=True); p.add_argument("--fonte-rag", required=True)
-    p.add_argument("--alvo", default="transformador-csv-json"); p.add_argument("--repeticoes", type=int, default=15)
-    p.add_argument("--barato-modelos", required=True); p.add_argument("--topo-modelos"); p.add_argument("--precos")
+    p.add_argument("--spec", required=True)
+    p.add_argument("--fonte-rag", required=True)
+    p.add_argument("--alvo", default="transformador-csv-json")
+    p.add_argument("--repeticoes", type=int, default=15)
+    p.add_argument("--barato-modelos", required=True)
+    p.add_argument("--topo-modelos")
+    p.add_argument("--precos")
     p.add_argument("--workspace")
     args = p.parse_args(sys.argv[1:] if argv is None else argv)
     resultado = rodar_ab(carregar_spec(args.spec), alvo=args.alvo, fonte_rag=args.fonte_rag,

@@ -16,8 +16,8 @@ REPO = Path(__file__).parent.parent
 PROJECT_ROOT = REPO.parent
 sys.path.insert(0, str(REPO))
 
-from motor.__main__ import construir_cliente
-from scripts.experimento_especialista import carregar_json, carregar_spec, executar, preparar_spec, resumir
+from motor.__main__ import construir_cliente  # noqa: E402
+from scripts.experimento_especialista import carregar_json, carregar_spec, executar, preparar_spec, resumir  # noqa: E402
 
 
 def _factory_modelos(cfg: dict[str, Any]):
