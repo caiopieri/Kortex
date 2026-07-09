@@ -2,7 +2,7 @@ import json
 import subprocess
 import sys
 
-from motor.curador import analisar, carregar_runs, formatar_custo_markdown, formatar_markdown, propor, rodar_sombra
+from motor.curador import analisar, carregar_runs, certificar_sombra, formatar_custo_markdown, formatar_markdown, propor, rodar_sombra
 
 
 def _jsonl(tmp_path, nome, eventos, corrompida=False):
@@ -870,3 +870,101 @@ def test_rodar_sombra_emite_evento_read_only():
     assert proposta == proposta_antes
     assert casos == casos_antes
     assert evidencia["status"] == "sombra_concluida"
+
+
+def _evidencia(taxa_t, custo_t, taxa_c, custo_c, slot="executor/simples"):
+    return {
+        "status": "sombra_concluida",
+        "slot": slot,
+        "titular": {"modelo": "t", "aprovados": 1, "total": 1, "taxa_aprovacao": taxa_t, "custo_medio_usd": custo_t},
+        "candidato": {"modelo": "c", "aprovados": 1, "total": 1, "taxa_aprovacao": taxa_c, "custo_medio_usd": custo_c},
+        "casos": [],
+        "casos_ignorados": 0,
+    }
+
+
+def test_certificar_aprova_quando_candidato_melhor_em_qualidade_e_custo():
+    evid = _evidencia(taxa_t=0.5, custo_t=0.02, taxa_c=0.8, custo_c=0.01)
+
+    resultado = certificar_sombra(evid)
+
+    assert resultado["status"] == "certificado"
+    assert "candidato vence titular" in resultado["motivo"]
+
+
+def test_certificar_rejeita_candidato_mais_barato_com_qualidade_menor():
+    evid = _evidencia(taxa_t=0.8, custo_t=0.02, taxa_c=0.5, custo_c=0.01)
+
+    resultado = certificar_sombra(evid)
+
+    assert resultado["status"] == "rejeitado"
+    assert "nao vence titular" in resultado["motivo"]
+
+
+def test_certificar_rejeita_qualidade_igual_mesmo_com_custo_menor():
+    evid = _evidencia(taxa_t=0.8, custo_t=0.02, taxa_c=0.8, custo_c=0.01)
+
+    resultado = certificar_sombra(evid)
+
+    assert resultado["status"] == "rejeitado"
+    assert "nao vence titular" in resultado["motivo"]
+
+
+def test_certificar_rejeita_custo_ausente():
+    evid = _evidencia(taxa_t=0.8, custo_t=None, taxa_c=0.9, custo_c=0.01)
+
+    resultado = certificar_sombra(evid)
+
+    assert resultado["status"] == "rejeitado"
+    assert resultado["motivo"] == "custo incomparavel"
+
+
+def test_certificar_rejeita_custo_candidato_ausente():
+    evid = _evidencia(taxa_t=0.5, custo_t=0.02, taxa_c=0.8, custo_c=None)
+
+    resultado = certificar_sombra(evid)
+
+    assert resultado["status"] == "rejeitado"
+    assert resultado["motivo"] == "custo incomparavel"
+
+
+def test_certificar_emite_evento_certificou():
+    eventos = []
+    evid = _evidencia(taxa_t=0.5, custo_t=0.02, taxa_c=0.9, custo_c=0.01)
+
+    certificar_sombra(evid, emitir_evento=lambda nome, payload: eventos.append((nome, payload)))
+
+    assert len(eventos) == 1
+    assert eventos[0][0] == "curador.certificou"
+    assert eventos[0][1]["slot"] == "executor/simples"
+
+
+def test_certificar_emite_evento_rejeitou():
+    eventos = []
+    evid = _evidencia(taxa_t=0.5, custo_t=None, taxa_c=0.9, custo_c=0.01)
+
+    certificar_sombra(evid, emitir_evento=lambda nome, payload: eventos.append((nome, payload)))
+
+    assert len(eventos) == 1
+    assert eventos[0][0] == "curador.rejeitou"
+    assert eventos[0][1]["motivo"] == "custo incomparavel"
+
+
+def test_rodar_sombra_cust_none_nao_vira_zero_na_evidencia():
+    proposta = {"slot": "s", "titular": "t", "candidato": "c"}
+    casos = [
+        {
+            "id": "1",
+            "slot": "s",
+            "entrada": {},
+            "titular": {"modelo": "t", "aprovado": True},
+        },
+    ]
+
+    def runner(caso, modelo):
+        return {"aprovado": True, "custo_usd": None}
+
+    evidencia = rodar_sombra(proposta, casos, runner)
+
+    assert evidencia["titular"]["custo_medio_usd"] is None
+    assert evidencia["candidato"]["custo_medio_usd"] is None

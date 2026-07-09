@@ -274,6 +274,65 @@ def rodar_sombra(
     return evidencia
 
 
+def certificar_sombra(
+    evidencia: dict[str, Any],
+    emitir_evento: Callable[[str, Any], None] | None = None,
+) -> dict[str, Any]:
+    """Compara titular vs candidato da evidencia de sombra e certifica ou rejeita.
+
+    Certifica somente se o candidato tem taxa de aprovacao estritamente maior E
+    custo medio estritamente menor que o titular. Custo ausente (None) em qualquer
+    lado veta por custo incomparavel. Empate de qualidade nao certifica.
+    """
+    slot = evidencia.get("slot")
+    titular = evidencia.get("titular") or {}
+    candidato = evidencia.get("candidato") or {}
+
+    taxa_titular = titular.get("taxa_aprovacao")
+    taxa_candidato = candidato.get("taxa_aprovacao")
+    custo_titular = titular.get("custo_medio_usd")
+    custo_candidato = candidato.get("custo_medio_usd")
+
+    if not isinstance(taxa_titular, (int, float)) or not isinstance(taxa_candidato, (int, float)):
+        motivo = "taxa de aprovacao incomparavel"
+        status = "rejeitado"
+    elif custo_titular is None or custo_candidato is None:
+        motivo = "custo incomparavel"
+        status = "rejeitado"
+    elif taxa_candidato > taxa_titular and custo_candidato < custo_titular:
+        motivo = (
+            f"candidato vence titular: aprovacao {taxa_candidato:.4f} > {taxa_titular:.4f}, "
+            f"custo {custo_candidato} < {custo_titular}"
+        )
+        status = "certificado"
+    else:
+        motivo = (
+            f"candidato nao vence titular em ambos os eixos: "
+            f"aprovacao {taxa_candidato:.4f} vs {taxa_titular:.4f}, "
+            f"custo {custo_candidato} vs {custo_titular}"
+        )
+        status = "rejeitado"
+
+    resultado = {
+        "status": status,
+        "slot": slot,
+        "titular": titular,
+        "candidato": candidato,
+        "motivo": motivo,
+    }
+
+    if emitir_evento is not None:
+        evento = "curador.certificou" if status == "certificado" else "curador.rejeitou"
+        emitir_evento(evento, {
+            "slot": slot,
+            "titular": titular.get("modelo"),
+            "candidato": candidato.get("modelo"),
+            "motivo": motivo,
+        })
+
+    return resultado
+
+
 def _executar_runner(
     runner: Callable[[dict[str, Any], str], dict[str, Any]],
     caso: dict[str, Any],
