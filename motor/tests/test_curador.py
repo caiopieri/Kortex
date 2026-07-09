@@ -2,7 +2,7 @@ import json
 import subprocess
 import sys
 
-from motor.curador import analisar, carregar_runs, certificar_sombra, formatar_custo_markdown, formatar_markdown, propor, rodar_sombra
+from motor.curador import analisar, carregar_runs, certificar_sombra, formatar_custo_markdown, formatar_markdown, preparar_promocao_gated, propor, rodar_sombra
 
 
 def _jsonl(tmp_path, nome, eventos, corrompida=False):
@@ -968,3 +968,75 @@ def test_rodar_sombra_cust_none_nao_vira_zero_na_evidencia():
 
     assert evidencia["titular"]["custo_medio_usd"] is None
     assert evidencia["candidato"]["custo_medio_usd"] is None
+
+
+def _certificacao_aprovada(slot="executor/simples", titular="modelo-t", candidato="modelo-c"):
+    return {
+        "status": "certificado",
+        "slot": slot,
+        "titular": {"modelo": titular, "aprovados": 1, "total": 2, "taxa_aprovacao": 0.5, "custo_medio_usd": 0.02},
+        "candidato": {"modelo": candidato, "aprovados": 2, "total": 2, "taxa_aprovacao": 1.0, "custo_medio_usd": 0.01},
+        "motivo": "candidato vence titular: aprovacao 1.0000 > 0.5000, custo 0.01 < 0.02",
+    }
+
+
+def _certificacao_rejeitada():
+    return {
+        "status": "rejeitado",
+        "slot": "executor/simples",
+        "titular": {"modelo": "t", "aprovados": 1, "total": 1, "taxa_aprovacao": 0.5, "custo_medio_usd": 0.02},
+        "candidato": {"modelo": "c", "aprovados": 1, "total": 1, "taxa_aprovacao": 0.5, "custo_medio_usd": 0.01},
+        "motivo": "candidato nao vence titular em ambos os eixos",
+    }
+
+
+def test_preparar_promocao_gera_intencao_pendente_quando_certificado():
+    intencao = preparar_promocao_gated(_certificacao_aprovada())
+
+    assert intencao["status"] == "promocao_pendente"
+    assert intencao["slot"] == "executor/simples"
+    assert intencao["de"] == "modelo-t"
+    assert intencao["para"] == "modelo-c"
+    assert intencao["requer_gate"] is True
+    assert intencao["evidencia"]["titular"]["taxa_aprovacao"] == 0.5
+    assert intencao["evidencia"]["candidato"]["taxa_aprovacao"] == 1.0
+    assert intencao["evidencia"]["motivo_certificacao"] is not None
+
+
+def test_preparar_promocao_veta_certificacao_rejeitada():
+    intencao = preparar_promocao_gated(_certificacao_rejeitada())
+
+    assert intencao["status"] == "promocao_vetada"
+    assert "certificacao nao aprovada" in intencao["motivo"]
+
+
+def test_preparar_promocao_veta_certificacao_com_status_desconhecido():
+    intencao = preparar_promocao_gated({"status": "sombra_concluida"})
+
+    assert intencao["status"] == "promocao_vetada"
+
+
+def test_preparar_promocao_emite_evento_pendente():
+    eventos = []
+    intencao = preparar_promocao_gated(
+        _certificacao_aprovada(),
+        emitir_evento=lambda nome, payload: eventos.append((nome, payload)),
+    )
+
+    assert len(eventos) == 1
+    assert eventos[0][0] == "curador.promocao_pendente"
+    assert eventos[0][1]["slot"] == "executor/simples"
+    assert eventos[0][1]["de"] == "modelo-t"
+    assert eventos[0][1]["para"] == "modelo-c"
+    assert intencao["status"] == "promocao_pendente"
+
+
+def test_preparar_promocao_nao_emite_evento_quando_vetada():
+    eventos = []
+    intencao = preparar_promocao_gated(
+        _certificacao_rejeitada(),
+        emitir_evento=lambda nome, payload: eventos.append((nome, payload)),
+    )
+
+    assert eventos == []
+    assert intencao["status"] == "promocao_vetada"

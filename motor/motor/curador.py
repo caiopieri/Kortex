@@ -333,6 +333,51 @@ def certificar_sombra(
     return resultado
 
 
+def preparar_promocao_gated(
+    certificacao: dict[str, Any],
+    emitir_evento: Callable[[str, Any], None] | None = None,
+) -> dict[str, Any]:
+    """Gera artefato de intencao de promocao a partir de certificacao aprovada.
+
+    Nao aplica mudanca de catalogo/config. Se a certificacao nao estiver aprovada,
+    retorna ``status="promocao_vetada"`` com motivo deterministico.
+    """
+    status_cert = certificacao.get("status")
+    if status_cert != "certificado":
+        return {
+            "status": "promocao_vetada",
+            "motivo": f"certificacao nao aprovada (status={status_cert})",
+        }
+
+    slot = certificacao.get("slot")
+    titular = certificacao.get("titular") or {}
+    candidato = certificacao.get("candidato") or {}
+    modelo_de = titular.get("modelo")
+    modelo_para = candidato.get("modelo")
+
+    intencao = {
+        "status": "promocao_pendente",
+        "slot": slot,
+        "de": modelo_de,
+        "para": modelo_para,
+        "requer_gate": True,
+        "evidencia": {
+            "titular": titular,
+            "candidato": candidato,
+            "motivo_certificacao": certificacao.get("motivo"),
+        },
+    }
+
+    if emitir_evento is not None:
+        emitir_evento("curador.promocao_pendente", {
+            "slot": slot,
+            "de": modelo_de,
+            "para": modelo_para,
+        })
+
+    return intencao
+
+
 def _executar_runner(
     runner: Callable[[dict[str, Any], str], dict[str, Any]],
     caso: dict[str, Any],
