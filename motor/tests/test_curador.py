@@ -1040,3 +1040,75 @@ def test_preparar_promocao_nao_emite_evento_quando_vetada():
 
     assert eventos == []
     assert intencao["status"] == "promocao_vetada"
+
+
+def test_cli_sombra_certificacao_e_promocao_read_only(tmp_path):
+    sombra_json = tmp_path / "sombra.json"
+    evidencia_out = tmp_path / "evidencia-out.json"
+    sombra_json.write_text(
+        json.dumps({
+            "proposta": {"slot": "executor/simples", "titular": "modelo-t", "candidato": "modelo-c"},
+            "casos": [
+                {
+                    "id": "caso-1",
+                    "slot": "executor/simples",
+                    "entrada": {"prompt": "held-out"},
+                    "titular": {"modelo": "modelo-t", "aprovado": True, "custo_usd": 0.02},
+                    "candidato": {"aprovado": True, "custo_usd": 0.01, "motivo": "ok"},
+                }
+            ],
+        }),
+        encoding="utf-8",
+    )
+
+    sombra = subprocess.run(
+        [sys.executable, "-m", "motor.curador", "--sombra", str(sombra_json), "--json", str(evidencia_out)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "# Evidencia de Sombra" in sombra.stdout
+    assert "- slot: executor/simples" in sombra.stdout
+    assert "- modelo: modelo-c" in sombra.stdout
+    evidencia_cli = json.loads(evidencia_out.read_text(encoding="utf-8"))
+    assert evidencia_cli["status"] == "sombra_concluida"
+    assert evidencia_cli["candidato"]["custo_medio_usd"] == 0.01
+
+    evidencia_json = tmp_path / "evidencia.json"
+    certificacao_out = tmp_path / "certificacao-out.json"
+    evidencia_json.write_text(
+        json.dumps(_evidencia(taxa_t=0.5, custo_t=0.02, taxa_c=1.0, custo_c=0.01)),
+        encoding="utf-8",
+    )
+
+    certificacao = subprocess.run(
+        [sys.executable, "-m", "motor.curador", "--certificar", str(evidencia_json), "--json", str(certificacao_out)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "# Certificacao de Sombra" in certificacao.stdout
+    assert "- status: certificado" in certificacao.stdout
+    certificacao_cli = json.loads(certificacao_out.read_text(encoding="utf-8"))
+    assert certificacao_cli["status"] == "certificado"
+
+    certificacao_json = tmp_path / "certificacao.json"
+    promocao_out = tmp_path / "promocao-out.json"
+    certificacao_json.write_text(json.dumps(_certificacao_aprovada()), encoding="utf-8")
+
+    promocao = subprocess.run(
+        [sys.executable, "-m", "motor.curador", "--promocao", str(certificacao_json), "--json", str(promocao_out)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "# Intencao de Promocao" in promocao.stdout
+    assert "- status: promocao_pendente" in promocao.stdout
+    assert "- requer_gate: True" in promocao.stdout
+    assert "curador.promoveu" not in promocao.stdout
+    promocao_cli = json.loads(promocao_out.read_text(encoding="utf-8"))
+    assert promocao_cli["status"] == "promocao_pendente"
+    assert promocao_cli["requer_gate"] is True

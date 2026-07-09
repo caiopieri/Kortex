@@ -543,12 +543,98 @@ def formatar_custo_markdown(custo: dict[str, Any]) -> str:
     return "\n".join(linhas).rstrip() + "\n"
 
 
+def formatar_sombra_markdown(evidencia: dict[str, Any]) -> str:
+    linhas = [
+        "# Evidencia de Sombra",
+        "",
+        f"- status: {evidencia.get('status')}",
+        f"- slot: {evidencia.get('slot')}",
+        f"- casos ignorados: {evidencia.get('casos_ignorados', 0)}",
+        "",
+    ]
+    tit = evidencia.get("titular") or {}
+    cand = evidencia.get("candidato") or {}
+    linhas += [
+        "## Titular",
+        f"- modelo: {tit.get('modelo')}",
+        f"- aprovados: {tit.get('aprovados')}/{tit.get('total')}",
+        f"- taxa de aprovacao: {_pct(tit.get('taxa_aprovacao') or 0)}",
+        f"- custo medio: {_usd(tit.get('custo_medio_usd')) or 'n/d'}",
+        "",
+        "## Candidato",
+        f"- modelo: {cand.get('modelo')}",
+        f"- aprovados: {cand.get('aprovados')}/{cand.get('total')}",
+        f"- taxa de aprovacao: {_pct(cand.get('taxa_aprovacao') or 0)}",
+        f"- custo medio: {_usd(cand.get('custo_medio_usd')) or 'n/d'}",
+        "",
+        "## Casos",
+    ]
+    linhas.append("| id | titular.aprovado | candidato.aprovado | candidato.motivo |")
+    linhas.append("| --- | ---: | ---: | --- |")
+    for caso in evidencia.get("casos") or []:
+        tit_caso = caso.get("titular") or {}
+        cand_caso = caso.get("candidato") or {}
+        linhas.append(
+            f"| {caso.get('id')} | {tit_caso.get('aprovado')} | {cand_caso.get('aprovado')} | "
+            f"{cand_caso.get('motivo') or ''} |"
+        )
+    return "\n".join(linhas).rstrip() + "\n"
+
+
+def formatar_certificacao_markdown(resultado: dict[str, Any]) -> str:
+    linhas = [
+        "# Certificacao de Sombra",
+        "",
+        f"- status: {resultado.get('status')}",
+        f"- slot: {resultado.get('slot')}",
+        f"- titular: {(resultado.get('titular') or {}).get('modelo')}",
+        f"- candidato: {(resultado.get('candidato') or {}).get('modelo')}",
+        f"- motivo: {resultado.get('motivo')}",
+    ]
+    return "\n".join(linhas).rstrip() + "\n"
+
+
+def formatar_promocao_markdown(intencao: dict[str, Any]) -> str:
+    linhas = [
+        "# Intencao de Promocao",
+        "",
+        f"- status: {intencao.get('status')}",
+    ]
+    if intencao.get("status") == "promocao_pendente":
+        linhas += [
+            f"- slot: {intencao.get('slot')}",
+            f"- de: {intencao.get('de')}",
+            f"- para: {intencao.get('para')}",
+            f"- requer_gate: {intencao.get('requer_gate')}",
+        ]
+        evid = intencao.get("evidencia") or {}
+        tit = evid.get("titular") or {}
+        cand = evid.get("candidato") or {}
+        linhas += [
+            "",
+            "## Evidencia do titular",
+            f"- taxa aprovacao: {_pct(tit.get('taxa_aprovacao') or 0)}",
+            f"- custo medio: {_usd(tit.get('custo_medio_usd')) or 'n/d'}",
+            "",
+            "## Evidencia do candidato",
+            f"- taxa aprovacao: {_pct(cand.get('taxa_aprovacao') or 0)}",
+            f"- custo medio: {_usd(cand.get('custo_medio_usd')) or 'n/d'}",
+        ]
+    else:
+        linhas.append(f"- motivo: {intencao.get('motivo')}")
+    return "\n".join(linhas).rstrip() + "\n"
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python3 -m motor.curador",
         description="Gera perfil read-only de aptidao a partir de logs JSONL.",
     )
-    parser.add_argument("caminhos", nargs="+")
+    parser.add_argument(
+        "caminhos",
+        nargs="*",
+        help="logs JSONL (obrigatorio exceto com --sombra/--certificar/--promocao)",
+    )
     parser.add_argument("--json", dest="json_path", type=Path)
     parser.add_argument("--propor", action="store_true", help="imprime proposta read-only por slot/modelo")
     parser.add_argument("--min-amostras", type=int, default=3)
@@ -561,7 +647,54 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--piso", type=float, default=0.6, help="piso de aprovacao 1a tentativa para proposta limpa")
     parser.add_argument("--limiar-falha", type=float, default=0.5, help="limiar de erro+incompleta para evitar modelo")
     parser.add_argument("--incluir-rascunho", action="store_true", help="inclui runs marcados como rascunho")
+    parser.add_argument(
+        "--sombra",
+        dest="sombra_json",
+        type=Path,
+        help="JSON com proposta e casos held-out; imprime evidencia de sombra sem chamada real de LLM",
+    )
+    parser.add_argument(
+        "--certificar",
+        dest="certificar_json",
+        type=Path,
+        help="JSON com evidencia de sombra; imprime certificacao anti-Goodhart",
+    )
+    parser.add_argument(
+        "--promocao",
+        dest="promocao_json",
+        type=Path,
+        help="JSON com certificacao aprovada; imprime intencao de promocao gated",
+    )
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
+
+    if args.sombra_json:
+        dados = _ler_json_path(args.sombra_json)
+        proposta = dados.get("proposta") or {}
+        casos = dados.get("casos") or []
+        evidencia = rodar_sombra(proposta, casos, _runner_cli_read_only)
+        if args.json_path:
+            _escrever_json(args.json_path, evidencia)
+        print(formatar_sombra_markdown(evidencia), end="")
+        return 0
+
+    if args.certificar_json:
+        evidencia = _ler_json_path(args.certificar_json)
+        resultado = certificar_sombra(evidencia)
+        if args.json_path:
+            _escrever_json(args.json_path, resultado)
+        print(formatar_certificacao_markdown(resultado), end="")
+        return 0
+
+    if args.promocao_json:
+        certificacao = _ler_json_path(args.promocao_json)
+        intencao = preparar_promocao_gated(certificacao)
+        if args.json_path:
+            _escrever_json(args.json_path, intencao)
+        print(formatar_promocao_markdown(intencao), end="")
+        return 0
+
+    if not args.caminhos:
+        raise SystemExit("erro: informe logs JSONL ou use --sombra/--certificar/--promocao")
 
     perfil = analisar(
         args.caminhos,
@@ -971,6 +1104,34 @@ def _parse_custo(valor: str | None) -> dict[str, Any] | None:
     if not isinstance(parsed, dict):
         raise SystemExit("--custo precisa ser um objeto JSON")
     return parsed
+
+
+def _ler_json_path(path: Path) -> dict[str, Any]:
+    try:
+        parsed = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise SystemExit(f"arquivo JSON nao encontrado: {path}") from exc
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"JSON invalido em {path}: {exc}") from exc
+    if not isinstance(parsed, dict):
+        raise SystemExit(f"JSON em {path} precisa ser um objeto")
+    return parsed
+
+
+def _escrever_json(path: Path, dados: dict[str, Any]) -> None:
+    path.write_text(json.dumps(dados, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def _runner_cli_read_only(caso: dict[str, Any], modelo: str) -> dict[str, Any]:
+    candidato = caso.get("candidato")
+    if isinstance(candidato, dict):
+        return dict(candidato)
+    return {
+        "modelo": modelo,
+        "aprovado": False,
+        "custo_usd": None,
+        "motivo": "runner CLI read-only: candidato ausente; nenhuma chamada real de LLM",
+    }
 
 
 def _normalizar_custo(custo: dict[str, Any] | None) -> dict[str, int]:
