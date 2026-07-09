@@ -24,16 +24,24 @@ está relitigando decisão travada — pare e releia esta seção.
    fala pelo dono. Gate sobe **cru**; classificação/cláusula pétrea moram no porteiro (Jarvis).
 6. **Superfície MCP fina** (despachar/status/responder_gate); jobs duráveis, não-bloqueantes.
 
-## Estado dos vetores (2026-06-29)
+## Estado dos vetores (2026-07-03)
 
 - **Fase C COMPLETA** (não estava aqui quando o doc nasceu): prevenção (rota de dependência em ondas) +
   escalada de tier + reconciliação na fonte em loop bounded. Validada em run real. Isso é o
   "reprovado vira lacuna por código" generalizado para correção upstream.
-- **V3 em curso/adiantado:** curador tem observador + propositor por slot + telemetria-por-modelo +
-  livro-razão de custo — tudo **read-only**. Falta a fatia 3 (agir: sombra + certificação).
-- **V2 em curso:** handoff do esquema de eventos tipados + canal MCP escrito.
+- **V1 FEITO:** nós validadores determinísticos (`schema_json`/`contem`; test/compile via nó ferramenta) já são primitiva da spec;
+  reprovação re-dispara o alvo via reconciliação. **RAG com lift de recuperação provado** (0/3→3/3; métrica `contem` = substring, prova recuperação não síntese) em
+  corpus que o base ignora). Ver `../../LOG-VERIFICACAO.md`.
+- **V2 FEITO:** 48 eventos tipados (`eventos_schema.py`, guard anti-drift) incluindo os de superfície
+  (`aresta.fluxo`, `custo.tick`, `artefato.atualizou`, `validador.rodou`, `rag.consultado`) + superfície MCP
+  (`despachar/status/responder_gate/resumo/eventos`).
+- **V3 adiantado:** curador tem observador + propositor por slot (com **custo_usd real** no desempate) +
+  telemetria-por-modelo + livro-razão de custo — tudo **read-only**. Falta a fatia 3 (agir: sombra +
+  certificação) — que é também o guardrail "melhor/pior é dado, não opinião" da edição de workflow.
 - **V5 parcialmente real:** a rota `grafo_dependencias` já roda com handoff entre nós via `deps_txt`; a
-  formalização do contrato tipado de handoff (spec v0.2) é o que falta.
+  formalização do contrato tipado de handoff (spec v0.2) e a **composição entre casas** é o que falta.
+- **V7 (novo) — ciclo de vida do workflow: DECIDIDO** (doc `../../docs/DECISAO-ciclo-de-vida-workflow.md`).
+  Ver vetor abaixo.
 - **Paperclip** (MIT) confirmou o V4: o control-plane (orçamento/eventos/approvals/UI) é roda pronta a
   reusar **na camada das casas**, nunca no motor. Ver `../../docs/LEIA-PRIMEIRO.md` §3.
 
@@ -116,6 +124,27 @@ vetor de **maior risco** (model collapse). Por isso a disciplina é parte do des
 especialista (backend) ponta a ponta** antes de generalizar. Nada disso entra no motor-kernel — o treino é
 orquestrado pelo curador/casas usando a máquina do motor, não é nó hard-coded no grafo.
 
+### V7 — Ciclo de vida do workflow (catálogo, versão, autoria-como-run, composição)
+
+Decidido em 2026-07-03; canônico em `../../docs/DECISAO-ciclo-de-vida-workflow.md`. Resumo dos pontos que
+tocam o motor:
+
+- **Template vs. missão.** Um template é um workflow nomeado (menu de papéis); a missão **instancia** e
+  **seleciona** — a spec da missão é muitas vezes um **subconjunto** do template. Papéis são primitivas
+  reutilizáveis; uma missão pode montar nós de templates diferentes.
+- **Catálogo de workflows versionados** (metadados "quando usar"); o Orquestrador seleciona o template.
+  Software = o `dev-harness` já é esse template (consenso codificado).
+- **Autoria é uma run do motor** (pesquisa→síntese→rascunho de spec) — mesma recursão do V6.
+- **Versão carrega evidência** (do livro-razão): certificação = versão + telemetria. É "só dado
+  gate-verificado promove" aplicado à evolução do workflow.
+- **Execução parcial / MVP:** perfil de disparo que solta gates/validadores/escalada → run sai **marcado
+  "não-certificado"** e **fora do corpus do curador/flywheel** (anti-collapse). Pode, mas não mascara de
+  certificado.
+- **Composição entre casas:** artefato tipado com proveniência atravessa a fronteira (é o handoff tipado do
+  V5 subindo um nível); **quem encadeia é o Orquestrador**, não o motor (decisão #5).
+- **Limite de topologia inalterado:** workflow novo = spec nova (livre); **padrão novo** (topologia/controle
+  novo) = versão de spec certificada (raro). O editor visual oferece só a gramática válida.
+
 ## Sequência sugerida (depende, não importância)
 
 1. **V2 (esquema de eventos)** — EM CURSO. Barato, destrava interface/controle e instrumenta tudo. Primeiro tijolo.
@@ -128,7 +157,10 @@ orquestrado pelo curador/casas usando a máquina do motor, não é nó hard-code
    quando uma run pedir.
 5. **V6 (fábrica de especialistas)** — Later, gated pelo V1 (grader) + V3 fatia 3 + livro-razão de custo.
    Prove UM especialista antes de generalizar.
-6. **V4** é guarda permanente, não tarefa: vale em toda decisão ("isso é músculo ou autoridade?").
+6. **V7 (ciclo de vida do workflow)** — decidido; o que falta é construção (catálogo/registro versionado,
+   editor visual na interface, marca de run não-certificado, contrato de composição entre casas). Casa com
+   V5 (spec v0.2) e V3 fatia 3 (o guardrail da medição).
+7. **V4** é guarda permanente, não tarefa: vale em toda decisão ("isso é músculo ou autoridade?").
 
 ## O que NÃO fazer (guardas)
 
@@ -137,6 +169,9 @@ orquestrado pelo curador/casas usando a máquina do motor, não é nó hard-code
 - Não fazer o motor classificar/decidir gate; ele sobe cru.
 - Não criar parser mágico pra prosa de LLM; ajustar prompt, não topologia.
 - Não deixar o curador aplicar mudança sem sombra+certificação.
+- Não deixar run "barato/MVP" (gates/validadores soltos) entrar no corpus do curador/flywheel nem contar
+  como evidência de versão — sempre marcado como não-certificado (V7).
+- Não permitir composição entre casas sem contrato tipado na fronteira (vira prosa solta — V5/V7).
 - **Não dar "ferramentas de auto-organização" (to-do/checklist que o nó marca) a um nó do grafo.** O
   organizador é o grafo; o nó é função pura. Dentro de uma run já existem: plano = WorkflowSpec, progresso
   = eventos, workspace = `runs/<id>/artefatos`, contexto/handoff = `deps_txt`. "Ver o progresso como

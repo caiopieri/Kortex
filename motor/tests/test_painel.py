@@ -253,7 +253,8 @@ def _http_get(path: str, log_path: Path) -> tuple[int, str, str]:
             thread.join(timeout=3)
 
 
-def test_rota_grafo3d_responde_html_com_forcegraph(tmp_path):
+def test_rota_grafo3d_responde_html_com_forcegraph(tmp_path, monkeypatch):
+    monkeypatch.setattr(painel, "APP_DIST", tmp_path / "nao_existe")
     log = tmp_path / "log.jsonl"
     log.write_text(
         json.dumps({"t": 0.0, "evento": "spec.recebida", "missao": "x"}) + "\n",
@@ -268,7 +269,8 @@ def test_rota_grafo3d_responde_html_com_forcegraph(tmp_path):
     assert "fetch(\"/dados\"" in body
 
 
-def test_rotas_dados_e_painel_2d_intactas(tmp_path):
+def test_rotas_dados_e_painel_2d_intactas(tmp_path, monkeypatch):
+    monkeypatch.setattr(painel, "APP_DIST", tmp_path / "nao_existe")
     log = tmp_path / "log.jsonl"
     log.write_text(
         json.dumps({"t": 0.0, "evento": "paralelo.iniciado", "subagentes": ["a"]}) + "\n",
@@ -285,3 +287,210 @@ def test_rotas_dados_e_painel_2d_intactas(tmp_path):
     assert status_home == 200
     assert "text/html" in content_type_home
     assert "Meta-fábrica v0.5" in body_home
+
+
+# ---------------------------------------------------------------------------
+# Rotas HTTP v1 — endpoints de leitura (GET /dados/*)
+# ---------------------------------------------------------------------------
+
+def test_get_dados_runs():
+    if not LOG_AMOSTRA.exists():
+        pytest.skip("amostra não encontrada — rode scripts/gerar_log_amostra.py")
+    status, content_type, body = _http_get("/dados/runs", LOG_AMOSTRA)
+    payload = json.loads(body)
+    assert status == 200
+    assert "application/json" in content_type
+    assert isinstance(payload, list)
+    assert len(payload) >= 1
+    ids = [r["id"] for r in payload]
+    assert "pesquisa-receita-exemplo" in ids
+    run = next(r for r in payload if r["id"] == "pesquisa-receita-exemplo")
+    assert set(run.keys()) == {"id", "objetivo", "estado", "inicio", "custo", "n_eventos"}
+    assert run["estado"] == "concluida"
+
+
+def test_get_dados_runs_id_existente():
+    if not LOG_AMOSTRA.exists():
+        pytest.skip("amostra não encontrada — rode scripts/gerar_log_amostra.py")
+    status, content_type, body = _http_get(
+        "/dados/runs/pesquisa-receita-exemplo", LOG_AMOSTRA
+    )
+    payload = json.loads(body)
+    assert status == 200
+    assert "application/json" in content_type
+    for chave in ("run", "eventos", "artefatos", "gates"):
+        assert chave in payload, f"chave ausente em /dados/runs/<id>: {chave}"
+    assert payload["run"]["id"] == "pesquisa-receita-exemplo"
+    assert isinstance(payload["eventos"], list) and len(payload["eventos"]) > 0
+
+
+def test_get_dados_runs_id_inexistente():
+    if not LOG_AMOSTRA.exists():
+        pytest.skip("amostra não encontrada — rode scripts/gerar_log_amostra.py")
+    import urllib.error
+    try:
+        _http_get("/dados/runs/missao-inexistente", LOG_AMOSTRA)
+    except urllib.error.HTTPError as e:
+        assert e.code == 404
+    else:
+        pytest.fail("esperado 404 para run inexistente")
+
+
+def test_get_dados_agentes():
+    if not LOG_AMOSTRA.exists():
+        pytest.skip("amostra não encontrada — rode scripts/gerar_log_amostra.py")
+    status, content_type, body = _http_get("/dados/agentes", LOG_AMOSTRA)
+    payload = json.loads(body)
+    assert status == 200
+    assert "application/json" in content_type
+    assert isinstance(payload, list)
+    assert len(payload) >= 1
+    ids = {a["id"] for a in payload}
+    assert "pesquisa-alfa" in ids
+    ag = next(a for a in payload if a["id"] == "pesquisa-alfa")
+    assert set(ag.keys()) == {"id", "papel", "chamadas", "falhas"}
+    assert ag["papel"] == "pesquisador"
+    assert ag["chamadas"] >= 1
+
+
+def test_get_dados_custos():
+    if not LOG_AMOSTRA.exists():
+        pytest.skip("amostra não encontrada — rode scripts/gerar_log_amostra.py")
+    status, content_type, body = _http_get("/dados/custos", LOG_AMOSTRA)
+    payload = json.loads(body)
+    assert status == 200
+    assert "application/json" in content_type
+    for chave in ("por_run", "por_modelo", "total"):
+        assert chave in payload, f"chave ausente em /dados/custos: {chave}"
+    assert isinstance(payload["por_run"], list)
+    assert isinstance(payload["por_modelo"], list)
+    assert set(payload["total"].keys()) == {"custo_total", "tokens_total", "n_chamadas"}
+
+
+def test_get_dados_catalogo():
+    if not LOG_AMOSTRA.exists():
+        pytest.skip("amostra não encontrada — rode scripts/gerar_log_amostra.py")
+    status, content_type, body = _http_get("/dados/catalogo", LOG_AMOSTRA)
+    payload = json.loads(body)
+    assert status == 200
+    assert "application/json" in content_type
+    assert isinstance(payload, list)
+    # Não quebra mesmo se array vazio; se houver, respeita o schema.
+    for item in payload:
+        assert set(item.keys()) == {"id", "nome", "descricao", "subagentes", "versao"}
+
+
+# ---------------------------------------------------------------------------
+# Gates — GET /dados/gates e POST /dados/gates/<id> (contrato v1)
+# ---------------------------------------------------------------------------
+
+import urllib.error
+
+
+def _http_post(path: str, body: dict, log_path: Path, db_path: Path):
+    """POST JSON; devolve (status, content_type, body_text) ou levanta HTTPError em 4xx."""
+    painel.Handler.log_path = log_path
+    painel.Handler.db_path = db_path
+    data = json.dumps(body).encode("utf-8")
+    with _TCPServerTeste(("127.0.0.1", 0), painel.Handler) as server:
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            url = f"http://127.0.0.1:{server.server_address[1]}{path}"
+            req = urllib.request.Request(
+                url, data=data,
+                headers={"Content-Type": "application/json"}, method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=3) as resp:
+                corpo = resp.read().decode("utf-8")
+                return resp.status, resp.headers.get("Content-Type", ""), corpo
+        finally:
+            server.shutdown()
+            thread.join(timeout=3)
+
+
+def _http_post_safe(path: str, body: dict, log_path: Path, db_path: Path):
+    """POST que captura HTTPError (4xx) devolvendo (status, body)."""
+    try:
+        s, ct, b = _http_post(path, body, log_path, db_path)
+        return s, b
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode("utf-8")
+
+
+_LOG_GATE_PENDENTE = [
+    json.dumps({"t": 0.0, "evento": "spec.recebida", "missao": "m-gate", "objetivo": "x"}),
+    json.dumps({"t": 0.1, "evento": "portao.reprovado", "portao": "cobertura",
+                "lacunas": ["falta x"], "missao": "m-gate"}),
+    json.dumps({"t": 0.2, "evento": "escalado", "para": "fundador",
+                "portao": "cobertura", "missao": "m-gate"}),
+]
+
+
+def test_get_dados_gates():
+    if not LOG_AMOSTRA.exists():
+        pytest.skip("amostra não encontrada")
+    status, content_type, body = _http_get("/dados/gates", LOG_AMOSTRA)
+    payload = json.loads(body)
+    assert status == 200
+    assert "application/json" in content_type
+    assert isinstance(payload, list)
+    # Amostra: escalado seguido de decisao.fundador → nenhum pendente
+    assert payload == []
+
+
+def test_get_dados_gates_pendente(tmp_path):
+    log = tmp_path / "log.jsonl"
+    log.write_text("\n".join(_LOG_GATE_PENDENTE) + "\n", encoding="utf-8")
+    status, _ct, body = _http_get("/dados/gates", log)
+    payload = json.loads(body)
+    assert status == 200
+    assert len(payload) == 1
+    g = payload[0]
+    assert set(g.keys()) == {"portao", "pergunta", "opcoes", "run", "estado"}
+    assert g["portao"] == "cobertura"
+    assert g["estado"] == "pendente"
+    assert g["opcoes"] == ["prosseguir", "corrigir", "abortar"]
+    assert "falta x" in g["pergunta"]
+
+
+def test_post_dados_gates_valido(tmp_path):
+    log = tmp_path / "log.jsonl"
+    log.write_text("\n".join(_LOG_GATE_PENDENTE) + "\n", encoding="utf-8")
+    db = tmp_path / "motor.db"
+    status, body = _http_post_safe("/dados/gates/cobertura", {"decisao": "prosseguir"}, log, db)
+    assert status == 200
+    resp = json.loads(body)
+    assert resp == {"ok": True, "gate": "cobertura", "decisao": "prosseguir"}
+    # valida gravação no SQLite
+    import sqlite3
+    conn = sqlite3.connect(str(db))
+    try:
+        row = conn.execute(
+            "SELECT decisao, respondido_em FROM caixa WHERE id = ?", ("cobertura",)
+        ).fetchone()
+        assert row is not None
+        assert row[0] == "prosseguir"
+        assert row[1] is not None and row[1] != ""
+    finally:
+        conn.close()
+
+
+def test_post_dados_gates_inexistente(tmp_path):
+    log = tmp_path / "log.jsonl"
+    log.write_text("\n".join(_LOG_GATE_PENDENTE) + "\n", encoding="utf-8")
+    db = tmp_path / "motor.db"
+    status, _body = _http_post_safe(
+        "/dados/gates/inexistente", {"decisao": "prosseguir"}, log, db
+    )
+    assert status == 404
+
+
+def test_post_dados_gates_decisao_invalida(tmp_path):
+    log = tmp_path / "log.jsonl"
+    log.write_text("\n".join(_LOG_GATE_PENDENTE) + "\n", encoding="utf-8")
+    db = tmp_path / "motor.db"
+    status, _body = _http_post_safe(
+        "/dados/gates/cobertura", {"decisao": "invalidar"}, log, db
+    )
+    assert status == 400

@@ -4,7 +4,7 @@
 > inteiro antes de mexer em qualquer coisa. Ele diz **o que estamos construindo, por quê, onde está, e
 > como não ir na direção errada.** Os detalhes vivem nos documentos canônicos listados na §7.
 >
-> De: Caio (dono e arquiteto da visão) + revisão de arquitetura. Atualizado: 2026-06-29.
+> De: Caio (dono e arquiteto da visão) + revisão de arquitetura. Atualizado: 2026-07-03.
 > Mantenha este documento vivo: quando a realidade mudar, atualize-o. Documento desatualizado mente.
 
 ---
@@ -124,7 +124,7 @@ direção errada — pare e releia.
 
 ---
 
-## 5. Estado atual (fotografia honesta — 2026-06-29)
+## 5. Estado atual (fotografia honesta — 2026-07-03)
 
 **O que JÁ funciona (validado em run real, não aspiracional):**
 
@@ -143,14 +143,24 @@ direção errada — pare e releia.
   modelo**, **propositor por slot** (ranqueia modelo por papel/tier, com **piso de qualidade** e ciente de
   **travas/timeouts** — não recomenda modelo que trava nem fraco demais), e **livro-razão de custo**
   (tokens + tempo + $ via tabela de preço). É o cérebro de medição e alocação.
-- **Superfície MCP fina** — `metafabrica.despachar_missao / status_missao / responder_gate / resumo_missao`.
+- **Validadores determinísticos (V1)** — `schema_json`/`contem` como primitiva da spec (test/compile = nó ferramenta via subprocess): gate que
+  passa/falha por **algoritmo**, não por opinião de LLM (o salto anti-alucinação, "Enforced Outcomes").
+  Reprovação re-dispara o alvo via reconciliação.
+- **Camada de conhecimento (RAG) — lift de recuperação provado (síntese, não)** — nó consome `fonte_rag`;
+  em corpus que o base ignora, medido por validador `contem`, **SEM RAG 0/3 → COM RAG 3/3**. ⚠️ A métrica é
+  presença de substring: prova que **o RAG traz o jargão que o base não tem**, NÃO que o modelo *combina* o
+  conhecimento. "Conhecimento antes de peso" tem 1º sinal, não prova completa (ver item 3 do red-team).
+- **Eventos tipados + superfície MCP** — **48 eventos tipados** (`eventos_schema.py`, guard anti-drift)
+  instrumentando tudo; `metafabrica.despachar_missao / status_missao / responder_gate / resumo_missao /
+  eventos`. É o gancho da interface viva. (Veredito por handoff em `LOG-VERIFICACAO.md`.)
 
-**Em curso:** esquema de eventos motor→superfície tipado + canal de stream (handoff escrito; é o gancho da
-interface viva).
+**Em curso:** a **interface viva própria** (brief de design v2 travado em `docs/design/`; construção
+iniciando sobre os eventos já emitidos).
 
-**Aspiracional (desenhado, ainda não construído):** a **interface viva própria** da meta-fábrica; curador
-que **age** (fatia 3: sombra + certificação); fábrica de especialistas (fine-tuning/destilação
-governados); casas além da softwarehouse; ponte física. Ver §6 e o ROADMAP.
+**Aspiracional (desenhado, ainda não construído):** curador que **age** (fatia 3: sombra + certificação);
+fábrica de especialistas (fine-tuning/destilação governados); **data-house** (aquisição de dataset, repo
+separado — justificada agora que o lift do RAG foi provado); casas além da softwarehouse; ponte física.
+Ver §6 e o ROADMAP.
 
 **Projetos SEPARADOS que consomem a meta-fábrica (não fazem parte dela, não são dependência):**
 **Jarvis** (assistente local; consome a meta-fábrica como motor headless), **Flint** (app de notas do
@@ -164,9 +174,12 @@ dono; pode *integrar* a meta-fábrica como cliente externo opcional — a meta-f
 
 Resumo; o detalhe Now/Next/Later está no `ROADMAP.md`.
 
-- **Curto:** esquema de eventos→superfície (instrumenta tudo, destrava a interface); validadores
-  determinísticos como primitiva da spec (o salto anti-alucinação); gate externo de CI (tira o gate da mão
-  do agente, estreia no Logisti).
+- **Curto:** construir a **interface viva** sobre os 48 eventos tipados (já emitidos) — incluindo o
+  **board de missões** (intake→planejamento→produção→concluída) e o **editor de workflow** (edita a
+  WorkflowSpec dentro dos padrões certificados); **catálogo de workflows versionados** + autoria-como-run;
+  **começar a data-house** (corpus que o base ignora — o RAG já provou o lift); gate externo de CI (tira o
+  gate da mão do agente, estreia no Logisti). *(Eventos tipados e validadores determinísticos: **feitos**.
+  Detalhe do ciclo de vida do workflow em `DECISAO-ciclo-de-vida-workflow.md`.)*
 - **Médio:** curador **age** (fatia 3 — testa modelo novo em sombra + certifica antes de mudar o catálogo);
   spec-kit rodando no Logisti (validação real); semente da camada de conhecimento (grafo md com
   proveniência/confiança/licença, ontologia emergente, "gap map").
@@ -203,6 +216,10 @@ Leia nesta ordem para entender o sistema:
 4. **`motor/docs/EVOLUCAO.md`** — o norte do **motor**: os vetores aditivos (validadores
    determinísticos, eventos tipados, curador-catraca, spec v0.2, fronteira fractal, fábrica de
    especialistas). Regra de ouro: melhorar, não substituir.
+4b. **`docs/DECISAO-ciclo-de-vida-workflow.md`** — como um workflow nasce, é personalizado,
+   **versionado com evidência**, executado (inclusive **parcialmente / modo MVP**), **composto
+   entre casas** e melhorado pelo curador. Autoria de workflow **é uma run do motor**; catálogo de
+   templates; o guardrail "melhor/pior é dado, não opinião". Canônico no tema workflow.
 5. **`motor/docs/ARQUITETURA-MCP.md`** — a **fronteira**: como o motor vira MCP, e a linha entre
    o que o motor faz e o que o porteiro/orquestrador faz. Decisões travadas.
 6. **`motor/README.md`** — entrada técnica do motor (como rodar, testar, Studio).

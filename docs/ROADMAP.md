@@ -41,14 +41,20 @@ curador**. Detalhe em `LEIA-PRIMEIRO.md` §3.
   synthesize + rota `grafo_dependencias` (construção). Verificação adversarial por subagente, avaliador
   de cobertura, **gate do fundador** (`interrupt()`), jobs duráveis (SQLite). Provider-agnóstico
   (OpenAI-compat/Codex/OpenCode/claude; roteamento papel/tier/pin/capacidade + failover por custo).
-  Suíte ~244 verde. **Fase C COMPLETA** (loop de auto-correção): prevenção (rota de dependência em
+  Suíte ~262+ verde. **Fase C COMPLETA** (loop de auto-correção): prevenção (rota de dependência em
   ondas) + escalada de tier (subtarefa difícil sobe de degrau e converge) + reconciliação na fonte em
   loop bounded (avaliador nomeia o nó culpado → re-dispara ele + dependentes até aprovar/teto). Validado
   em run real (`cobertura` reprovado→aprovado).
 - **Curador — FUNDAÇÃO COMPLETA** (read-only): observador + telemetria-por-modelo + propositor por slot
-  (ranqueia modelo por papel/tier, com piso de qualidade e ciente de travas/timeouts) + **livro-razão de
-  custo** (tokens+tempo+$). O cérebro de medição e alocação. Falta a fatia 3 (ele *agir*: sombra +
-  certificação). **Esquema de eventos motor→superfície** em curso (handoff escrito).
+  (ranqueia modelo por papel/tier, com piso de qualidade, ciente de travas/timeouts, **usando custo_usd
+  real no desempate**) + **livro-razão de custo** (tokens+tempo+$). O cérebro de medição e alocação. Falta
+  a fatia 3 (ele *agir*: sombra + certificação).
+- **Eventos + V1 FEITOS:** **48 eventos tipados** (`eventos_schema.py`, guard anti-drift) + superfície MCP
+  (`despachar/status/responder_gate/resumo/eventos`); **validadores determinísticos V1** (`schema_json`/
+  `contem`); **RAG com lift de recuperação provado** (0/3→3/3 por métrica de substring — prova recuperação, não síntese). Ver `LOG-VERIFICACAO.md`.
+- **Ciclo de vida do workflow — DECIDIDO** (doc `DECISAO-ciclo-de-vida-workflow.md`): catálogo de templates
+  versionados, autoria-como-run, versionamento com evidência, execução parcial/MVP (run não-certificado
+  fora do flywheel), composição entre casas com contrato tipado. Construção da UI/registro é Now/Next.
 - **dev-harness** — metodologia madura (FIC, tiers T0/T1/T2, DoD, anti-bajulação, security-DoD,
   spec-kit decidido). **Lacuna principal:** o gate ainda é auto-reportado pelo agente; o CI mecânico
   que bloqueia merge (Fase 4, passo 1) ainda não foi fiado. Estreia prevista no Logisti.
@@ -68,8 +74,9 @@ curador**. Detalhe em `LEIA-PRIMEIRO.md` §3.
 | Auto-evolução (curador / flywheel) | segura + barata | **fundação read-only completa** (observador+propositor+custo); falta fatia 3 (agir: sombra+certificação) |
 | Eficiência (modelos pequenos especialistas) | barata | telemetria-por-modelo **feita** (perfil de aptidão por slot); fábrica de especialistas é Later |
 | Camada de dados / conhecimento | boa | só a semente md (memória/Obsidian); grafo de conhecimento é Next |
-| Custo (medição) | barata | **livro-razão de custo feito** (tokens+tempo+$); falta o propositor usar custo real no desempate |
-| Interface viva (própria da meta-fábrica) | tempo-até-decisão | briefing completo; esquema de eventos motor→superfície **em curso** |
+| Custo (medição) | barata | **livro-razão feito** (tokens+tempo+$ **estimado**: tabela manual, sem reconciliação vs fatura — item 15); propositor usa custo_usd no desempate |
+| Interface viva (própria da meta-fábrica) | tempo-até-decisão | briefing v2 completo (board + editor de workflow); **48 eventos tipados feitos**; construção da UI é o Now |
+| Ciclo de vida do workflow | boa + barata | **decidido** (catálogo, versão-com-evidência, autoria-como-run, execução parcial/MVP) — ver `DECISAO-ciclo-de-vida-workflow.md` |
 
 ---
 
@@ -81,24 +88,33 @@ curador**. Detalhe em `LEIA-PRIMEIRO.md` §3.
 
 - [x] **Curador fatias 1-2 + telemetria-por-modelo + livro-razão de custo** — FEITO (read-only,
   determinístico). Fundação do flywheel *e* da medição de aptidão/custo por (papel, tier, modelo). ✅
-- [ ] **Esquema de eventos motor→superfície** — EM CURSO (handoff escrito). Contrato tipado + canal de
-  stream (MCP). É o gancho da interface viva e o ponto de interceptação; instrumenta tudo.
+- [x] **Esquema de eventos motor→superfície** — FEITO. 48 eventos tipados + guard anti-drift + superfície
+  MCP. É o gancho da interface viva e o ponto de interceptação; instrumenta tudo. ✅
+- [x] **Validadores determinísticos como primitiva da spec** (motor V1) — FEITO. A WorkflowSpec declara nós
+  validadores (`schema_json`/`contem`; test/compile = nó ferramenta); reprovação re-dispara via reconciliação. RAG com lift
+  provado por essa métrica. ✅
+- [ ] **Interface viva — P0** (board de missões + Grafo 2D com editor de workflow + Caixa do Fundador).
+  Construída sobre os eventos já emitidos. Ver `design/BRIEF-DESIGN-interface-meta-fabrica.md` e
+  `DECISAO-ciclo-de-vida-workflow.md`.
 - [ ] **Gate externo de CI** (Fase 4, passo 1) — T1. A máquina bloqueia merge (lint · type · test ·
   SAST · secrets · build); o agente propõe, a máquina decide. **Estreia no Logisti.** É o tijolo que
   tira o gate da mão do agente.
-- [ ] **Validadores determinísticos como primitiva da spec** (motor V1) — o salto anti-alucinação: a
-  WorkflowSpec passa a declarar nós validadores (teste/schema/compile/matemática), não só subagentes LLM.
-  Começar pela família mais barata (schema+teste), que casa com software. Ver `../motor/docs/EVOLUCAO.md`.
 
 ## Next (entra quando o Now esvaziar — ordenado por valor × risco)
 
-1. ~~**Livro-razão de custo**~~ — FEITO ✅ (tokens+tempo+$ por run/modelo, via tabela de preço). Próximo
-   passo derivado: o **propositor passar a usar custo_usd real no desempate** (hoje usa custo_ordem proxy).
-2. **Curador fatia 3** — teste em sombra + certificação antes de aplicar qualquer mudança de catálogo.
+1. ~~**Livro-razão de custo** + **propositor usa custo_usd real**~~ — FEITO ✅ (tokens+tempo+$ por
+   run/modelo; desempate por $/chamada real).
+2. **Catálogo de workflows + versionamento com evidência + autoria-como-run** — o registro de templates
+   versionados (metadados "quando usar"); criar workflow novo = uma run do motor (pesquisa→síntese→spec);
+   cada versão carrega sua telemetria (certificação = versão + evidência). Ver
+   `DECISAO-ciclo-de-vida-workflow.md`. Casa com o editor de workflow da interface.
+3. **Curador fatia 3** — teste em sombra + certificação antes de aplicar qualquer mudança de catálogo.
+   **É também o guardrail do "melhor/pior é dado, não opinião"** na edição de workflow (o agente suspeita;
+   a sombra decide).
    O ponto onde a auto-evolução começa a *agir*, com trava. **Timing:** casa com a troca de provedor do
    Caio (Codex→Ollama/OpenRouter) — é o cenário exato de "testar um modelo novo antes de confiar".
-3. **spec-kit + constituição rodando no Logisti** — decisão já tomada; falta o estresse real.
-4. **Semente da camada de conhecimento** — grafo md dos próprios outputs/decisões do harness, com
+4. **spec-kit + constituição rodando no Logisti** — decisão já tomada; falta o estresse real.
+5. **Semente da camada de conhecimento** — grafo md dos próprios outputs/decisões do harness, com
    **proveniência + confiança + licença em cada nó**. Dobra como visão de aprendizado (Obsidian/Flint),
    fonte de recuperação pro agente e semente de dataset. Custa quase nada hoje.
    - **Ontologia emergente, não desenhada na frente.** O schema do grafo cresce do uso real; tentar
@@ -107,11 +123,11 @@ curador**. Detalhe em `LEIA-PRIMEIRO.md` §3.
    - **Gap map** — registrar também o que o agente *tentou usar e não achou*. O negativo do grafo é tão
      valioso quanto o positivo: é ele que dá norte ao que coletar/ingerir e à estratégia de consumo de
      dados pro treino. É o que o curador opera.
-5. **NFRs na spec + estratégia de testes** (Fase 4, passos 2-3) — escala como requisito a montante.
+6. **NFRs na spec + estratégia de testes** (Fase 4, passos 2-3) — escala como requisito a montante.
 
-> O **esquema de eventos motor→superfície** saiu daqui — foi promovido pro **Now** (em curso). Eventos
-> tipados (`agente.iniciou`, `ferramenta.chamada`, `aresta.fluxo`, `gate.passou`, `custo.tick`,
-> `artefato.atualizou`) + canal de stream MCP. Desenhar agora é de graça; retrofitar depois é caro.
+> O **esquema de eventos motor→superfície** já saiu daqui e do Now — está **FEITO** (48 eventos tipados
+> incluindo `aresta.fluxo`, `custo.tick`, `artefato.atualizou`, `validador.rodou`). O próximo consumidor
+> desses eventos é a interface viva (Now).
 
 ## Later (capturado, não comprometido — começar cedo demais é o risco)
 
