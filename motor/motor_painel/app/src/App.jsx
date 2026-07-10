@@ -6,6 +6,7 @@ import Home from './pages/Home';
 import Runs from './pages/Runs';
 import CaixaFundador from './pages/CaixaFundador';
 import Grafo2D from './pages/Grafo2D';
+import Custos from './pages/Custos';
 
 /* Roteador hash-based — mais leve possível, zero deps */
 function useHashRoute() {
@@ -42,6 +43,7 @@ function App() {
   else if (route.startsWith('/runs')) Page = <Runs route={route} />;
   else if (route === '/caixa') Page = <CaixaFundador />;
   else if (route === '/grafo') Page = <Grafo2D />;
+  else if (route === '/custos') Page = <Custos />;
   else Page = <Home />;
 
   return (
