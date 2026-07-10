@@ -146,10 +146,13 @@ direção errada — pare e releia.
 - **Validadores determinísticos (V1)** — `schema_json`/`contem` como primitiva da spec (test/compile = nó ferramenta via subprocess): gate que
   passa/falha por **algoritmo**, não por opinião de LLM (o salto anti-alucinação, "Enforced Outcomes").
   Reprovação re-dispara o alvo via reconciliação.
-- **Camada de conhecimento (RAG) — lift de recuperação provado (síntese, não)** — nó consome `fonte_rag`;
-  em corpus que o base ignora, medido por validador `contem`, **SEM RAG 0/3 → COM RAG 3/3**. ⚠️ A métrica é
-  presença de substring: prova que **o RAG traz o jargão que o base não tem**, NÃO que o modelo *combina* o
-  conhecimento. "Conhecimento antes de peso" tem 1º sinal, não prova completa (ver item 3 do red-team).
+- **Camada de conhecimento (RAG) — lift de RECUPERAÇÃO provado com régua honesta (v3, 2026-07-04)** —
+  nó consome `fonte_rag`. A evidência v2 ("0/3→3/3") caiu no red-team item 3 (métrica tautológica +
+  baseline ruído); o medidor v3 refez a régua com fatos não-adivinháveis, 3 braços e **execução isolada
+  em tempdir** (o run dentro do repo contamina: o modelo lê os docs pelo filesystem): SEM RAG 1/5,
+  RAG irrelevante 0/5, RAG relevante 5/5 — critério pré-registrado batido. Escopo honesto: prova
+  **recuperação** numa config (codex/gpt-5.4-mini, n=5); **síntese** segue não medida (Frente C:
+  números crus, sem veredito). "Conhecimento antes de peso" tem 1º sinal real agora. `LOG-VERIFICACAO.md`.
 - **Eventos tipados + superfície MCP** — **48 eventos tipados** (`eventos_schema.py`, guard anti-drift)
   instrumentando tudo; `metafabrica.despachar_missao / status_missao / responder_gate / resumo_missao /
   eventos`. É o gancho da interface viva. (Veredito por handoff em `LOG-VERIFICACAO.md`.)
@@ -159,7 +162,8 @@ iniciando sobre os eventos já emitidos).
 
 **Aspiracional (desenhado, ainda não construído):** curador que **age** (fatia 3: sombra + certificação);
 fábrica de especialistas (fine-tuning/destilação governados); **data-house** (aquisição de dataset, repo
-separado — justificada agora que o lift do RAG foi provado); casas além da softwarehouse; ponte física.
+separado — **despausada em 2026-07-04**: o medidor v3 provou lift de recuperação com régua honesta;
+entra no **Next** do ROADMAP, não no Now); casas além da softwarehouse; ponte física.
 Ver §6 e o ROADMAP.
 
 **Projetos SEPARADOS que consomem a meta-fábrica (não fazem parte dela, não são dependência):**
@@ -177,7 +181,8 @@ Resumo; o detalhe Now/Next/Later está no `ROADMAP.md`.
 - **Curto:** construir a **interface viva** sobre os 48 eventos tipados (já emitidos) — incluindo o
   **board de missões** (intake→planejamento→produção→concluída) e o **editor de workflow** (edita a
   WorkflowSpec dentro dos padrões certificados); **catálogo de workflows versionados** + autoria-como-run;
-  **começar a data-house** (corpus que o base ignora — o RAG já provou o lift); gate externo de CI (tira o
+  data-house no Next (o medidor v3 provou o lift de recuperação em 2026-07-04 — a régua veio antes do
+  investimento, como manda o princípio 3); gate externo de CI (tira o
   gate da mão do agente, estreia no Logisti). *(Eventos tipados e validadores determinísticos: **feitos**.
   Detalhe do ciclo de vida do workflow em `DECISAO-ciclo-de-vida-workflow.md`.)*
 - **Médio:** curador **age** (fatia 3 — testa modelo novo em sombra + certifica antes de mudar o catálogo);

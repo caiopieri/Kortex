@@ -55,6 +55,11 @@ executáveis por runner + spec de autoria não pode emitir nó `ferramenta` sem 
 
 ## 3. [E] O "lift do RAG 0/3→3/3" é quase tautológico — mede papagaio, não maestria
 
+> **[CONFIRMADO 2026-07-04 — e pior que o previsto.]** Controle negativo passou 3/3 (métrica mede
+> substring) **e** a mesma pergunta passou 2/2 SEM RAG nenhum: o baseline 0/3 de 2026-07-02 era ruído
+> (termos adivinháveis, min 5/7). Lift v2 invalidado; data-house pausada; medidor v3 emitido
+> (`motor/handoffs/HANDOFF-CODEX-item3B-medidor-lift-v3.md`). Veredito no `LOG-VERIFICACAO.md`.
+
 **Fraqueza.** `exemplos/lift-docs-metafabrica.json`: o validador é `contem` com 7 jargões
 ("prevenção", "escalada de tier", "reconciliação na fonte"…, `min: 5`) — e o RAG injeta 8
 chunks **dos próprios docs que contêm essas strings**. O experimento mede: "com o texto na

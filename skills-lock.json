@@ -1,0 +1,101 @@
+{
+  "version": 1,
+  "skills": {
+    "build-loop-claude-code": {
+      "source": "BuildGreatProducts/builder-os",
+      "sourceType": "github",
+      "skillPath": "skills/build-loop-claude-code/SKILL.md",
+      "computedHash": "160784be70d90c41529187ce3b2070b424de805dfcf66556d6430c7ef61b399d"
+    },
+    "build-loop-codex": {
+      "source": "BuildGreatProducts/builder-os",
+      "sourceType": "github",
+      "skillPath": "skills/build-loop-codex/SKILL.md",
+      "computedHash": "16e23d980106312e310d04deb0bc4e34e535fb0a22a52dd0ac8ad419412009ce"
+    },
+    "build-loop-cursor": {
+      "source": "BuildGreatProducts/builder-os",
+      "sourceType": "github",
+      "skillPath": "skills/build-loop-cursor/SKILL.md",
+      "computedHash": "6e5983d420060d6850fe61a9244170052860bfeef8ec78b67a95d2eae7341495"
+    },
+    "build-mvp": {
+      "source": "BuildGreatProducts/builder-os",
+      "sourceType": "github",
+      "skillPath": "skills/build-mvp/SKILL.md",
+      "computedHash": "c5f3896c0f7a7fc805b11b59e1d8f5bef9cafd298f3561e70037e2cdfbb72dd7"
+    },
+    "design-system": {
+      "source": "BuildGreatProducts/builder-os",
+      "sourceType": "github",
+      "skillPath": "skills/design-system/SKILL.md",
+      "computedHash": "988c43ee66a6de27a39da15a748dbf1d9a5f01b575c2ac2dce6c22cd595566fe"
+    },
+    "idea-generator": {
+      "source": "BuildGreatProducts/builder-os",
+      "sourceType": "github",
+      "skillPath": "skills/idea-generator/SKILL.md",
+      "computedHash": "ed5e523cdb3b1985aef008057c7f1fec1158e3352b40908e46262f2704ca9b79"
+    },
+    "idea-validator": {
+      "source": "BuildGreatProducts/builder-os",
+      "sourceType": "github",
+      "skillPath": "skills/idea-validator/SKILL.md",
+      "computedHash": "941a3b8c23a83c07249382d49e4ea260f64a42c40270ee617daf04539383a17a"
+    },
+    "karpathy-guidelines": {
+      "source": "multica-ai/andrej-karpathy-skills",
+      "sourceType": "github",
+      "skillPath": "skills/karpathy-guidelines/SKILL.md",
+      "computedHash": "41e8ca055bbde13d240776a14a076a59614057200340c243130a76ba4e64cac8"
+    },
+    "launch-checklist": {
+      "source": "BuildGreatProducts/builder-os",
+      "sourceType": "github",
+      "skillPath": "skills/launch-checklist/SKILL.md",
+      "computedHash": "e90c1973d3ceab195199f82c41c63184e08b00e453fd9c47c469b7f8b75cdee5"
+    },
+    "ponytail": {
+      "source": "DietrichGebert/ponytail",
+      "sourceType": "github",
+      "skillPath": "skills/ponytail/SKILL.md",
+      "computedHash": "4503a9dba2dca5836469a104c90e0c32ae9cb8bb97d02806e6fa06d15ceed56a"
+    },
+    "ponytail-audit": {
+      "source": "DietrichGebert/ponytail",
+      "sourceType": "github",
+      "skillPath": "skills/ponytail-audit/SKILL.md",
+      "computedHash": "8b8d72e6ff70b65b6c9518d470fcf29dc696eea93d28f3efa10fdcc60cbd696d"
+    },
+    "ponytail-debt": {
+      "source": "DietrichGebert/ponytail",
+      "sourceType": "github",
+      "skillPath": "skills/ponytail-debt/SKILL.md",
+      "computedHash": "0099b82174e3a4261828b4ec04d2c068b1b294fdab14f76701c2acd1f7c99539"
+    },
+    "ponytail-gain": {
+      "source": "DietrichGebert/ponytail",
+      "sourceType": "github",
+      "skillPath": "skills/ponytail-gain/SKILL.md",
+      "computedHash": "c45ecba7906960eea904218b623abf097ebff84ecbacca6d68da1d0687435f75"
+    },
+    "ponytail-help": {
+      "source": "DietrichGebert/ponytail",
+      "sourceType": "github",
+      "skillPath": "skills/ponytail-help/SKILL.md",
+      "computedHash": "10e8382b1033c9a0fec0073de6d3de3846b4f5dca7d78b6df2d476a1f4cd43c6"
+    },
+    "ponytail-review": {
+      "source": "DietrichGebert/ponytail",
+      "sourceType": "github",
+      "skillPath": "skills/ponytail-review/SKILL.md",
+      "computedHash": "4646594fcd75455533f7ff1425f4f1c5ba0fa65f88241bf262b1c4fc275f049a"
+    },
+    "product-planner": {
+      "source": "BuildGreatProducts/builder-os",
+      "sourceType": "github",
+      "skillPath": "skills/product-planner/SKILL.md",
+      "computedHash": "3ef021149482b96ed87edae047bddc1cd587396915bee77be92d0dc4ec0460f0"
+    }
+  }
+}

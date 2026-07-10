@@ -47,10 +47,10 @@ o melhor terreno pra provar as primitivas antes de generalizar.
    qualidade, ciente de travas/timeouts), e **livro-razão de custo** (tokens + tempo + $ real).
    É o cérebro de medição e alocação — torna "vale a pena?" uma conta de ROI.
 6. **Camada de conhecimento (RAG).** Nó consome `fonte_rag`, recebe bloco "CONTEXTO RECUPERADO"
-   antes de produzir. **Lift de recuperação provado (síntese não)**: em corpus que o base ignora, medido
-   por validador `contem` (substring), SEM RAG 0/3 → COM RAG 3/3. Prova que o RAG **traz** o que o base não
-   sabe; NÃO prova que o modelo *combina* o conhecimento (item 3 do red-team). 1º sinal de "conhecimento
-   antes de peso", não prova completa.
+   antes de produzir. **Lift de RECUPERAÇÃO provado com régua honesta (medidor v3, 2026-07-04)**:
+   a evidência v2 caiu (tautologia + baseline ruído), a régua foi refeita — fatos não-adivinháveis,
+   3 braços, execução isolada em tempdir — e bateu o critério pré-registrado (SEM RAG 1/5 ·
+   irrelevante 0/5 · relevante 5/5; codex/gpt-5.4-mini). **Síntese: não medida.** Ver `LOG-VERIFICACAO.md`.
 7. **Superfície MCP + eventos tipados.** `metafabrica.despachar_missao / status_missao /
    responder_gate / resumo_missao / eventos`. Esquema de 48 eventos tipados (`eventos_schema.py`,
    guard anti-drift) que instrumenta tudo e destrava a interface viva.
@@ -81,7 +81,7 @@ depende de nenhum produto externo.
 - Uma missão real fecha com `cobertura` indo de **reprovado → aprovado** sem intervenção humana
   além dos gates. ✅ atingido.
 - Validador determinístico distingue saída boa de ruim de forma reproduzível (não satura). ✅.
-- RAG dá **lift de recuperação medível** sobre corpus que o base ignora (métrica de substring). ✅ recuperação; ❌ síntese (não testada — item 3 red-team).
+- RAG dá **lift de recuperação medível** sobre corpus que o base ignora. ✅ **provado (medidor v3, 2026-07-04)** — a evidência v2 caiu, a régua v3 (fatos não-adivinháveis, 3 braços, tempdir isolado) bateu o critério pré-registrado numa config. Síntese: ❌ não testada.
 - Trocar de provedor sem tocar em código (só JSON). ✅.
 - Livro-razão atribui **$ estimado por modelo/papel** (tabela de preço manual, sem reconciliação vs fatura → tendência, não valor exato — item 15 red-team), permitindo comparação de alocação. ✅ (com ressalva).
 - **Meta ainda aberta:** UM especialista pequeno bate o generalista em custo **e** passa no gate
@@ -102,12 +102,13 @@ depende de nenhum produto externo.
 ## Estado atual (retrato honesto — 2026-07-03)
 **Já funciona (validado, não aspiracional):** motor v0.5 + Fase C completa; validadores
 determinísticos V1; roteamento provider-agnóstico + failover por custo; curador (observador +
-propositor com custo real + livro-razão); RAG com lift provado; 48 eventos tipados + superfície
-MCP. Suíte ~262+ verde. (Ver `LOG-VERIFICACAO.md` para o veredito por handoff.)
+propositor com custo real + livro-razão); RAG (encanamento + lift de recuperação provado no
+medidor v3, 2026-07-04; síntese não medida); 48 eventos tipados + superfície MCP. Suíte ~292 verde.
+(Ver `LOG-VERIFICACAO.md`.)
 **Aspiracional (desenhado, não construído):** interface viva própria; curador que **age** (fatia
 3 — sombra + certificação antes de mudar catálogo); fábrica de especialistas (fine-tune/destilação
-governados); casas além da softwarehouse; data-house (aquisição de dataset, repo separado); ponte
-física.
+governados); casas além da softwarehouse; data-house (aquisição de dataset, repo separado —
+**despausada 2026-07-04**, no Next como semente); ponte física.
 
 ## Capacidades-alvo validadas manualmente hoje (o protótipo "Maestri")
 O dono opera hoje, **à mão**, um arranjo (Maestri + monitor Python + Antigravity) que prototipa o
@@ -148,7 +149,8 @@ verificação + curador + evidência, em vez de orquestração manual.
 ## Suposições (a validar)
 - Software é mesmo a vertical de grader mais barato pra provar o flywheel primeiro. (Alta
   confiança.)
-- O lift do RAG em corpus ignorado pelo base generaliza pra corpora externos obscuros (a
-  data-house) — provado só nos nossos docs até agora.
+- O RAG dá lift real em corpus que o base ignora — **recuperação provada numa config** (medidor
+  v3, 2026-07-04). Segue suposição: generalizar pra outros modelos/corpora externos (data-house)
+  e a claim de **síntese** (combinar conhecimento, não só recuperar).
 - Um especialista pequeno **pode** bater o generalista em custo+qualidade numa tarefa estreita —
   hipótese central do longo prazo, ainda **não** provada.

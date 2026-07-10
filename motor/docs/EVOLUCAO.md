@@ -30,8 +30,11 @@ está relitigando decisão travada — pare e releia esta seção.
   escalada de tier + reconciliação na fonte em loop bounded. Validada em run real. Isso é o
   "reprovado vira lacuna por código" generalizado para correção upstream.
 - **V1 FEITO:** nós validadores determinísticos (`schema_json`/`contem`; test/compile via nó ferramenta) já são primitiva da spec;
-  reprovação re-dispara o alvo via reconciliação. **RAG com lift de recuperação provado** (0/3→3/3; métrica `contem` = substring, prova recuperação não síntese) em
-  corpus que o base ignora). Ver `../../LOG-VERIFICACAO.md`.
+  reprovação re-dispara o alvo via reconciliação. **RAG: lift de recuperação provado (medidor v3,
+  2026-07-04)** — a evidência v2 "0/3→3/3" caiu (red-team item 3); a régua refeita (fatos
+  não-adivinháveis, 3 braços, tempdir isolado) bateu o critério pré-registrado (1/5 · 0/5 · 5/5).
+  Síntese: não medida. Lição estrutural: **run de experimento dentro do repo contamina** (o modelo
+  lê os docs pelo filesystem) — isolamento em tempdir é obrigatório. Ver `../../LOG-VERIFICACAO.md`.
 - **V2 FEITO:** 48 eventos tipados (`eventos_schema.py`, guard anti-drift) incluindo os de superfície
   (`aresta.fluxo`, `custo.tick`, `artefato.atualizou`, `validador.rodou`, `rag.consultado`) + superfície MCP
   (`despachar/status/responder_gate/resumo/eventos`).

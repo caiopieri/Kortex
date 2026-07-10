@@ -38,3 +38,10 @@ graphify-out/
 .agents/
 .claude/
 .browser-profile/
+.maestri/
+
+# Café do_KEEP_AWAKE do LiteLLM (estado de runtime, não pertence ao repo)
+caffeinate.log
+caffeinate.pid
+infra/litellm/caffeinate.log
+infra/litellm/caffeinate.pid
