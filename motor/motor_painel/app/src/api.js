@@ -28,6 +28,7 @@ export const getAgents = () => get('/agentes');
 export const getCosts = () => get('/custos');
 export const getGates = () => get('/gates');
 export const getCatalogo = () => get('/catalogo');
+export const fetchDados = () => get('');
 export const postGateDecision = (id, decisao) => post(`/gates/${id}`, { decisao });
 
 /* Hook de poll a cada 2s para telas vivas */

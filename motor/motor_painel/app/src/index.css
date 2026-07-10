@@ -189,3 +189,62 @@ body {
 .sh.red { width: 11px; height: 11px; background: var(--red); clip-path: polygon(30% 0,70% 0,100% 30%,100% 70%,70% 100%,30% 100%,0 70%,0 30%); }
 .sh.idle { width: 9px; height: 9px; border-radius: 50%; background: var(--text3); }
 
+/* Cost details and chart styles */
+.drow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  transition: background-color 0.15s ease;
+}
+.drow.clk { cursor: pointer; }
+.drow.clk:hover { background: var(--surface2); }
+
+.bar {
+  height: 6px;
+  background: var(--surface2);
+  border-radius: 1px;
+  position: relative;
+  overflow: hidden;
+  flex: none;
+}
+.barf {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-radius: 1px;
+  transition: width 0.3s ease;
+}
+
+.cbars {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 100%;
+  padding-top: 8px;
+}
+.cb {
+  flex: 1;
+  background: var(--surface2);
+  position: relative;
+  border-radius: 1px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+.cb:hover {
+  background: var(--border);
+}
+.cbf {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: 1px;
+  transition: height 0.3s ease;
+}
+
+

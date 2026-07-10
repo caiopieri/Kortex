@@ -106,6 +106,25 @@ const BUILTINS = [
 
 const THEME_KEY = 'mf-theme-active';
 const MODE_KEY = 'mf-theme-mode';
+const CUSTOM_THEMES_KEY = 'mf-themes-custom';
+
+export function getCustomThemes() {
+  try {
+    return JSON.parse(localStorage.getItem(CUSTOM_THEMES_KEY)) || [];
+  } catch (e) {
+    return [];
+  }
+}
+
+export function saveCustomThemes(list) {
+  try {
+    localStorage.setItem(CUSTOM_THEMES_KEY, JSON.stringify(list));
+  } catch (e) {}
+}
+
+export function getAllThemes() {
+  return [...BUILTINS, ...getCustomThemes()];
+}
 
 export function getStoredTheme() {
   return localStorage.getItem(THEME_KEY) || 'metafabrica';
@@ -116,9 +135,16 @@ export function getStoredMode() {
 }
 
 export function applyTheme(themeId, mode) {
-  const theme = BUILTINS.find((t) => t.id === themeId) || BUILTINS[0];
+  const themes = getAllThemes();
+  const theme = themes.find((t) => t.id === themeId) || themes[0];
   
-  const decl = (obj) => Object.entries(obj).map(([k, v]) => `${k}:${v}`).join(';');
+  const decl = (obj) =>
+    Object.entries(obj || {})
+      .map(([k, v]) => {
+        const key = k.startsWith('--') ? k : `--${k}`;
+        return `${key}:${v}`;
+      })
+      .join(';');
 
   let el = document.getElementById('mf-theme-active-style');
   if (!el) {
@@ -127,10 +153,13 @@ export function applyTheme(themeId, mode) {
   }
   document.head.appendChild(el);
   
+  const escuroBg = theme.escuro['--bg'] || theme.escuro['bg'] || '#0B0C0E';
+  const claroBg = theme.claro['--bg'] || theme.claro['bg'] || '#FAFBFD';
+  
   el.textContent = `
     :root, .mf-root { ${decl(theme.escuro)} }
     :root[data-theme="stark"], html[data-theme="stark"], .mf-root[data-theme="stark"] { ${decl(theme.claro)} }
-    body { background: ${mode === 'claro' ? theme.claro['--bg'] : theme.escuro['--bg']}; }
+    body { background: ${mode === 'claro' ? claroBg : escuroBg}; }
   `;
 
   const root = document.documentElement;
@@ -138,6 +167,10 @@ export function applyTheme(themeId, mode) {
   
   localStorage.setItem(THEME_KEY, themeId);
   localStorage.setItem(MODE_KEY, mode);
+
+  // Dispatch event for other parts of the application to listen to
+  document.dispatchEvent(new CustomEvent('mf-theme-applied', { detail: theme }));
 }
 
 export { BUILTINS };
+
