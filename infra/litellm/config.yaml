@@ -29,22 +29,22 @@ model_list:
   # ---------------------------------------------------------------------------
   - model_name: operario           # GLM-5.2 — líder open-weight de coding agêntico
     litellm_params: {model: nvidia_nim/z-ai/glm-5.2, api_base: https://integrate.api.nvidia.com/v1, api_key: os.environ/NVIDIA_NIM_API_KEY}
-  - model_name: operario_fb1       # DeepSeek-V4-Pro — LiveCodeBench + 1M ctx
-    litellm_params: {model: nvidia_nim/deepseek-ai/deepseek-v4-pro, api_base: https://integrate.api.nvidia.com/v1, api_key: os.environ/NVIDIA_NIM_API_KEY}
-  - model_name: operario_fb2       # Kimi-K2.6 — forte em tool use / agente
-    litellm_params: {model: nvidia_nim/moonshotai/kimi-k2.6, api_base: https://integrate.api.nvidia.com/v1, api_key: os.environ/NVIDIA_NIM_API_KEY}
-  - model_name: operario_fb3       # Qwen3-Coder-480B — melhor eficiência/parâmetro
-    litellm_params: {model: nvidia_nim/qwen/qwen3-coder-480b-a35b-instruct, api_base: https://integrate.api.nvidia.com/v1, api_key: os.environ/NVIDIA_NIM_API_KEY}
-  - model_name: operario_fb4       # MiniMax-M3 — líder SWE-Bench Pro (mas é o topo do revisor; entra fundo aqui)
-    litellm_params: {model: nvidia_nim/minimaxai/minimax-m3, api_base: https://integrate.api.nvidia.com/v1, api_key: os.environ/NVIDIA_NIM_API_KEY, max_tokens: 4096}
-  - model_name: operario_fb5       # Qwen3.5-397B — generalista grande
-    litellm_params: {model: nvidia_nim/qwen/qwen3.5-397b-a17b, api_base: https://integrate.api.nvidia.com/v1, api_key: os.environ/NVIDIA_NIM_API_KEY}
-  - model_name: operario_fb6       # DeepSeek-V4-Flash — rápido, mantém o fluxo vivo
-    litellm_params: {model: nvidia_nim/deepseek-ai/deepseek-v4-flash, api_base: https://integrate.api.nvidia.com/v1, api_key: os.environ/NVIDIA_NIM_API_KEY}
-  - model_name: operario_fb7       # Qwen2.5-Coder-32B — pequeno, quase sempre disponível
-    litellm_params: {model: nvidia_nim/qwen/qwen2.5-coder-32b-instruct, api_base: https://integrate.api.nvidia.com/v1, api_key: os.environ/NVIDIA_NIM_API_KEY}
-  - model_name: operario_fb8       # Gemini-2.5-Flash — fora da NVIDIA (bucket de limite diferente)
+  - model_name: operario_fb1       # Gemini-2.5-Flash — fallback FORA da NVIDIA no INÍCIO da escada (desacopla o operário do bucket NVIDIA, igual ao revisor)
     litellm_params: {model: gemini/gemini-2.5-flash, api_key: os.environ/GEMINI_API_KEY}
+  - model_name: operario_fb2       # DeepSeek-V4-Pro — LiveCodeBench + 1M ctx
+    litellm_params: {model: nvidia_nim/deepseek-ai/deepseek-v4-pro, api_base: https://integrate.api.nvidia.com/v1, api_key: os.environ/NVIDIA_NIM_API_KEY}
+  - model_name: operario_fb3       # Kimi-K2.6 — forte em tool use / agente
+    litellm_params: {model: nvidia_nim/moonshotai/kimi-k2.6, api_base: https://integrate.api.nvidia.com/v1, api_key: os.environ/NVIDIA_NIM_API_KEY}
+  - model_name: operario_fb4       # Qwen3-Coder-480B — melhor eficiência/parâmetro
+    litellm_params: {model: nvidia_nim/qwen/qwen3-coder-480b-a35b-instruct, api_base: https://integrate.api.nvidia.com/v1, api_key: os.environ/NVIDIA_NIM_API_KEY}
+  - model_name: operario_fb5       # MiniMax-M3 — líder de benchmarks SWE-Bench Pro 2026
+    litellm_params: {model: nvidia_nim/minimaxai/minimax-m3, api_base: https://integrate.api.nvidia.com/v1, api_key: os.environ/NVIDIA_NIM_API_KEY, max_tokens: 4096}
+  - model_name: operario_fb6       # Qwen3.5-397B — generalista grande
+    litellm_params: {model: nvidia_nim/qwen/qwen3.5-397b-a17b, api_base: https://integrate.api.nvidia.com/v1, api_key: os.environ/NVIDIA_NIM_API_KEY}
+  - model_name: operario_fb7       # DeepSeek-V4-Flash — rápido, mantém o fluxo vivo
+    litellm_params: {model: nvidia_nim/deepseek-ai/deepseek-v4-flash, api_base: https://integrate.api.nvidia.com/v1, api_key: os.environ/NVIDIA_NIM_API_KEY}
+  - model_name: operario_fb8       # Qwen2.5-Coder-32B — pequeno, quase sempre disponível (salva-vidas fundo de poço)
+    litellm_params: {model: nvidia_nim/qwen/qwen2.5-coder-32b-instruct, api_base: https://integrate.api.nvidia.com/v1, api_key: os.environ/NVIDIA_NIM_API_KEY}
 
   # ---------------------------------------------------------------------------
   # ARQUITETO — julgamento/arquitetura. Topo: DeepSeek-V4-Pro (reasoning forte)
@@ -92,12 +92,13 @@ router_settings:
   routing_strategy: simple-shuffle
   fallbacks:
     - operario:  [operario_fb1, operario_fb2, operario_fb3, operario_fb4, operario_fb5, operario_fb6, operario_fb7, operario_fb8]
-    - operario_fb1: [operario_fb2, operario_fb3, operario_fb4, operario_fb5, operario_fb6, operario_fb7]
-    - operario_fb2: [operario_fb3, operario_fb4, operario_fb5, operario_fb6, operario_fb7]
-    - operario_fb3: [operario_fb4, operario_fb5, operario_fb6, operario_fb7]
-    - operario_fb4: [operario_fb5, operario_fb6, operario_fb7]
-    - operario_fb5: [operario_fb6, operario_fb7]
-    - operario_fb6: [operario_fb7]
+    - operario_fb1: [operario_fb2, operario_fb3, operario_fb4, operario_fb5, operario_fb6, operario_fb7, operario_fb8]
+    - operario_fb2: [operario_fb3, operario_fb4, operario_fb5, operario_fb6, operario_fb7, operario_fb8]
+    - operario_fb3: [operario_fb4, operario_fb5, operario_fb6, operario_fb7, operario_fb8]
+    - operario_fb4: [operario_fb5, operario_fb6, operario_fb7, operario_fb8]
+    - operario_fb5: [operario_fb6, operario_fb7, operario_fb8]
+    - operario_fb6: [operario_fb7, operario_fb8]
+    - operario_fb7: [operario_fb8]
     - arquiteto: [arquiteto_fb1, arquiteto_fb2, arquiteto_fb3, arquiteto_fb4, arquiteto_fb5, arquiteto_fb6]
     - arquiteto_fb1: [arquiteto_fb2, arquiteto_fb3, arquiteto_fb4, arquiteto_fb5]
     - arquiteto_fb2: [arquiteto_fb3, arquiteto_fb4, arquiteto_fb5]
