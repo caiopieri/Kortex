@@ -30,6 +30,21 @@ export const getGates = () => get('/gates');
 export const getCatalogo = () => get('/catalogo');
 export const fetchDados = () => get('');
 export const postGateDecision = (id, decisao) => post(`/gates/${id}`, { decisao });
+export const getMissaoAtiva = () => get('/missoes/ativa');
+
+/* Despacho real do motor — erro devolve a mensagem crua do servidor. */
+export async function postMissao(spec, opcoes) {
+  const res = await fetch(`${BASE}/missoes`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ spec, opcoes }),
+  });
+  if (!res.ok) {
+    const texto = await res.text();
+    throw new Error(`HTTP ${res.status}: ${texto}`);
+  }
+  return res.json();
+}
 
 /* Hook de poll a cada 2s para telas vivas */
 export function usePoll(fetcher, deps = []) {

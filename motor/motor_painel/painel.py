@@ -4,6 +4,8 @@
 Uso: python3 motor_painel/painel.py  →  http://localhost:8378
 """
 import json
+import os
+import subprocess
 import sys
 import http.server
 import socketserver
@@ -375,6 +377,27 @@ def obter_catalogo() -> list[dict]:
     return catalogo
 
 
+def _pid_vivo(pid: int) -> bool:
+    """True se o processo com este pid existe (os.kill(pid, 0))."""
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # existe, mas é de outro usuário
+    return True
+
+
+def _ler_pid_lock(lock: Path) -> int | None:
+    """Lê o pid gravado no lock de despacho; None se ausente/ilegível."""
+    if not lock.exists():
+        return None
+    try:
+        return int(lock.read_text(encoding="utf-8").strip())
+    except (ValueError, OSError):
+        return None
+
+
 def atualizar_nota_caixa(gate_id: str, decisao: str) -> bool:
     caminhos_busca = [
         BASE.parent,
@@ -412,6 +435,7 @@ class ReaproveitavelTCPServer(socketserver.TCPServer):
 class Handler(http.server.BaseHTTPRequestHandler):
     log_path: Path = LOG_PATH  # substituível em testes
     db_path: Path = DB_PATH    # substituível em testes
+    despachos_dir: Path = BASE.parent / "runs" / "despachos"  # substituível em testes
 
     def log_message(self, *a):
         pass  # silencia o log padrão do BaseHTTPRequestHandler
@@ -423,6 +447,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def _origem_permitida(self) -> bool:
+        """Validação de Origem para prevenir CSRF (mesmo padrão nos POSTs)."""
+        origin = self.headers.get("Origin")
+        if not origin:
+            return True
+        host = self.headers.get("Host", "")
+        origin_clean = origin.replace("http://", "").replace("https://", "")
+        if origin_clean != host and not (host.startswith("127.0.0.1") and origin_clean.startswith("localhost")):
+            return False
+        return True
+
+    def _erro(self, status: int, msg: bytes):
+        self.send_response(status)
+        self.end_headers()
+        self.wfile.write(msg)
 
     def _html(self, body: bytes):
         self.send_response(200)
@@ -595,6 +635,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path == "/dados/catalogo":
             catalogo = obter_catalogo()
             return self._json(catalogo)
+
+        if path == "/dados/missoes/ativa":
+            pid = _ler_pid_lock(self.despachos_dir / ".lock")
+            ativa = pid is not None and _pid_vivo(pid)
+            return self._json({"ativa": ativa, "pid": pid if ativa else None})
             
         if path == "/healthz":
             return self._json({"ok": True})
@@ -654,19 +699,73 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _post_missao(self):
+        """POST /dados/missoes — despacha o motor de verdade (consome créditos).
+
+        Salvaguardas: Origin validado, body ≤64KB, spec dict não-vazia,
+        lock de despacho único (pid vivo → 409), spec gravada em arquivo
+        (nenhum campo do body vira argumento), Popen sem shell.
+        """
+        content_length = int(self.headers.get("Content-Length", 0))
+        if content_length > 64 * 1024:
+            self.rfile.read(content_length)  # drena p/ a resposta chegar ao cliente
+            return self._erro(400, b"corpo excede 64KB")
+        post_data = self.rfile.read(content_length)  # lê antes de responder — evita RST no cliente
+
+        if not self._origem_permitida():
+            return self._erro(403, b"Erro CSRF: Origem nao permitida")
+
+        try:
+            body = json.loads(post_data.decode("utf-8"))
+        except Exception:
+            return self._erro(400, b"JSON invalido")
+        if not isinstance(body, dict):
+            return self._erro(400, b"JSON invalido")
+
+        spec = body.get("spec")
+        if not isinstance(spec, dict) or not spec:
+            return self._erro(400, b"spec deve ser um objeto nao-vazio")
+        opcoes = body.get("opcoes")
+        if not isinstance(opcoes, dict):
+            opcoes = {}
+
+        despachos = self.despachos_dir
+        despachos.mkdir(parents=True, exist_ok=True)
+        lock = despachos / ".lock"
+        pid_lock = _ler_pid_lock(lock)
+        if pid_lock is not None and _pid_vivo(pid_lock):
+            return self._erro(409, b"ja existe despacho em curso")
+
+        ts = time.strftime("%Y%m%d-%H%M%S")
+        spec_path = despachos / f"spec-{ts}.json"
+        spec_path.write_text(json.dumps(spec, ensure_ascii=False, indent=2), encoding="utf-8")
+        run_log = despachos / f"run-{ts}.log"
+
+        argv = [sys.executable, "-m", "motor", "--spec", str(spec_path), "--caixa", "runs/caixa"]
+        if opcoes.get("auto") is True:
+            argv.append("--auto")
+        if opcoes.get("escalar") is True:
+            argv.append("--escalar")
+
+        with open(run_log, "wb") as log_f:
+            proc = subprocess.Popen(
+                argv,
+                cwd=str(BASE.parent),
+                stdout=log_f,
+                stderr=log_f,
+                start_new_session=True,
+            )
+        lock.write_text(str(proc.pid), encoding="utf-8")
+        return self._json({"ok": True, "pid": proc.pid, "spec": str(spec_path), "log": str(run_log)})
+
     def do_POST(self):
         path = urlparse(self.path).path
+        if path == "/dados/missoes":
+            return self._post_missao()
+
         if path.startswith("/dados/gates/"):
-            # Validação de Origem para prevenir CSRF
-            origin = self.headers.get("Origin")
-            if origin:
-                host = self.headers.get("Host", "")
-                origin_clean = origin.replace("http://", "").replace("https://", "")
-                if origin_clean != host and not (host.startswith("127.0.0.1") and origin_clean.startswith("localhost")):
-                    self.send_response(403)
-                    self.end_headers()
-                    self.wfile.write(b"Erro CSRF: Origem nao permitida")
-                    return
+            if not self._origem_permitida():
+                return self._erro(403, b"Erro CSRF: Origem nao permitida")
 
             gate_id = path.split("/")[-1]
             content_length = int(self.headers.get("Content-Length", 0))

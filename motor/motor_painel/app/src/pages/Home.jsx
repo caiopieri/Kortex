@@ -76,10 +76,7 @@ export default function Home() {
 
   const hoje = `US$ ${totalCusto.toFixed(2)}`;
   const hojeD = `${nChamadas} chamadas (${(totalTokens / 1000).toFixed(1)}k tokens)`;
-  const mes = `US$ ${(totalCusto * 12.5 + 18.2).toFixed(2)}`;
-  const mesD = `Est. baseado na sessão`;
   const prov = costsData?.por_modelo?.map(m => m.modelo.split('/').pop()).join(' · ') || '—';
-  const proj = `US$ ${(totalCusto * 25).toFixed(2)}`;
 
   // AO VIVO or OCIOSO status
   const temAtivas = runs.some(r => r.estado === 'ativa');
@@ -144,7 +141,8 @@ export default function Home() {
     return id.slice(0, 3);
   };
 
-  const activeAgents = agentsData && agentsData.length > 0 ? agentsData.map(a => ({
+  const hasRealAgents = agentsData && agentsData.length > 0;
+  const activeAgents = hasRealAgents ? agentsData.map(a => ({
     mono: getAgentLabel(a.id),
     role: a.papel || 'agente',
     now: a.falhas > 0 ? 'falhou' : a.chamadas > 0 ? 'ativo' : 'ocioso',
@@ -171,8 +169,8 @@ export default function Home() {
               </div>
               <div className="kpi">
                 <div className="eyebrow">Mês</div>
-                <div className="mono" style={{ fontSize: 20, fontWeight: 600, marginTop: 6 }}>{mes}</div>
-                <div className="mono" style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>{mesD}</div>
+                <div className="mono" style={{ fontSize: 20, fontWeight: 600, marginTop: 6, color: 'var(--text3)' }}>—</div>
+                <div className="mono" style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>requer histórico com timestamp</div>
               </div>
               <div className="kpi">
                 <div className="eyebrow">Por provedor</div>
@@ -180,7 +178,8 @@ export default function Home() {
               </div>
               <div className="kpi">
                 <div className="eyebrow">Projeção do mês</div>
-                <div className="mono" style={{ fontSize: 20, fontWeight: 600, marginTop: 6 }}>{proj}</div>
+                <div className="mono" style={{ fontSize: 20, fontWeight: 600, marginTop: 6, color: 'var(--text3)' }}>—</div>
+                <div className="mono" style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>requer histórico com timestamp</div>
               </div>
             </div>
           </div>
@@ -313,16 +312,11 @@ export default function Home() {
               <span className="bk tl"></span><span className="bk tr"></span><span className="bk bl"></span><span className="bk br"></span>
               {/* chat */}
               <div style={{ padding: 16, borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column' }}>
-                <div className="eyebrow">Chat · dispara missão em linguagem natural</div>
+                <div className="eyebrow">Resumo · status ao vivo</div>
                 <div style={{ flex: 1, margin: '12px 0', display: 'flex', flexDirection: 'column', gap: 8, justifyContent: 'flex-end' }}>
-                  <div className="mono" style={{ fontSize: 11.5, color: 'var(--text2)', alignSelf: 'flex-start', background: 'var(--surface2)', border: '1px solid var(--border)', padding: '8px 10px', borderRadius: 2, maxWidth: '90%' }}>Como estão os runs de hoje?</div>
                   <div className="mono" style={{ fontSize: 11.5, color: 'var(--text)', alignSelf: 'flex-end', maxWidth: '92%', lineHeight: 1.5 }}>
                     {runs.length} missão{runs.length !== 1 ? 's' : ''} registrada{runs.length !== 1 ? 's' : ''} ({runs.filter(r => r.estado === 'ativa').length} ativa{runs.filter(r => r.estado === 'ativa').length !== 1 ? 's' : ''}). {gates.length > 0 ? `${gates.length} aguarda você na Caixa do Fundador.` : 'Nenhuma pendência activa.'} Custo total {hoje}.
                   </div>
-                </div>
-                <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: 'var(--bg)' }}>
-                  <span className="mono" style={{ fontSize: 11.5, color: 'var(--text3)', flex: 1 }}>Peça um status ou descreva uma missão…</span>
-                  <span className="arrow">↑</span>
                 </div>
               </div>
               {/* feed */}
@@ -359,7 +353,10 @@ export default function Home() {
           {/* 06 AGENTES */}
           <div>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12 }}>
-              <span className="num">06 — Agentes</span>
+              <span className="num" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                06 — Agentes
+                {!hasRealAgents && <span className="chip">exemplo · estático</span>}
+              </span>
               <span className="lnk" onClick={() => window.location.hash = '/agentes'}>ver todos →</span>
             </div>
             <div style={{ display: 'flex', gap: 22, alignItems: 'flex-start', flexWrap: 'wrap' }}>

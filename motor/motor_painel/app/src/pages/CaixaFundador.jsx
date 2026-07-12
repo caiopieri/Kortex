@@ -169,6 +169,7 @@ export default function CaixaFundador() {
   const [selectMode, setSelectMode] = useState(false);
   const [checked, setChecked] = useState([]);
   const [submitting, setSubmitting] = useState(false);
+  const [resolvedGates, setResolvedGates] = useState(new Set());
 
   // Auto-seleciona o primeiro gate se nada estiver selecionado
   useEffect(() => {
@@ -198,11 +199,12 @@ export default function CaixaFundador() {
     if (checked.length === 0) return;
     setSubmitting(true);
     try {
-      const queue = (gates || []);
-      const checkedGates = queue.filter((q) => checked.includes(`${q.run}_${q.portao}`));
+      const queueLocal = (gates || []);
+      const checkedGates = queueLocal.filter((q) => checked.includes(`${q.run}_${q.portao}`));
       for (const g of checkedGates) {
         const decision = g.opcoes && g.opcoes.length > 0 ? g.opcoes[0] : 'prosseguir';
         await postGateDecision(g.portao, decision);
+        setResolvedGates((prev) => new Set(prev).add(`${g.run}_${g.portao}`));
       }
     } catch (e) {
       console.error("Erro na aprovação em lote:", e);
@@ -217,6 +219,7 @@ export default function CaixaFundador() {
     setSubmitting(true);
     try {
       await postGateDecision(gate.portao, option);
+      setResolvedGates((prev) => new Set(prev).add(`${gate.run}_${gate.portao}`));
       setSelectedGate(null);
     } catch (e) {
       console.error("Erro ao registrar decisão:", e);
@@ -228,6 +231,7 @@ export default function CaixaFundador() {
   const queue = (gates || []).map((q) => {
     const isSelected = selectedGate && selectedGate.run === q.run && selectedGate.portao === q.portao;
     const isChecked = checked.includes(`${q.run}_${q.portao}`);
+    const isResolved = resolvedGates.has(`${q.run}_${q.portao}`);
     return {
       ...q,
       isSelected,
@@ -235,8 +239,8 @@ export default function CaixaFundador() {
       icon: q.portao === 'cobertura' ? '⛒' : '◆',
       origin: q.portao === 'cobertura' ? 'Gate humano' : `Gate ${q.portao}`,
       project: q.run,
-      when: 'pendente',
-      short: q.pergunta,
+      when: isResolved ? 'decisão registrada' : 'pendente',
+      short: isResolved ? 'decisão registrada · aguardando motor' : q.pergunta,
     };
   });
 
@@ -482,7 +486,7 @@ export default function CaixaFundador() {
             </div>
             <div style={{ display: 'flex', gap: 9 }}>
               <span className="btn btn-sm" onClick={() => { window.location.hash = '/'; }}>Ir para a Home</span>
-              <span className="btn btn-sm" onClick={() => { window.location.hash = '/grafo'; }}>Abrir Mapa geral</span>
+              <span className="btn btn-sm" onClick={() => { window.location.hash = '/mapa'; }}>Abrir Mapa geral</span>
             </div>
           </div>
         ) : (

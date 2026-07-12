@@ -247,4 +247,45 @@ body {
   transition: height 0.3s ease;
 }
 
+/* Chips */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  padding: 2px 6px;
+  border-radius: 2px;
+  color: var(--text3);
+  vertical-align: middle;
+}
 
+/* linha de tabela leve — usada em Dashboard, MapaGeral, Curador, Datahouse */
+.trow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+}
+.trow:last-child {
+  border-bottom: none;
+}
+
+/* data-density="compacto" */
+[data-density="compacto"] .card {
+  padding: 11px 11px !important;
+}
+[data-density="compacto"] .drow,
+[data-density="compacto"] .trow {
+  padding: 7px 10px !important;
+}
+
+/* data-anim="off" */
+[data-anim="off"] * {
+  animation: none !important;
+  transition: none !important;
+}

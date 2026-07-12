@@ -19,17 +19,17 @@ export default function Topbar({ theme, onToggleTheme }) {
       <span className="title" style={{ fontSize: 13, letterSpacing: 1 }}>
         META-FÁBRICA
       </span>
-      <span className="pill on" style={{ marginLeft: 4 }}>
-        Projeto: Todos ▾
+      <span className="pill" style={{ marginLeft: 4, cursor: 'default' }}>
+        Projeto: Todos
       </span>
       <div style={{ flex: 1 }} />
       <button className="pill" onClick={onToggleTheme} title="Alternar tema">
         ◐ {label}
       </button>
-      <button className="btn btn-primary btn-sm" style={{ marginLeft: 2 }}>
+      <button className="btn btn-primary btn-sm" style={{ marginLeft: 2 }} onClick={() => window.location.hash = '/nova-missao'}>
         + Nova missão
       </button>
-      <span className="pill" style={{ padding: '5px 8px' }} title="Caixa do Fundador">
+      <span className="pill" style={{ padding: '5px 8px', cursor: 'pointer' }} title="Caixa do Fundador" onClick={() => window.location.hash = '/caixa'}>
         🔔
       </span>
     </header>
