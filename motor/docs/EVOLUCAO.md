@@ -1,7 +1,7 @@
 # Evolução do motor (pós-v0.5) — o norte
 
-> Para: Caio + Codex + Claude (sessões futuras). De: revisão de arquitetura, 2026-06-29.
-> Companheiro de `ARQUITETURA-MCP.md` (a fronteira) e `../handoffs/HANDOFF.md` (a fabricação v0.5).
+> Direção arquitetural registrada em 2026-06-29. Companheiro de `ARQUITETURA-MCP.md`
+> (a fronteira) e `../specs/001-hardening-producao/spec.md` (o contrato de produção).
 > Referencia `../../dev-harness/docs/biblioteca-de-validadores.md` e `../../docs/ROADMAP.md`.
 
 ## Regra de ouro
@@ -21,7 +21,7 @@ está relitigando decisão travada — pare e releia esta seção.
    cobertura **antes** da síntese → gate via `interrupt()`. Subagente reprovado vira lacuna **por código**.
 4. **Eventos JSONL = auditoria** (fonte da verdade); checkpointer SQLite = só resume.
 5. **Motor = músculo, não autoridade.** Não decide permissão, não classifica risco, não mede dinheiro, não
-   fala pelo dono. Gate sobe **cru**; classificação/cláusula pétrea moram no porteiro (Jarvis).
+   fala pelo dono. Gate sobe **cru**; classificação e autorização moram no host/porteiro.
 6. **Superfície MCP fina** (despachar/status/responder_gate); jobs duráveis, não-bloqueantes.
 
 ## Estado dos vetores (2026-07-03)
@@ -34,19 +34,19 @@ está relitigando decisão travada — pare e releia esta seção.
   2026-07-04)** — a evidência v2 "0/3→3/3" caiu (red-team item 3); a régua refeita (fatos
   não-adivinháveis, 3 braços, tempdir isolado) bateu o critério pré-registrado (1/5 · 0/5 · 5/5).
   Síntese: não medida. Lição estrutural: **run de experimento dentro do repo contamina** (o modelo
-  lê os docs pelo filesystem) — isolamento em tempdir é obrigatório. Ver `../../LOG-VERIFICACAO.md`.
-- **V2 FEITO:** 48 eventos tipados (`eventos_schema.py`, guard anti-drift) incluindo os de superfície
+  lê os docs pelo filesystem) — isolamento em tempdir é obrigatório. Ver
+  `../specs/003-experimentos-reprodutiveis/spec.md`.
+- **V2 FEITO:** eventos tipados (`eventos_schema.py`, guard anti-drift) incluindo os de superfície
   (`aresta.fluxo`, `custo.tick`, `artefato.atualizou`, `validador.rodou`, `rag.consultado`) + superfície MCP
   (`despachar/status/responder_gate/resumo/eventos`).
-- **V3 adiantado:** curador tem observador + propositor por slot (com **custo_usd real** no desempate) +
-  telemetria-por-modelo + livro-razão de custo — tudo **read-only**. Falta a fatia 3 (agir: sombra +
-  certificação) — que é também o guardrail "melhor/pior é dado, não opinião" da edição de workflow.
+- **V3 FEITO:** o curador observa, propõe, executa em sombra e certifica sem aplicar promoções
+  automaticamente. Qualidade funciona como piso; custo só desempata candidatos elegíveis.
 - **V5 parcialmente real:** a rota `grafo_dependencias` já roda com handoff entre nós via `deps_txt`; a
   formalização do contrato tipado de handoff (spec v0.2) e a **composição entre casas** é o que falta.
 - **V7 (novo) — ciclo de vida do workflow: DECIDIDO** (doc `../../docs/DECISAO-ciclo-de-vida-workflow.md`).
   Ver vetor abaixo.
 - **Paperclip** (MIT) confirmou o V4: o control-plane (orçamento/eventos/approvals/UI) é roda pronta a
-  reusar **na camada das casas**, nunca no motor. Ver `../../docs/LEIA-PRIMEIRO.md` §3.
+  reusar **na camada das casas**, nunca no motor. Ver `../../docs/ARCHITECTURE.md`.
 
 ## Os vetores de evolução (aditivos)
 
@@ -64,7 +64,7 @@ validadores determinísticos**, não só subagentes.
 - **É o grafo híbrido virando real:** agente = peça pensante; validador determinístico = a verdade. É o
   coração anti-alucinação, e é onde estamos à frente do Paperclip ("Enforced Outcomes" não-feito).
 - **O que NÃO fazer:** não transformar isso em motor de workflow visual nem em DSL gigante. É um novo *tipo
-  de nó* na spec, com a mesma disciplina de versão (padrão novo = spec v0.2, decisão do Caio).
+  de nó* na spec, com a mesma disciplina de versão (padrão novo = spec v0.2, decisão arquitetural).
 
 ### V2 — Contrato de evidência + esquema de eventos tipados
 
@@ -72,7 +72,7 @@ Cada nó (pensante ou validador) emite evento tipado com **referência de evidê
 `gate.passou`/`gate.reprovou` + ref, `checkpoint.pediu_humano`). Estende `eventos.py`, não muda o núcleo.
 
 - **Por que importa:** esse stream **é** a interface viva e o ponto de interceptação — o controle estilo
-  Paperclip (e mais) que o Caio quer cai daqui, não é feature à parte. É o item "esquema de eventos
+  Paperclip (e mais) que a arquitetura requer cai daqui, não é feature à parte. É o item "esquema de eventos
   motor→superfície" do roadmap.
 
 ### V3 — Curador opera a biblioteca de gates (a catraca)
@@ -101,7 +101,7 @@ A v0.2 formaliza **handoff baseado em contrato** entre nós (e, mais tarde, entr
 um artefato tipado com evidência que o próximo consome — não conversa solta.
 
 - **Disciplina:** novos padrões (chain, tournament, dep-graph rico) entram por **versão de spec
-  certificada**, um de cada vez, como já manda o HANDOFF. v0.5 certifica fan_out_sintese primeiro.
+  certificada**, um de cada vez, conforme o contrato versionado. v0.5 certifica fan_out_sintese primeiro.
 
 ### V6 — Fábrica de especialistas (o curador-supervisor que cria modelos)
 
@@ -153,9 +153,8 @@ tocam o motor:
 1. **V2 (esquema de eventos)** — EM CURSO. Barato, destrava interface/controle e instrumenta tudo. Primeiro tijolo.
 2. **V1 (nós validadores determinísticos)** — o salto de qualidade anti-alucinação. Começar pela família
    mais barata (schema/contrato + teste), que casa com a vertical de software.
-3. **V3 (curador catraca)** — fundação read-only FEITA (observador+propositor+custo); o próximo degrau é a
-   **fatia 3** (sombra + certificação), o ponto em que o curador começa a *agir*. Timing casa com a troca
-   de provedor do Caio.
+3. **V3 (curador catraca)** — observação, proposição, sombra e certificação estão implementadas; aplicação
+   continua sendo uma intenção sujeita à autoridade externa.
 4. **V5 (spec v0.2 dep/handoff)** — parcialmente real (grafo_dependencias); formalizar o contrato tipado
    quando uma run pedir.
 5. **V6 (fábrica de especialistas)** — Later, gated pelo V1 (grader) + V3 fatia 3 + livro-razão de custo.
@@ -168,7 +167,7 @@ tocam o motor:
 ## O que NÃO fazer (guardas)
 
 - Não meter company/orçamento/org-chart/permissão no motor (vive na casa).
-- Não trocar fan_out_sintese por padrão novo sem certificar; padrão novo = spec v0.2, decisão do Caio.
+- Não trocar fan_out_sintese por padrão novo sem certificar; padrão novo = spec v0.2.
 - Não fazer o motor classificar/decidir gate; ele sobe cru.
 - Não criar parser mágico pra prosa de LLM; ajustar prompt, não topologia.
 - Não deixar o curador aplicar mudança sem sombra+certificação.
@@ -191,5 +190,5 @@ tocam o motor:
   Resistir é a decisão #5; quando em dúvida, fica fora.
 - **Spec virando linguagem de programação.** Se a WorkflowSpec começar a precisar de lógica condicional
   rica demais, é sinal de que algo que devia ser nó/código virou dado. Reavaliar antes de crescer a DSL.
-- **Evoluir sem run real.** Cada vetor estreia num uso real (Logisti/softwarehouse), não em abstrato —
+- **Evoluir sem run real.** Cada vetor estreia num projeto externo real, não em abstrato —
   mesma regra de validação-primeiro de sempre.

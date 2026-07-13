@@ -3,7 +3,7 @@
 `chamar(papel, prompt) -> str | None`. O grafo só conhece PAPÉIS
 (planner, verifier, evaluator, synthesizer, e os papéis dos subagentes);
 qual modelo/provedor atende cada papel é config deste módulo.
-Hoje: claude -p (assinatura do Caio). Amanhã: OpenRouter/NVIDIA por papel.
+Hoje: Claude CLI. Também suporta OpenRouter/NVIDIA por papel.
 Falha vira None — quem chama decide o fallback (lei: falha vira evento, não crash).
 """
 from __future__ import annotations
@@ -186,7 +186,7 @@ class ClienteRoteador:
         self.padrao = padrao
         self.mapa = mapa or {}
         self.tiers = tiers or {}   # tier → cliente (roteamento por custo)
-        # Pins MANUAIS (decisão do Caio, "não me questiona"): chave papel|tier|"*"
+        # Pins manuais explícitos: chave papel|tier|"*"
         # → cliente. Precedência MÁXIMA, acima do tier e do papel — o planner não
         # sobrepõe. "*" = vale pra tudo (o "esse no todo"). Evento modelo.pin.
         self.pins = pins or {}
@@ -437,7 +437,7 @@ class ClienteRoteador:
             return None
         # Guard de independência do juiz: o verifier não pode rodar no MESMO provedor
         # do executor que ele julga (senão o modelo se auto-aprova). `evitar` = provedor
-        # do executor. Um PIN explícito do Caio vence o guard (decisão consciente).
+        # do executor. Um PIN explícito vence o guard por decisão do operador.
         if evitar and not self._eh_pin(papel, tier) and getattr(cliente, "provedor", None) == evitar:
             alt = self._outro_provedor(evitar, capacidades, ferramentas)
             if alt is not None:
@@ -487,7 +487,7 @@ class ClienteRoteador:
 
 
 class ClienteClaudeCLI:
-    """Backend real via `claude -p` (Claude Code do Mac do Caio).
+    """Backend real via `claude -p` (Claude Code CLI).
 
     `papel` hoje não muda o modelo (uma assinatura), mas mantém o contrato:
     quando houver multi-provider, o roteamento por papel entra AQUI, sem tocar o grafo.
@@ -541,7 +541,7 @@ class ClienteClaudeCLI:
 
 
 class ClienteCodex:
-    """Backend real via `codex exec` (Codex CLI da OpenAI, assinatura ChatGPT do Caio).
+    """Backend real via `codex exec` (Codex CLI da OpenAI).
 
     Papel deste cliente no motor: **EXECUTOR** (alto volume). O julgamento
     (planner/verifier/evaluator/synthesizer) fica no claude — separação
@@ -556,8 +556,8 @@ class ClienteCodex:
       - `--skip-git-repo-check`: o motor pode rodar fora de um repo git.
       - `--ephemeral`: não acumula arquivos de rollout em disco.
 
-    Auth: reusa o login salvo do CLI (`codex login`) — a assinatura do Caio,
-    sem chave de API no arquivo (mesma fronteira do claude -p).
+    Auth: reusa o login salvo do CLI (`codex login`), sem chave de API no arquivo
+    (mesma fronteira do claude -p).
     """
 
     # Codex É agêntico (web search, leitura de arquivos, MCP). Ao contrário dos
@@ -635,8 +635,7 @@ class ClienteOpenCode:
 
     Papel no motor: EXECUTOR pros OUTROS modelos — qualquer provider/model que o
     opencode suporta (openai/gpt-5.5, anthropic/..., openrouter/..., local...).
-    Útil quando o Caio NÃO está pagando o Codex mas quer GPT-5.5 pago por token,
-    ou pra rodar modelos que nem Codex nem claude expõem.
+    Útil para modelos pagos por token ou modelos que Codex e Claude CLI não expõem.
 
     `opencode run "prompt"` roda não-interativo, imprime a resposta no stdout e sai;
     `-m provider/model` escolhe o modelo (daí o "modelo" aqui é "provider/model",

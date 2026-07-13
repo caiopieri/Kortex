@@ -73,7 +73,7 @@ export default function Board() {
   const { data: fullData } = usePoll(fetchDados);
   const [ideas, setIdeas] = useState([
     { id: '_i1', title: 'Nota fiscal PDF → JSON', note: 'extrair itens + validar schema · rota forja', ev: 'candidato · sem run', col: 'ideias' },
-    { id: '_i2', title: 'Landing do Logisti-Kit', note: 'rota construção · 1 página estática', ev: 'candidato · sem run', col: 'ideias' },
+    { id: '_i2', title: 'Landing de produto', note: 'rota construção · 1 página estática', ev: 'candidato · sem run', col: 'ideias' },
   ]);
 
   const error = e1 || e2;

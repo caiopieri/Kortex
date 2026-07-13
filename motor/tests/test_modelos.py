@@ -207,7 +207,7 @@ def test_roteador_descricao_de_usa_mapa_papeis_do_cliente_compartilhado():
 
 
 def test_esgotar_claude_reroteia_julgamento_ao_codex():
-    """O cenário que travou o Caio: synthesizer (papel sem tier → padrao=claude)
+    """Synthesizer (papel sem tier → padrao=claude)
     com claude esgotado deve cair no Codex, não pendurar."""
     claude = _stub_prov("do-claude", "claude")
     codex = _stub_prov("do-codex", "codex")
@@ -762,7 +762,7 @@ def test_juiz_sem_conflito_nao_desvia():
 
 
 def test_pin_vence_guard_do_juiz():
-    """Pin explícito do Caio no verifier vence o guard (decisão consciente)."""
+    """Pin explícito do operador no verifier vence o guard."""
     codex_pin, claude = _stub_prov("PIN-CODEX", "codex"), _stub_prov("do-claude", "claude")
     r = ClienteRoteador(padrao=claude, pins={"verifier": codex_pin}, cadeia=[claude])
     # mesmo com evitar=codex, o pin manda

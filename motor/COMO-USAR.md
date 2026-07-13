@@ -1,14 +1,13 @@
 # COMO USAR o motor (uso real, hoje)
 
 > O motor já roda missões de verdade. Este guia é o mínimo pra você usar sem esperar o resto ser
-> construído. Visão: `../docs/LEIA-PRIMEIRO.md`. Como funciona por dentro: `docs/EVOLUCAO.md`.
+> construído. Visão: `../docs/ARCHITECTURE.md`. Como funciona por dentro: `docs/EVOLUCAO.md`.
 
 ## Rodar uma missão
 
 ```bash
-cd ~/Desktop/Projects/Orquestrador/motor
-source ~/.zshrc >/dev/null 2>&1          # carrega NVIDIA_API_KEY
-python3 -m motor "SEU OBJETIVO AQUI" \
+cd motor
+python -m motor "SEU OBJETIVO AQUI" \
   --registro exemplos/registro \
   --modelos exemplos/modelos-free-escalada.json
 ```
@@ -35,21 +34,18 @@ python3 -m motor "SEU OBJETIVO AQUI" \
 - Construção em etapas com dependência (arquitetura → spec → testes) — use `--rota construcao`:
   `python3 -m motor "..." --registro exemplos/registro --rota construcao --modelos exemplos/modelos-free-escalada.json`
 
-## Arestas ásperas (honestidade — pra você não se assustar)
+## Limitações atuais
 
 - **Lento.** Uma missão leva minutos (latência por chamada do provedor). É normal.
-- **Juiz Codex pode pendurar.** No fim (evaluator/synthesizer), o `codex` às vezes trava sem retornar. Se
-  acontecer: `Ctrl-C` — **os artefatos dos papéis já estão salvos em `runs/`**. Alternativas: rode com
-  `--esgotado claude` (reroteia o julgamento), ou use uma config só-NVIDIA. É problema conhecido do
-  provedor, não do motor.
 - **Planner às vezes erra o JSON na 1ª tentativa** e recupera na 2ª — normal, ele reinjeta o erro.
-- **Precisa de `NVIDIA_API_KEY`** exportada (o `source ~/.zshrc` acima resolve).
+- **O provider configurado pode exigir credenciais.** Exporte somente as variáveis exigidas pela
+  configuração escolhida; nunca grave chaves no arquivo JSON ou no repositório.
 
 ## Trocar de modelo/provedor
 
 É só trocar o `--modelos <arquivo>`:
-- `exemplos/modelos-free-escalada.json` — NVIDIA grátis, planner Kimi, escada llama→kimi→codex (padrão).
-- Outras configs em `exemplos/` (codex, opencode, multi). O motor é provider-agnóstico: mudar de provedor
+- `exemplos/modelos-free-escalada.json` — exemplo de roteamento com escalada.
+- Outras configurações vivem em `exemplos/`. O motor é provider-agnóstico: mudar de provedor
   = editar JSON, não código.
 
 ## Onde pedir mais

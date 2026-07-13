@@ -66,7 +66,7 @@ def validar() -> list[str]:
             erros.append(f"invariante invalido: {row.get('nodeid')}")
         if str(row.get("nodeid", "")).split("::", 1)[0] != row.get("corpus_member"):
             erros.append(f"nodeid nao pertence ao membro: {row.get('nodeid')}")
-        if row.get("origin") == "codex-preexisting" and "Caio Amaral de Pieri" not in str(row.get("disposition_by")):
+        if row.get("origin") == "codex-preexisting" and "mantenedor humano" not in str(row.get("disposition_by")):
             erros.append(f"disposicao Codex sem aprovador humano: {row.get('nodeid')}")
         par_disposicao = (row.get("disposition"), row.get("landing"))
         if par_disposicao not in DISPOSITION_LANDING:

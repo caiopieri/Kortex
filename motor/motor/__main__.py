@@ -17,7 +17,7 @@
   python -m motor ... --registro Registry --rota construcao  # estratégia explícita do planner
   python -m motor ... --workspace runs  # base dos artefatos por execução
 
-Requer `claude` CLI no PATH (Mac do Caio). Gate do fundador: sem `--caixa`, a
+Requer `claude` CLI no PATH. Gate do fundador: sem `--caixa`, a
 decisão é via input() e o checkpointer é em memória (volátil). Com `--caixa
 <dir>`, a decisão vai para uma nota na Caixa do fundador (T3) e o estado do
 grafo é persistido em `motor.db` na raiz do repo — religar o processo retoma do
@@ -81,7 +81,7 @@ def construir_cliente(cfg_modelos: dict | None, dir_registro: str | None,
         return cliente_de_config(cfg_modelos, log=log)
     if not ClienteClaudeCLI.disponivel():
         raise ProvedorIndisponivel(
-            "`claude` CLI não encontrado no PATH — rode no Mac do Caio ou use o ClienteStub em testes."
+            "`claude` CLI não encontrado no PATH; instale o CLI ou use o ClienteStub em testes."
         )
     return ClienteClaudeCLI(log=log)
 

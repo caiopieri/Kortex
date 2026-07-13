@@ -1,8 +1,8 @@
 # Spec — hardening de produção do motor
 
-Status: **APPROVED — plano aprovado para H00/H01/H02**  
-Tier: **T2**  
-Fonte: `docs/auditoria/ACHADOS-GPT5-CODEX.md`
+Status: **IN PROGRESS — see `verification.md`**
+Tier: **T2**
+Fonte normativa: `../../docs/INVARIANTES.md`
 
 ## Problema
 
@@ -63,8 +63,8 @@ kernel orientado por `WorkflowSpec` e a promoção como intenção manual.
 - **Persistência:** JSONL continua ledger de eventos; SQLite passa a ser ledger da Caixa.
 - **Migração:** escritor só produz formato novo. Logs v1 são consulta/quarentena; specs legadas
   revalidam em v2; notas antigas não autorizam decisão sem migração auditada.
-- **Dependências:** cada PR adiciona o teste causal junto da correção e depende somente dos
-  contratos listados em `plan.md`.
+- **Dependências:** cada PR adiciona o teste causal junto da correção e respeita a sequência
+  registrada em `plan.md` e `plan-h12b.md`.
 
 ## Restrições
 

@@ -15,7 +15,7 @@ A meta-fábrica é **autossuficiente** (motor + casas + **interface própria**).
 ela via MCP, mas ela **não depende de nenhum deles**.
 
 ```
-Consumidores externos (opcionais, via MCP):  Jarvis (assistente/porteiro) · Flint (app de notas) · …
+Consumidores externos opcionais via MCP (assistentes, painéis e aplicações)
    ▲  MCP (despachar / status / stream de eventos)
 ┌ META-FÁBRICA (este repositório) ───────────────────────────────────────────────┐
 │ Interface própria   ── a superfície de 1ª classe: VÊ a fábrica rodando e intercepta
@@ -27,20 +27,17 @@ Consumidores externos (opcionais, via MCP):  Jarvis (assistente/porteiro) · Fli
 
 **Regra pétrea:** o motor é *músculo, não autoridade* — fabrica e expõe estado; não decide permissão,
 risco ou dinheiro (isso é do porteiro). A fronteira entre camadas é **MCP**. Este repositório é o
-**núcleo** (motor + harnesses de domínio + interface própria + documentação). **Jarvis** e **Flint** são
-**projetos separados** (repos próprios) que *podem* consumir a meta-fábrica como clientes — ela funciona
-sozinha sem eles.
+**núcleo** (motor + harnesses de domínio + interface própria + documentação). Clientes externos vivem
+em projetos separados; a meta-fábrica funciona sem eles.
 
 ## Estrutura do repositório
 
 ```
-docs/                  visão, roadmap e specs do sistema (comece por docs/LEIA-PRIMEIRO.md)
-  design/              briefing da interface viva
+docs/                  arquitetura, roadmap, decisões e design system
 motor/                 o kernel (pacote Python autocontido)
   motor/ tests/ exemplos/ scripts/ motor_painel/
-  docs/                EVOLUCAO, ARQUITETURA-MCP, runbooks
-  handoffs/            histórico de handoffs de implementação (rationale)
-  specs/               especificações, matrizes e evidências do hardening T2
+  docs/                ADRs, invariantes, segurança e runbooks
+  specs/               contratos e verificação reproduzível
 dev-harness/           a softwarehouse: metodologia de engenharia (a 1ª casa)
 harness-hardware/      semente da vertical de hardware
 harness-mecanico/      semente da vertical mecânica
@@ -48,11 +45,11 @@ harness-mecanico/      semente da vertical mecânica
 
 ## Começar a entender
 
-1. **[docs/LEIA-PRIMEIRO.md](docs/LEIA-PRIMEIRO.md)** — a visão, as camadas, os princípios e o estado atual. **Leia primeiro.**
+1. **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — camadas, fluxo e fronteiras de confiança.
 2. [docs/ROADMAP.md](docs/ROADMAP.md) — o mapa operacional Now/Next/Later.
 3. [motor/README.md](motor/README.md) — como rodar e testar o motor.
 4. [motor/docs/EVOLUCAO.md](motor/docs/EVOLUCAO.md) e [motor/docs/ARQUITETURA-MCP.md](motor/docs/ARQUITETURA-MCP.md) — o norte e a fronteira do motor.
-5. [motor/specs/001-hardening-producao/](motor/specs/001-hardening-producao/) — spec, matriz de invariantes e evidências do hardening T2.
+5. [motor/specs/](motor/specs/) — contratos públicos e evidências reproduzíveis.
 
 ## Rodar o motor (rápido)
 
@@ -86,10 +83,14 @@ Duas fronteiras impedem declarar o gate global fechado:
    consumidor. H12b2c1 não publica; portanto a janela entre publicação e `ack` ainda exige a semântica
    at-least-once/deduplicação que será fechada nessa fatia.
 
-O snapshot consolidado e suas ressalvas estão em
-[verification-h13.md](motor/specs/001-hardening-producao/verification-h13.md); o progresso posterior de
-H12b está em [h12b1a-landings.md](motor/specs/001-hardening-producao/h12b1a-landings.md). O sequenciamento
-operacional continua em [docs/ROADMAP.md](docs/ROADMAP.md).
+O estado verificável e os bloqueios estão em
+[verification.md](motor/specs/001-hardening-producao/verification.md). O sequenciamento operacional
+continua em [docs/ROADMAP.md](docs/ROADMAP.md).
+
+## Contribuir e segurança
+
+Veja [CONTRIBUTING.md](CONTRIBUTING.md) para configurar o ambiente e executar os gates. Falhas de
+segurança devem seguir [SECURITY.md](SECURITY.md), sem exposição antecipada em issue pública.
 
 ## Licença
 

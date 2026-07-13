@@ -124,6 +124,20 @@ def test_excecao_externa_preserva_retry_sem_vazar_detalhe(
     assert "detalhe confidencial" not in json.dumps(log.eventos, ensure_ascii=False)
 
 
+def test_excecao_do_executor_vira_reprovacao_e_evento(tmp_path: Path) -> None:
+    class Cliente:
+        def chamar(self, papel: str, _prompt: str, **_kwargs: Any) -> str:
+            if papel == "A":
+                raise RuntimeError("falha injetada")
+            return json.dumps({"aprovado": True})
+
+    log = _LogMemoria()
+    estado = _invocar(tmp_path, _spec([_sub("A")]), Cliente(), log)
+
+    assert estado["resultados"][0]["aprovado"] is False
+    assert any(tipo == "executor.erro" for tipo, _dados in log.eventos)
+
+
 def test_reconciliacao_bloqueia_dependente_se_fonte_reprovar(tmp_path: Path) -> None:
     class Cliente:
         def __init__(self) -> None:

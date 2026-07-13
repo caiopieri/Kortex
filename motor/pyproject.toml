@@ -10,8 +10,8 @@ requires-python = ">=3.10"
 dependencies = [
     "langgraph>=1.0,<2",
     "pydantic>=2.7,<3",
-    # Checkpointer durável (resume pós-crash, T3). NB: o pin original do HANDOFF
-    # era "<3", mas sqlite-saver 2.x exige langgraph-checkpoint<3, que conflita
+    # Checkpointer durável (resume pós-crash, T3). sqlite-saver 2.x exige
+    # langgraph-checkpoint<3, que conflita
     # com langgraph 1.x (exige checkpoint>=4.1). Só a linha 3.x do sqlite-saver
     # é compatível com langgraph 1.x — daí ">=3,<4".
     "langgraph-checkpoint-sqlite>=3,<4",

@@ -45,7 +45,7 @@ Cada subpasta tem um `README.md` que especifica, **com precisão, o que o agente
 2. **`specs/M2-bracket.json`** — a 1ª WorkflowSpec real (bracket sob carga), validada contra o schema do motor **sem rodar física**. Prova a premissa "M2 roda hoje".
 3. **`ferramentas/`** — as entidades que a spec M2 referencia: `cadquery-runner`, `gmsh-mesher`, `calculix-solver`, `reconciliation-checker`, `dfm-linter`, `mass-props`, `clash-detector`.
 4. **`corpus/`** — material library + perfil de fornecedor JLC (entidade versionada) + peças-padrão.
-5. **Rodar M2 ponta-a-ponta** na máquina do Caio → anotar atrito real → MR-2.
+5. **Rodar M2 ponta-a-ponta** em ambiente isolado → anotar atrito real → MR-2.
 
 ## Convenções
 

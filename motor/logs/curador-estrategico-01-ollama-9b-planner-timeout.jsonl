@@ -1,2 +1,0 @@
-{"t": 0.024, "evento": "executor.chamado", "executor": "planner", "tentativa": 1, "modelo": "ollama-9b/qwen3.5:9b"}
-{"t": 0.028, "evento": "modelo.pin", "papel": "planner", "tier": null}

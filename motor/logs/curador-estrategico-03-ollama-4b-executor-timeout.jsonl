@@ -1,6 +1,0 @@
-{"t": 0.026, "evento": "spec.recebida", "missao": "curador-cli-csv-json", "subagentes": 3}
-{"t": 0.03, "evento": "gate.auto", "portao": "plano", "decisao": "prosseguir"}
-{"t": 0.03, "evento": "grafo_dep.iniciado", "subagentes": ["especificador", "arquiteto", "validador"]}
-{"t": 0.03, "evento": "onda.iniciada", "ids": ["especificador"]}
-{"t": 0.031, "evento": "executor.chamado", "executor": "especificador", "papel": "especificador", "tier": "media", "tentativa": 1, "modelo": "ollama-4b/qwen3.5:4b"}
-{"t": 0.031, "evento": "modelo.roteado_tier", "papel": "especificador", "tier": "media"}

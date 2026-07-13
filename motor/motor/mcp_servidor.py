@@ -1,6 +1,6 @@
 """Servidor MCP fino da meta-fábrica.
 
-Exposição stdio para o Jarvis: o servidor só embrulha GerenciadorJobs. Gates
+Exposição stdio para hosts MCP: o servidor só embrulha GerenciadorJobs. Gates
 sobem crus e a decisão volta por responder_gate; não há porteiro dentro do motor.
 """
 from __future__ import annotations
@@ -29,7 +29,7 @@ DESCRICAO_STATUS = """Consulta o estado de uma missão: em_execucao | gate_pende
 
 DESCRICAO_RESPONDER_GATE = """Responde um gate pendente de uma missão e retoma a execução. USO INTERNO do
   fluxo de autorização do chamador (porteiro), não é ferramenta de uso livre do
-  modelo. A decisão vem da escada de risco do Jarvis, nunca do julgamento de um modelo."""
+  modelo. A decisão vem da política de risco do host, nunca do julgamento de um modelo."""
 
 DESCRICAO_RESUMO = """Resumo compacto de uma missão para acompanhamento conversacional: progresso,
   marcos, gate pendente e referências de artefato — sem despejar logs ou conteúdo.

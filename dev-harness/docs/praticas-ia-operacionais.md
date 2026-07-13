@@ -4,7 +4,7 @@
 > automatizar. Fonte: artigos do Fabio Akita (2026), **avaliadas contra o nosso contexto**, não acatadas
 > por autoridade. O que foi rejeitado (e por quê) está no fim — de propósito.
 >
-> Complementa o `global/CLAUDE.md` (que instrui o *agente*); aqui é como o *operador* trabalha.
+> Complementa o `project-template/AGENTS.md` (que instrui o *agente*); aqui é como o *operador* trabalha.
 
 ---
 
