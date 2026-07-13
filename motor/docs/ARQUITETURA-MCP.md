@@ -11,9 +11,10 @@
 ## Princípio que decide tudo
 
 **O motor é a meta-fábrica, e nada além.** Ele fabrica resultado complexo (fan-out,
-verificação, síntese) e **expõe seu estado**. Ele **não** decide permissão, não classifica
-risco, não mede dinheiro, não fala no nome do dono. Toda autoridade mora **fora** dele — no
-porteiro do Jarvis e em MCPs especializados (ex.: finanças). Essa é a tradução fiel de duas
+verificação, síntese) e **expõe seu estado**. Ele mede uso/custo e aplica suas próprias
+restrições de spec, mas não concede permissão externa nem fala no nome do dono. Autoridade
+organizacional mora **fora** dele — no porteiro do Jarvis e em MCPs especializados (ex.:
+finanças). Essa é a tradução fiel de duas
 constituições:
 
 - **Jarvis:** "a tranca nunca é o modelo"; dinheiro e identidade são **cláusulas pétreas**;
@@ -65,9 +66,10 @@ e o grafo; do lado de fora, três ferramentas com retorno tipado.
 
 ## Contrato MCP (a superfície que o Jarvis consome)
 
-Três ferramentas, nada além (REQ-5). Descrições são **artefato versionado** — a precisão do
-roteador depende delas. (As descrições canônicas estão no roadmap, F6; aqui o contrato de
-dados.)
+O núcleo mutável tem três ferramentas (`despachar`, `status`, `responder_gate`); projeções
+read-only podem acrescentar `resumo` e, futuramente, `buscar`. Descrições são **artefato
+versionado** — a precisão do roteador depende delas. (As descrições canônicas estão no
+roadmap, F6; aqui o contrato de dados.)
 
 ### `metafabrica.despachar_missao(objetivo, contexto?, restricoes?) → {job_id, estado}`
 Escopo de roteamento: **só** tarefa complexa (multi-passo, verificação adversarial, síntese)
@@ -77,14 +79,17 @@ hora; execução assíncrona.
 ### `metafabrica.status_missao(job_id) → {estado, ...}`
 `estado ∈ {em_execucao, gate_pendente, concluido, erro}`. Não bloqueia.
 - `gate_pendente` → `gate: {portao, pergunta, opcoes, lacunas?, plano?}` **cru**, como saiu do
-  `interrupt()`. O motor não anota classe de risco (ver fronteira).
+  `interrupt()`. `gates` expõe todos os interrupts com `decision_id`; `gate` permanece alias
+  do primeiro para compatibilidade. O motor não anota classe de risco (ver fronteira).
 - `concluido` → `resposta_final` (texto-produto) + `artefatos` (**referências**: nome/tipo/
   caminho/subagente) + `run: {job_id, workspace, log}`. **Sem blobs.**
 - `erro` → `{tipo, mensagem}` tratável; o servidor não cai.
 
-### `metafabrica.responder_gate(job_id, decisao) → {estado, ...}`
+### `metafabrica.responder_gate(job_id, decisao, decision_id?) → {estado, ...}`
 **Uso interno do porteiro**, não do modelo. Retoma com `Command(resume=decisao)`. A decisão
 vem da escada de risco, nunca do julgamento de um modelo (nem do motor, nem do Jarvis).
+Quando há múltiplos interrupts, `decision_id` é obrigatório; reenvio idêntico é idempotente e
+conteúdo/ID divergente falha fechado.
 
 ### `metafabrica.resumo_missao(job_id) → <digest>` (F7 — o "RAG" de conversa)
 O orquestrador é pequeno e **não pode ler o `log.jsonl` cru nem os artefatos**. Esta
@@ -114,26 +119,26 @@ Este é o ponto de maior alavancagem — e onde a linha de escopo corta com mais
 **O que o motor NÃO faz (fora do escopo — orquestrador/porteiro + finanças):**
 - **Classificar** o gate em `rotina` / `dinheiro` / `identidade`. Quem mapeia
   `portao → classe de risco` é o **porteiro** do Jarvis, usando sua escada de risco e seu
-  livro de confiança. Hoje os portões do motor são `plano` e `cobertura` — ambos `rotina` por
-  natureza; o porteiro decide isso, não o motor.
+  livro de confiança. O motor conserva uma defesa local mínima: `promocao` é gate sensível
+  e nunca é auto-respondido; `plano` e `cobertura` não são sensíveis no contrato atual.
 - **Aplicar a cláusula pétrea** (dinheiro/identidade nunca autônomos). Isso é regra do
   porteiro: ele simplesmente **nunca** chama `responder_gate` automaticamente para uma classe
   pétrea — exige confirmação do dono e, se for dinheiro, pode consultar o **MCP de finanças**
   antes. O motor não precisa "saber" disso.
-- **Medir custo / `teto_custo`.** O `teto_custo` da spec é hook inerte; o enforcement de gasto
-  é do sistema de finanças. Se um dia uma missão for cara, é o porteiro/finanças que barram —
-  não o motor.
+- **Substituir o hard-stop de `teto_custo`.** O motor já mede `modelo.uso`/`custo.tick`, mas
+  S4 ainda não é sustentado: não há reserva/hard-stop antes de chamada, retry ou failover.
+  H12b pertence ao motor porque `teto_custo` é contrato da spec; porteiro/finanças podem
+  impor limites adicionais, não substituir esse enforcement. Ver
+  `../specs/001-hardening-producao/plan-h12b.md`.
 
 **Por que essa divisão é segura:** o motor expõe **tudo** que um gate carrega (o payload já é
 estruturado), então o porteiro tem o que precisa para classificar e decidir. Nenhuma decisão
 de permissão "vaza" para dentro do motor. Mantém-se **uma única tranca**.
 
-**Consequência para o `--auto` do motor:** o motor pode oferecer `--auto` (gates auto-resolvem)
-para uso humano/local. Quando o chamador é o Jarvis, o orquestrador **simplesmente não usa**
-`responder_gate` automático para classes pétreas — a recusa vive no porteiro. *Não é preciso*
-ensinar o motor a recusar `--auto` por classe, porque o motor não conhece classe. (Se no
-futuro o Caio quiser um cinto-e-suspensório dentro do motor, é uma extensão opcional, não
-requisito desta rodada.)
+**Consequência para o `--auto` do motor:** auto-resposta só vale para gates não sensíveis.
+`promocao` falha fechado mesmo com `auto_mode`, override ou default. Quando o chamador é o
+Jarvis, o porteiro continua responsável por classes organizacionais adicionais e por nunca
+automatizar dinheiro/identidade.
 
 ---
 
@@ -143,8 +148,9 @@ requisito desta rodada.)
   pode ficar preso num `input()` nem segurar a thread → **despachar retorna na hora**, o
   acompanhamento é por `status`.
 - Durabilidade: `thread_id` do **chamador** é a chave; `SqliteSaver` em `motor.db` é o default
-  do caminho de serviço. Religar processo + `status(job_id)` retoma do gate. Isso estende ao
-  chamador programático a mesma garantia que o `--caixa` dá ao humano hoje.
+  do caminho de serviço. Outbox SQLite com claim/lease/ack reconcilia decisões depois de
+  restart. A entrega é **at-least-once** e efeitos externos precisam deduplicar por
+  `decision_id`; não há promessa de exactly-once entre stores.
 - O LangGraph já devolve controle no `interrupt()`; o `GerenciadorJobs` roda `invoke()` em
   thread de fundo e lê `__interrupt__` para saber se é `gate_pendente` ou `concluido`. Sem
   Caixa, sem `input()`.
@@ -171,6 +177,7 @@ requisito desta rodada.)
 | Prompt injection | Porteiro/orquestrador | Motor trata missão e retornos como dados (já é assim). |
 | Cláusulas pétreas (dinheiro/identidade) | Porteiro + MCP de finanças | **Nada** no motor. |
 | Rodar sem credencial de produção solta | Host/deploy do MCP | Motor não guarda credencial; recebe env por invocação. |
+| Comando autônomo | Runner externo certificado | Default `DenyCommandRunner`; C2/C3 indisponíveis sem H05b real. |
 
 ---
 
@@ -189,6 +196,9 @@ requisito desta rodada.)
    dependendo do fundador: o gate sempre espera (parado de forma durável), `--auto` fica
    desligado no caminho de serviço, o `GerenciadorJobs` nunca auto-resolve. "Não-bloqueante"
    = o motor estaciona e devolve o controle, **não** = anda sozinho.
+5. **Retomada é at-least-once.** O reconciliador fecha perda após crash, mas não transforma
+   efeitos em stores distintos em exactly-once; consumidores deduplicam por `decision_id` e
+   callers fecham explicitamente o `GerenciadorJobs`.
 
 ## Em aberto para o Caio (se quiser decidir antes de o Codex chegar na F6)
 

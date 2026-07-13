@@ -5,17 +5,22 @@ controle ao chamador. Ele não decide gate, não usa input() e não liga auto-mo
 """
 from __future__ import annotations
 
+import json
+import math
+import re
 import sqlite3
 import threading
-import json
-import re
+import time
+import uuid
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.types import Command
 
 from .__main__ import construir_cliente
+from .caixa import LedgerCaixa
 from .eventos import LogEventos
 from .eventos_schema import SCHEMA_VERSAO
 from .grafo import construir_grafo
@@ -24,11 +29,15 @@ from .politica import PoliticaGates
 from .registro import ferramentas_de_registro, ferramentas_permitidas_de_registro, rotas_de_registro
 
 
-PADRAO_JOB_ID = re.compile(r"^[A-Za-z0-9._-]+$")
+PADRAO_JOB_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
 
 def _validar_job_id(job_id: str) -> None:
-    if not PADRAO_JOB_ID.fullmatch(job_id):
+    if (
+        not isinstance(job_id, str)
+        or job_id in {".", ".."}
+        or not PADRAO_JOB_ID.fullmatch(job_id)
+    ):
         raise ValueError("job_id inválido")
 
 
@@ -40,6 +49,31 @@ def _lista_str(valor: Any) -> list[str]:
     return [str(valor)]
 
 
+def _segundos_positivos(nome: str, valor: float) -> float:
+    if isinstance(valor, bool) or not isinstance(valor, (int, float)):
+        raise ValueError(f"{nome} inválido")
+    try:
+        segundos = float(valor)
+    except (TypeError, ValueError, OverflowError) as ex:
+        raise ValueError(f"{nome} inválido") from ex
+    if not math.isfinite(segundos) or segundos <= 0:
+        raise ValueError(f"{nome} inválido")
+    return segundos
+
+
+class _LogConsulta:
+    """Interface sem writer para compilar o grafo em consultas de snapshot."""
+
+    def __init__(self, path: Path):
+        self.path = path
+
+    def evento(self, *_args: Any, **_kwargs: Any) -> None:
+        raise RuntimeError("consulta de snapshot não pode emitir eventos")
+
+    def fechar(self) -> None:
+        return None
+
+
 class GerenciadorJobs:
     def __init__(self, *, db_path: str | Path = "motor.db",
                  workspace_base: str | Path = "runs",
@@ -48,7 +82,12 @@ class GerenciadorJobs:
                  politica: PoliticaGates | None = None,
                  log: LogEventos | None = None,
                  cliente: ClienteModelo | None = None,
-                 ferramentas: dict[str, dict[str, Any]] | None = None):
+                 ferramentas: dict[str, dict[str, Any]] | None = None,
+                 fault: Callable[[str], None] | None = None,
+                 outbox_poll_s: float = 0.5,
+                 outbox_lease_s: float = 30.0):
+        self._outbox_poll_s = _segundos_positivos("outbox_poll_s", outbox_poll_s)
+        self._outbox_lease_s = _segundos_positivos("outbox_lease_s", outbox_lease_s)
         self.db_path = Path(db_path)
         self.workspace_base = Path(workspace_base)
         self.cfg_modelos = cfg_modelos
@@ -56,6 +95,7 @@ class GerenciadorJobs:
         self.politica = politica or PoliticaGates()
         self.log = log
         self._cliente = cliente
+        self._fault = fault
         self.ferramentas = (ferramentas if ferramentas is not None else
                             ferramentas_de_registro(self.dir_registro) if self.dir_registro else {})
         self.ferramentas_permitidas = _lista_str((cfg_modelos or {}).get("ferramentas_permitidas"))
@@ -64,16 +104,37 @@ class GerenciadorJobs:
         self.rotas = rotas_de_registro(self.dir_registro) if self.dir_registro else {}
         self._jobs: dict[str, dict[str, Any]] = {}
         self._lock = threading.RLock()
+        self._threads: set[threading.Thread] = set()
+        self._stop_reconciliador = threading.Event()
+        self._fechado = False
+        self._conn_fechada = False
+        self._owner_reconciliador = f"reconciliador-{uuid.uuid4().hex}"
+        self._erro_reconciliador: Exception | None = None
 
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
         self._checkpointer = SqliteSaver(self._conn)
         self._checkpointer.setup()
+        ledger = LedgerCaixa(self.db_path)
+        ledger.fechar()
+        self._reconciliador = threading.Thread(
+            target=self._reconciliar_outbox,
+            name=f"motor-outbox-{uuid.uuid4().hex[:8]}",
+            daemon=True,
+        )
+        try:
+            self._reconciliador.start()
+        except BaseException:
+            self._conn.close()
+            self._conn_fechada = True
+            raise
 
     def iniciar(self, *, missao_texto: str | None = None,
                 spec: dict[str, Any] | None = None,
                 thread_id: str) -> dict:
         """Dispara a execução em background e retorna imediatamente."""
+        with self._lock:
+            self._exigir_aberto()
         if bool(missao_texto) == bool(spec):
             raise ValueError("exige missao_texto XOR spec")
         if not thread_id:
@@ -86,14 +147,16 @@ class GerenciadorJobs:
         )
         entrada["run_id"] = thread_id
         with self._lock:
+            self._exigir_aberto()
             self._jobs[thread_id] = {"estado": "em_execucao"}
-        self._iniciar_thread(thread_id, cliente, entrada)
+            self._iniciar_thread(thread_id, cliente, entrada)
         return {"job_id": thread_id, "estado": "em_execucao"}
 
     def status(self, job_id: str) -> dict:
         """Estado atual sem bloquear."""
         _validar_job_id(job_id)
         with self._lock:
+            self._exigir_aberto()
             registro = self._jobs.get(job_id)
             if registro and registro.get("estado") != "em_execucao":
                 return self._resposta_de_registro(job_id, registro)
@@ -101,11 +164,78 @@ class GerenciadorJobs:
                 return {"estado": "em_execucao"}
         return self._status_duravel(job_id)
 
-    def responder_gate(self, job_id: str, decisao) -> dict:
+    def responder_gate(self, job_id: str, decisao,
+                       decision_id: str | None = None) -> dict:
         """Retoma um job pausado com a decisão humana fornecida pelo chamador."""
+        with self._lock:
+            self._exigir_aberto()
         _validar_job_id(job_id)
-        atual = self.status(job_id)
-        if atual.get("estado") != "gate_pendente":
+        if decision_id is not None and (
+            not isinstance(decision_id, str)
+            or not PADRAO_JOB_ID.fullmatch(decision_id)
+        ):
+            return {
+                "estado": "erro",
+                "erro": {"tipo": "DecisaoInvalida", "mensagem": "decision_id inválido"},
+            }
+
+        gates = self._gates_duraveis(job_id)
+        if decision_id is None:
+            if len(gates) > 1:
+                return {
+                    "estado": "erro",
+                    "erro": {
+                        "tipo": "DecisaoIdObrigatorio",
+                        "mensagem": "decision_id é obrigatório para múltiplos gates",
+                    },
+                }
+            if gates:
+                decision_id = gates[0]["decision_id"]
+                gate = gates[0]
+            else:
+                gate = None
+        else:
+            gate = next(
+                (item for item in gates if item.get("decision_id") == decision_id),
+                None,
+            )
+
+        if gate is None:
+            if decision_id is not None:
+                if self._decisao_ja_aceita(decision_id, job_id, decisao):
+                    return {"estado": "em_execucao"}
+                return {
+                    "estado": "erro",
+                    "erro": {
+                        "tipo": "EstadoInvalido",
+                        "mensagem": "decision_id não corresponde a gate pendente",
+                    },
+                }
+            if decision_id is None:
+                legado = self.status(job_id)
+                gate_legado = legado.get("gate") or {}
+                if (
+                    legado.get("estado") == "gate_pendente"
+                    and "gates" not in legado
+                    and not isinstance(gate_legado.get("decision_id"), str)
+                ):
+                    with self._lock:
+                        self._exigir_aberto()
+                        if self._jobs.get(job_id, {}).get("estado") == "em_execucao":
+                            return {
+                                "estado": "erro",
+                                "erro": {
+                                    "tipo": "EstadoInvalido",
+                                    "mensagem": "gate já respondido",
+                                },
+                            }
+                        self._jobs[job_id] = {"estado": "em_execucao"}
+                        self._iniciar_thread(
+                            job_id, self._obter_cliente(), Command(resume=decisao)
+                        )
+                    return {"estado": "em_execucao"}
+            if self._recuperar_outbox(job_id):
+                return {"estado": "em_execucao"}
             return {
                 "estado": "erro",
                 "erro": {
@@ -113,12 +243,85 @@ class GerenciadorJobs:
                     "mensagem": "job não está em gate_pendente",
                 },
             }
+        if not isinstance(decision_id, str):
+            raise RuntimeError("gate durável sem decision_id")
 
-        cliente = self._obter_cliente()
+        try:
+            ledger = LedgerCaixa(self.db_path)
+            try:
+                ledger.registrar_decisao(
+                    decisao_id=decision_id, job_id=job_id,
+                    portao=gate.get("portao", "decisao"), decisao=decisao,
+                )
+                claim = ledger.claim(
+                    f"servico-{uuid.uuid4().hex}", lease_s=self._outbox_lease_s,
+                    decisao_id=decision_id,
+                )
+                aceito_por_outro = False
+                if claim is None:
+                    registro = ledger.buscar_decisao(decision_id)
+                    aceito_por_outro = (
+                        registro is not None
+                        and registro["estado"] in {"PENDING", "CLAIMED", "APPLIED"}
+                    )
+            finally:
+                ledger.fechar()
+        except ValueError as ex:
+            return {
+                "estado": "erro",
+                "erro": {"tipo": "DecisaoInvalida", "mensagem": str(ex)},
+            }
+        if claim is None:
+            if aceito_por_outro:
+                return {"estado": "em_execucao"}
+            return {
+                "estado": "erro",
+                "erro": {"tipo": "EstadoInvalido", "mensagem": "gate já respondido"},
+            }
         with self._lock:
+            self._exigir_aberto()
             self._jobs[job_id] = {"estado": "em_execucao"}
-        self._iniciar_thread(job_id, cliente, Command(resume=decisao))
+            self._iniciar_thread(job_id, self._obter_cliente(), None, claim)
         return {"estado": "em_execucao"}
+
+    def _decisao_ja_aceita(self, decision_id: str, job_id: str,
+                           decisao: Any) -> bool:
+        ledger = LedgerCaixa(self.db_path)
+        try:
+            registro = ledger.buscar_decisao(decision_id)
+        finally:
+            ledger.fechar()
+        if registro is None or registro["estado"] not in {
+            "PENDING", "CLAIMED", "APPLIED",
+        }:
+            return False
+        payload = registro.get("payload")
+        return (
+            isinstance(payload, dict)
+            and payload.get("job_id") == job_id
+            and payload.get("decisao") == decisao
+        )
+
+    def _gates_duraveis(self, job_id: str) -> list[dict[str, Any]]:
+        log = self._log_do_job(job_id, truncar=False)
+        conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
+        try:
+            grafo = construir_grafo(
+                self._obter_cliente(),
+                log,
+                checkpointer=SqliteSaver(conn),
+                politica=self.politica,
+                workspace_base=self.workspace_base,
+                ferramentas=self.ferramentas,
+                ferramentas_permitidas=self.ferramentas_permitidas,
+                rotas=self.rotas,
+            )
+            snapshot = grafo.get_state(self._config(job_id))
+            return self._gates(getattr(snapshot, "interrupts", ()))
+        finally:
+            conn.close()
+            if log is not self.log:
+                log.fechar()
 
     def resumo(self, job_id: str) -> dict:
         """Digest compacto, derivado de state + log.jsonl. Nunca devolve log cru."""
@@ -157,16 +360,31 @@ class GerenciadorJobs:
             return self._cliente
         return construir_cliente(self.cfg_modelos, self.dir_registro, log=self.log)
 
-    def _iniciar_thread(self, job_id: str, cliente: ClienteModelo, entrada: Any) -> None:
+    def _iniciar_thread(self, job_id: str, cliente: ClienteModelo, entrada: Any,
+                        claim: dict[str, Any] | None = None) -> None:
+        def executar() -> None:
+            try:
+                self._executar(job_id, cliente, entrada, claim)
+            finally:
+                with self._lock:
+                    self._threads.discard(threading.current_thread())
+
         thread = threading.Thread(
-            target=self._executar,
-            args=(job_id, cliente, entrada),
+            target=executar,
             name=f"motor-job-{job_id}",
             daemon=True,
         )
-        thread.start()
+        with self._lock:
+            self._exigir_aberto()
+            self._threads.add(thread)
+            try:
+                thread.start()
+            except BaseException:
+                self._threads.discard(thread)
+                raise
 
-    def _executar(self, job_id: str, cliente: ClienteModelo, entrada: Any) -> None:
+    def _executar(self, job_id: str, cliente: ClienteModelo, entrada: Any,
+                  claim: dict[str, Any] | None = None) -> None:
         log = self._log_do_job(job_id)
         try:
             grafo = construir_grafo(
@@ -179,7 +397,21 @@ class GerenciadorJobs:
                 ferramentas_permitidas=self.ferramentas_permitidas,
                 rotas=self.rotas,
             )
-            resultado = grafo.invoke(entrada, self._config(job_id))
+            if claim is None:
+                resultado = grafo.invoke(entrada, self._config(job_id))
+            else:
+                ledger = LedgerCaixa(self.db_path)
+                try:
+                    resultado = ledger.consumir(
+                        claim,
+                        lambda payload: grafo.invoke(
+                            Command(resume={payload["decisao_id"]: payload["decisao"]}),
+                            self._config(job_id),
+                        ),
+                        fault=self._fault,
+                    )
+                finally:
+                    ledger.fechar()
             with self._lock:
                 self._jobs[job_id] = self._registro_de_resultado(resultado)
         except Exception as ex:  # erro tratável: o gerenciador não cai
@@ -191,6 +423,86 @@ class GerenciadorJobs:
         finally:
             if log is not self.log:
                 log.fechar()
+
+    def _recuperar_outbox(self, job_id: str) -> bool:
+        with self._lock:
+            self._exigir_aberto()
+        ledger = LedgerCaixa(self.db_path)
+        try:
+            claim = ledger.claim(
+                f"servico-{uuid.uuid4().hex}",
+                lease_s=self._outbox_lease_s,
+                job_id=job_id,
+            )
+        finally:
+            ledger.fechar()
+        if claim is None:
+            return False
+        with self._lock:
+            self._exigir_aberto()
+            self._jobs[job_id] = {"estado": "em_execucao"}
+            self._iniciar_thread(job_id, self._obter_cliente(), None, claim)
+        return True
+
+    def _reconciliar_outbox(self) -> None:
+        while not self._stop_reconciliador.is_set():
+            try:
+                ledger = LedgerCaixa(self.db_path)
+                try:
+                    claim = ledger.claim(
+                        self._owner_reconciliador,
+                        lease_s=self._outbox_lease_s,
+                    )
+                finally:
+                    ledger.fechar()
+                if claim is None:
+                    self._stop_reconciliador.wait(self._outbox_poll_s)
+                    continue
+                payload = claim.get("payload")
+                job_id = payload.get("job_id") if isinstance(payload, dict) else None
+                if not isinstance(job_id, str):
+                    raise ValueError("payload sem job_id válido")
+                _validar_job_id(job_id)
+                if self._stop_reconciliador.is_set():
+                    return
+                with self._lock:
+                    if self._fechado:
+                        return
+                    self._jobs[job_id] = {"estado": "em_execucao"}
+                    self._erro_reconciliador = None
+                self._executar(job_id, self._obter_cliente(), None, claim)
+            except Exception as ex:
+                with self._lock:
+                    self._erro_reconciliador = ex
+                self._stop_reconciliador.wait(self._outbox_poll_s)
+
+    def fechar(self, *, timeout_s: float = 5.0) -> None:
+        """Para workers e só então fecha o checkpointer compartilhado."""
+        timeout = _segundos_positivos("timeout_s", timeout_s)
+        with self._lock:
+            if self._conn_fechada:
+                return
+            self._fechado = True
+            self._stop_reconciliador.set()
+            threads = [self._reconciliador, *self._threads]
+
+        limite = time.monotonic() + timeout
+        for thread in threads:
+            restante = max(0.0, limite - time.monotonic())
+            thread.join(restante)
+        if any(thread.is_alive() for thread in threads):
+            raise TimeoutError("workers não encerraram no prazo")
+
+        with self._lock:
+            if self._threads or self._reconciliador.is_alive():
+                raise TimeoutError("workers não encerraram no prazo")
+            if not self._conn_fechada:
+                self._conn.close()
+                self._conn_fechada = True
+
+    def _exigir_aberto(self) -> None:
+        if self._fechado:
+            raise RuntimeError("GerenciadorJobs fechado")
 
     def _status_duravel(self, job_id: str) -> dict:
         log = self._log_do_job(job_id, truncar=False)
@@ -207,9 +519,11 @@ class GerenciadorJobs:
         try:
             snapshot = grafo.get_state(self._config(job_id))
             if getattr(snapshot, "interrupts", None):
+                gates = self._gates(snapshot.interrupts)
                 return {
                     "estado": "gate_pendente",
-                    "gate": snapshot.interrupts[0].value,
+                    "gates": gates,
+                    "gate": gates[0],
                 }
             if snapshot.values.get("resposta_final") or snapshot.values.get("avaliacao", {}).get("abortada"):
                 return self._resultado_concluido(job_id, snapshot.values)
@@ -220,9 +534,11 @@ class GerenciadorJobs:
 
     def _registro_de_resultado(self, resultado: dict[str, Any]) -> dict[str, Any]:
         if "__interrupt__" in resultado:
+            gates = self._gates(resultado["__interrupt__"])
             return {
                 "estado": "gate_pendente",
-                "gate": resultado["__interrupt__"][0].value,
+                "gates": gates,
+                "gate": gates[0],
             }
         if resultado.get("avaliacao", {}).get("abortada"):
             return {
@@ -236,7 +552,8 @@ class GerenciadorJobs:
 
     def _resposta_de_registro(self, job_id: str, registro: dict[str, Any]) -> dict:
         if registro["estado"] == "gate_pendente":
-            return {"estado": "gate_pendente", "gate": registro["gate"]}
+            gates = registro.get("gates", [registro["gate"]])
+            return {"estado": "gate_pendente", "gates": gates, "gate": gates[0]}
         if registro["estado"] == "concluido":
             return self._resultado_concluido(job_id, registro["resultado"])
         return {"estado": "erro", "erro": registro["erro"]}
@@ -269,6 +586,8 @@ class GerenciadorJobs:
     def _log_do_job(self, job_id: str, truncar: bool = True) -> LogEventos:
         if self.log is not None:
             return self.log
+        if not truncar:
+            return cast(LogEventos, _LogConsulta(self._caminho_log(job_id)))
         return LogEventos(self._caminho_log(job_id), truncar=truncar)
 
     def _caminho_log(self, job_id: str) -> Path:
@@ -290,6 +609,18 @@ class GerenciadorJobs:
 
     def _run(self, job_id: str, run_id: str) -> dict:
         return {"job_id": job_id, "workspace": str(self.workspace_base / run_id), "log": "log.jsonl"}
+
+    @staticmethod
+    def _gates(interrupcoes: Any) -> list[dict[str, Any]]:
+        gates = []
+        for interrupcao in interrupcoes:
+            decision_id = getattr(interrupcao, "id", None)
+            if not isinstance(decision_id, str):
+                raise RuntimeError("interrupt sem decision_id válido")
+            gate = dict(interrupcao.value)
+            gate["decision_id"] = decision_id
+            gates.append(gate)
+        return gates
 
     @staticmethod
     def _gate_resumo(gate: dict[str, Any] | None) -> dict[str, Any] | None:
