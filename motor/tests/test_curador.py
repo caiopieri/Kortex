@@ -872,15 +872,23 @@ def test_rodar_sombra_emite_evento_read_only():
     assert evidencia["status"] == "sombra_concluida"
 
 
-def _evidencia(taxa_t, custo_t, taxa_c, custo_c, slot="executor/simples"):
-    return {
-        "status": "sombra_concluida",
+def _evidencia(taxa_t, custo_t, taxa_c, custo_c, slot="executor/simples", titular="t", candidato="c"):
+    total = 10
+    casos = [{
+        "id": str(i),
         "slot": slot,
-        "titular": {"modelo": "t", "aprovados": 1, "total": 1, "taxa_aprovacao": taxa_t, "custo_medio_usd": custo_t},
-        "candidato": {"modelo": "c", "aprovados": 1, "total": 1, "taxa_aprovacao": taxa_c, "custo_medio_usd": custo_c},
-        "casos": [],
-        "casos_ignorados": 0,
-    }
+        "meta": {"split": "held-out", "proveniencia": "suite-curador"},
+        "titular": {"modelo": titular, "aprovado": i < round(taxa_t * total), "custo_usd": custo_t},
+    } for i in range(total)]
+
+    def runner(caso, _modelo):
+        return {"aprovado": int(caso["id"]) < round(taxa_c * total), "custo_usd": custo_c}
+
+    return rodar_sombra(
+        {"slot": slot, "titular": titular, "candidato": candidato, "politica": {"min_casos": 1}},
+        casos,
+        runner,
+    )
 
 
 def test_certificar_aprova_quando_candidato_melhor_em_qualidade_e_custo():
@@ -970,28 +978,37 @@ def test_rodar_sombra_cust_none_nao_vira_zero_na_evidencia():
     assert evidencia["candidato"]["custo_medio_usd"] is None
 
 
-def _certificacao_aprovada(slot="executor/simples", titular="modelo-t", candidato="modelo-c"):
-    return {
-        "status": "certificado",
-        "slot": slot,
-        "titular": {"modelo": titular, "aprovados": 1, "total": 2, "taxa_aprovacao": 0.5, "custo_medio_usd": 0.02},
-        "candidato": {"modelo": candidato, "aprovados": 2, "total": 2, "taxa_aprovacao": 1.0, "custo_medio_usd": 0.01},
-        "motivo": "candidato vence titular: aprovacao 1.0000 > 0.5000, custo 0.01 < 0.02",
-    }
+class _RepositorioCertificacoesFake:
+    def __init__(self, registro):
+        self.registro = registro
+
+    def obter(self, certification_id):
+        if certification_id != self.registro["certification_id"]:
+            return None
+        return self.registro
 
 
-def _certificacao_rejeitada():
-    return {
-        "status": "rejeitado",
-        "slot": "executor/simples",
-        "titular": {"modelo": "t", "aprovados": 1, "total": 1, "taxa_aprovacao": 0.5, "custo_medio_usd": 0.02},
-        "candidato": {"modelo": "c", "aprovados": 1, "total": 1, "taxa_aprovacao": 0.5, "custo_medio_usd": 0.01},
-        "motivo": "candidato nao vence titular em ambos os eixos",
+def _registro_certificacao(*, aprovado=True):
+    evidencia = _evidencia(
+        taxa_t=0.5,
+        custo_t=0.02,
+        taxa_c=1.0 if aprovado else 0.5,
+        custo_c=0.01,
+        titular="modelo-t",
+        candidato="modelo-c",
+    )
+    certification_id = "cert-1"
+    registro = {
+        "certification_id": certification_id,
+        "evidencia": evidencia,
+        "decisao": certificar_sombra(evidencia),
     }
+    return certification_id, _RepositorioCertificacoesFake(registro)
 
 
 def test_preparar_promocao_gera_intencao_pendente_quando_certificado():
-    intencao = preparar_promocao_gated(_certificacao_aprovada())
+    certification_id, repo = _registro_certificacao()
+    intencao = preparar_promocao_gated(certification_id, repo)
 
     assert intencao["status"] == "promocao_pendente"
     assert intencao["slot"] == "executor/simples"
@@ -1004,10 +1021,11 @@ def test_preparar_promocao_gera_intencao_pendente_quando_certificado():
 
 
 def test_preparar_promocao_veta_certificacao_rejeitada():
-    intencao = preparar_promocao_gated(_certificacao_rejeitada())
+    certification_id, repo = _registro_certificacao(aprovado=False)
+    intencao = preparar_promocao_gated(certification_id, repo)
 
     assert intencao["status"] == "promocao_vetada"
-    assert "certificacao nao aprovada" in intencao["motivo"]
+    assert "nao aprovada" in intencao["motivo"]
 
 
 def test_preparar_promocao_veta_certificacao_com_status_desconhecido():
@@ -1018,8 +1036,10 @@ def test_preparar_promocao_veta_certificacao_com_status_desconhecido():
 
 def test_preparar_promocao_emite_evento_pendente():
     eventos = []
+    certification_id, repo = _registro_certificacao()
     intencao = preparar_promocao_gated(
-        _certificacao_aprovada(),
+        certification_id,
+        repo,
         emitir_evento=lambda nome, payload: eventos.append((nome, payload)),
     )
 
@@ -1033,8 +1053,10 @@ def test_preparar_promocao_emite_evento_pendente():
 
 def test_preparar_promocao_nao_emite_evento_quando_vetada():
     eventos = []
+    certification_id, repo = _registro_certificacao(aprovado=False)
     intencao = preparar_promocao_gated(
-        _certificacao_rejeitada(),
+        certification_id,
+        repo,
         emitir_evento=lambda nome, payload: eventos.append((nome, payload)),
     )
 
@@ -1047,12 +1069,18 @@ def test_cli_sombra_certificacao_e_promocao_read_only(tmp_path):
     evidencia_out = tmp_path / "evidencia-out.json"
     sombra_json.write_text(
         json.dumps({
-            "proposta": {"slot": "executor/simples", "titular": "modelo-t", "candidato": "modelo-c"},
+            "proposta": {
+                "slot": "executor/simples",
+                "titular": "modelo-t",
+                "candidato": "modelo-c",
+                "politica": {"min_casos": 1},
+            },
             "casos": [
                 {
                     "id": "caso-1",
                     "slot": "executor/simples",
                     "entrada": {"prompt": "held-out"},
+                    "meta": {"split": "held-out", "proveniencia": "suite-cli"},
                     "titular": {"modelo": "modelo-t", "aprovado": True, "custo_usd": 0.02},
                     "candidato": {"aprovado": True, "custo_usd": 0.01, "motivo": "ok"},
                 }
@@ -1096,7 +1124,7 @@ def test_cli_sombra_certificacao_e_promocao_read_only(tmp_path):
 
     certificacao_json = tmp_path / "certificacao.json"
     promocao_out = tmp_path / "promocao-out.json"
-    certificacao_json.write_text(json.dumps(_certificacao_aprovada()), encoding="utf-8")
+    certificacao_json.write_text(json.dumps(certificacao_cli), encoding="utf-8")
 
     promocao = subprocess.run(
         [sys.executable, "-m", "motor.curador", "--promocao", str(certificacao_json), "--json", str(promocao_out)],
@@ -1106,9 +1134,7 @@ def test_cli_sombra_certificacao_e_promocao_read_only(tmp_path):
     )
 
     assert "# Intencao de Promocao" in promocao.stdout
-    assert "- status: promocao_pendente" in promocao.stdout
-    assert "- requer_gate: True" in promocao.stdout
+    assert "- status: promocao_vetada" in promocao.stdout
     assert "curador.promoveu" not in promocao.stdout
     promocao_cli = json.loads(promocao_out.read_text(encoding="utf-8"))
-    assert promocao_cli["status"] == "promocao_pendente"
-    assert promocao_cli["requer_gate"] is True
+    assert promocao_cli["status"] == "promocao_vetada"

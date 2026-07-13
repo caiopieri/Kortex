@@ -1,10 +1,10 @@
 # Runbook: Curador Sombra e Certificacao
 
-Este caminho e read-only. Ele gera evidencia para gate posterior; nao muda catalogo, config ou
-roteamento.
+Este caminho e read-only. Ele gera evidencia diagnostica; nao muda catalogo, config ou
+roteamento e nao cria intencao autoritativa de promocao.
 
-O formato da CLI ainda e beta: use os artefatos JSON como contrato interno da fatia 3, nao como API
-publica estavel.
+O formato da CLI ainda e beta: artefatos JSON sao contrato interno de inspecao, nao API
+publica, registro autoritativo ou entrada confiavel para apply.
 
 ## Casos held-out
 
@@ -37,10 +37,29 @@ JSON manual.
 ```bash
 python3 -m motor.curador --sombra casos.json --json evidencia-sombra.json
 python3 -m motor.curador --certificar evidencia-sombra.json --json certificacao.json
-python3 -m motor.curador --promocao certificacao.json --json promocao.json
 ```
 
 `python3 -m motor.curador <logs.jsonl>` continua sendo o caminho existente de perfil read-only.
+
+`--certificar` recomputa e sela a evidencia, mas o arquivo exportado continua nao
+autoritativo. Nao promova copiando `status`, hash ou conteudo desse JSON.
+
+O comando legado abaixo exercita somente o default-deny da CLI:
+
+```bash
+python3 -m motor.curador --promocao certificacao.json --json veto.json
+```
+
+Sem `RepositorioCertificacoes`, ele nao pode criar `promocao_pendente`. A trilha
+operacional exige uma integracao de deployment que:
+
+1. registre a certificacao validada em repositório imutavel/autenticado;
+2. passe somente o `certification_id` a `preparar_promocao_gated(...)`;
+3. confira que o retorno e `promocao_pendente` e `requer_gate=True`;
+4. encaminhe a intencao ao gate humano; o curador nao aplica catalogo.
+
+Este repositorio define o protocolo, mas nao fornece hoje esse backend. Portanto, promocao
+operacional esta indisponivel por default; um fake de teste nao remove essa restricao.
 
 ## Invariantes
 
@@ -49,3 +68,14 @@ python3 -m motor.curador --promocao certificacao.json --json promocao.json
 - `curador.promoveu` nao e emitido por estes comandos; ele pertence ao gate externo que aplicar a
   promocao.
 - Custo ausente (`null`/`None`) nao e zero.
+- JSON/CLI, dict, hash e `status="certificado"` fornecidos pelo chamador nao sao autoridade.
+- Custo menor nunca compensa qualidade igual ou pior; ambos os eixos precisam melhorar de
+  forma estrita.
+
+## Falhas operacionais
+
+- Repositorio ausente, ID desconhecido ou registro divergente: veto; nao contornar pela CLI.
+- Evidencia selada invalida, caso duplicado, proveniencia vazia ou custo nao finito: rejeicao;
+  corrigir a origem, nao o agregado.
+- Runner falha em um caso: o caso registra falha e os demais continuam; revisar antes de
+  certificar.
