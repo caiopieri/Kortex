@@ -68,3 +68,14 @@ mypy, Bandit high/high, compileall e `git diff --check` verdes.
 
 H12b2c1 nao chama publicador. Crash apos publicacao e antes de ack continuara produzindo
 duplicata at-least-once; H12b2c2 deve definir o relay e transportar `event_id` ao consumidor.
+
+## H12b2c2
+
+Relay generico publica no maximo um evento por chamada, fora da transacao SQLite, e entrega
+`event_id`, tipo e copia defensiva do payload. ACK ocorre apenas depois do retorno do
+publicador; falha deixa o claim ate o lease expirar e permite redelivery com o mesmo ID para
+deduplicacao pelo consumidor. Sao 26 linhas de producao + 255 de testes (281, <=300).
+
+Gate focado: 12 testes; cadeia H12b0-H12b2c2: 100 testes. Ruff, mypy, Bandit high/high,
+compileall e `git diff --check` verdes. A suite ampla teve 724 passes e uma falha preexistente
+fora da fatia no manifesto H00, que ainda exige regressao substituta do oraculo K2.
