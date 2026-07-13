@@ -40,6 +40,7 @@ motor/                 o kernel (pacote Python autocontido)
   motor/ tests/ exemplos/ scripts/ motor_painel/
   docs/                EVOLUCAO, ARQUITETURA-MCP, runbooks
   handoffs/            histórico de handoffs de implementação (rationale)
+  specs/               especificações, matrizes e evidências do hardening T2
 dev-harness/           a softwarehouse: metodologia de engenharia (a 1ª casa)
 harness-hardware/      semente da vertical de hardware
 harness-mecanico/      semente da vertical mecânica
@@ -51,22 +52,44 @@ harness-mecanico/      semente da vertical mecânica
 2. [docs/ROADMAP.md](docs/ROADMAP.md) — o mapa operacional Now/Next/Later.
 3. [motor/README.md](motor/README.md) — como rodar e testar o motor.
 4. [motor/docs/EVOLUCAO.md](motor/docs/EVOLUCAO.md) e [motor/docs/ARQUITETURA-MCP.md](motor/docs/ARQUITETURA-MCP.md) — o norte e a fronteira do motor.
+5. [motor/specs/001-hardening-producao/](motor/specs/001-hardening-producao/) — spec, matriz de invariantes e evidências do hardening T2.
 
 ## Rodar o motor (rápido)
 
 ```bash
 cd motor
-pip install -e ".[dev]"
-pytest -q                                       # suíte sem rede (ClienteStub)
+python -m pip install -e ".[dev]"
+pytest -q                                       # suíte sem rede; mesmo alvo funcional do CI
 python -m motor "pesquise oportunidades de aumento de receita"   # requer um provedor de modelo
 ```
 
 ## Estado
 
-Motor-core fechado e validado em run real. Fase C completa (prevenção + escalada de tier + reconciliação
-na fonte em loop). Curador (auto-melhora) com fundação completa: observa, perfila por modelo, propõe por
-slot e mede custo. Próximo: esquema de eventos motor→superfície e validadores determinísticos. Detalhe em
-[docs/ROADMAP.md](docs/ROADMAP.md).
+O motor v0.5 está em **hardening T2; ainda não está certificado para produção**. O programa H00–H13
+fechou a maior parte das falhas encontradas pela auditoria defensiva, e a extensão H12b já avançou até
+H12b2c1. O estado comprovado hoje é:
+
+- kernel/spec/grafo, reconciliação bounded e validação de capabilities hardened;
+- executor de comando com identidade e `argv` validados, mas **default-deny em produção**;
+- schema de eventos v2, ledger append-only/recovery, projeção read-only e superfície MCP hardened;
+- curador com sombra read-only, certificação anti-Goodhart e promoção apenas como intenção humana
+  (ADR-003), nunca aplicação automática;
+- Caixa do Fundador e livro-razão de orçamento com transações, replay, reserva exclusiva, outbox e
+  protocolo de `claim/lease/ack` até H12b2c1.
+
+Duas fronteiras impedem declarar o gate global fechado:
+
+1. **H05b bloqueado externamente:** falta um backend real de sandbox, com imagem por digest e policy
+   versionada, para provar isolamento de filesystem/rede/ambiente, limite de output e TERM/KILL da
+   árvore de processos. Sem isso, C2/C3 permanecem indisponíveis.
+2. **H12b2c2 é o próximo landing:** o relay/publicador ainda precisa transportar `event_id` ao
+   consumidor. H12b2c1 não publica; portanto a janela entre publicação e `ack` ainda exige a semântica
+   at-least-once/deduplicação que será fechada nessa fatia.
+
+O snapshot consolidado e suas ressalvas estão em
+[verification-h13.md](motor/specs/001-hardening-producao/verification-h13.md); o progresso posterior de
+H12b está em [h12b1a-landings.md](motor/specs/001-hardening-producao/h12b1a-landings.md). O sequenciamento
+operacional continua em [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Licença
 
