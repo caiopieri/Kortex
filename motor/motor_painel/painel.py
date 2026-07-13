@@ -14,7 +14,9 @@ from pathlib import Path
 import re
 import time
 import sqlite3
-from typing import Any, Optional, cast
+from typing import Any, NoReturn, Optional, cast
+
+from motor.eventos_schema import valido
 
 PORTA = 8378
 BASE = Path(__file__).parent.resolve()
@@ -23,50 +25,13 @@ LOG_PATH = BASE.parent / "log.jsonl"
 DB_PATH = BASE.parent / "motor.db"
 APP_DIST = BASE / "app" / "dist"
 
-# Preços padrão para cálculo de custos
-DEFAULT_PRECOS = {
-    "deepseek-reasoner": {"in_por_1k": 0.00055, "out_por_1k": 0.00219},
-    "deepseek-chat": {"in_por_1k": 0.00014, "out_por_1k": 0.00028},
-    "claude-3-5-sonnet": {"in_por_1k": 0.003, "out_por_1k": 0.015},
-    "gemini-1.5-flash": {"in_por_1k": 0.000075, "out_por_1k": 0.0003},
-    "gemini-1.5-pro": {"in_por_1k": 0.00125, "out_por_1k": 0.005},
-    "gpt-4o": {"in_por_1k": 0.0025, "out_por_1k": 0.010},
-    "gpt-4o-mini": {"in_por_1k": 0.00015, "out_por_1k": 0.0006},
-}
-
-PRECOS_PATH = BASE.parent / "precos.json"
-
-def carregar_precos() -> dict:
-    precos = dict(DEFAULT_PRECOS)
-    if PRECOS_PATH.exists():
-        try:
-            with open(PRECOS_PATH, encoding="utf-8") as f:
-                user_precos = json.load(f)
-                if isinstance(user_precos, dict):
-                    for k, v in user_precos.items():
-                        if isinstance(v, dict) and "in_por_1k" in v and "out_por_1k" in v:
-                            precos[k] = {
-                                "in_por_1k": float(v["in_por_1k"]),
-                                "out_por_1k": float(v["out_por_1k"])
-                            }
-        except Exception:
-            pass
-    return precos
-
 # ---------------------------------------------------------------------------
 # Lógica de parse — importável pelos testes
 # ---------------------------------------------------------------------------
 
-TIPOS_EVENTO = {
-    "spec.criada", "spec.recebida",
-    "paralelo.iniciado", "paralelo.concluido",
-    "executor.chamado", "executor.respondeu", "executor.erro",
-    "portao.aprovado", "portao.reprovado",
-    "modelo.falha",
-    "escalado",
-    "decisao.pendente", "decisao.retomada", "decisao.fundador", "decisao.timeout",
-    "tarefa.concluida", "tarefa.abortada",
-}
+
+def _constante_json_invalida(valor: str) -> NoReturn:
+    raise ValueError(f"constante fora do JSON estrito: {valor}")
 
 
 def parse_linha(linha: str) -> dict | None:
@@ -74,21 +39,38 @@ def parse_linha(linha: str) -> dict | None:
     linha = linha.strip()
     if not linha:
         return None
-    res = json.loads(linha)  # levanta JSONDecodeError se inválido
+    res = json.loads(linha, parse_constant=_constante_json_invalida)
     return cast(Optional[dict[Any, Any]], res) if isinstance(res, dict) else None
 
 
 def parse_eventos(log_path: str | Path | None = None) -> list[dict]:
-    """Lê e parseia todas as linhas válidas de log.jsonl."""
+    """Lê linhas completas e ignora somente o último fragmento sem newline."""
     path = Path(log_path) if log_path is not None else LOG_PATH
     if not path.exists():
         return []
-    eventos = []
-    with open(path, encoding="utf-8") as f:
-        for linha in f:
-            ev = parse_linha(linha)
-            if ev is not None:
-                eventos.append(ev)
+    eventos: list[dict] = []
+    ultimo_seq = 0
+    ultimo_t: int | float = 0
+    conteudo = path.read_bytes()
+    linhas = conteudo.split(b"\n")
+    linhas_completas = linhas[:-1]
+    for numero_linha, linha in enumerate(linhas_completas, start=1):
+        texto = linha.decode("utf-8")
+        ev = parse_linha(texto)
+        if ev is None:
+            if texto.strip():
+                raise ValueError(f"linha {numero_linha} nao contem evento")
+            continue
+        if "seq" in ev:
+            if not valido(ev):
+                raise ValueError(f"linha {numero_linha} fora do schema v2")
+            if ev["seq"] != ultimo_seq + 1:
+                raise ValueError(f"sequencia invalida na linha {numero_linha}")
+            if ev["t"] < ultimo_t:
+                raise ValueError(f"tempo regressivo na linha {numero_linha}")
+            ultimo_seq = ev["seq"]
+            ultimo_t = ev["t"]
+        eventos.append(ev)
     return eventos
 
 
@@ -215,21 +197,8 @@ def obter_runs(eventos: list[dict]) -> list[dict]:
                 estado = "abortada"
                 break
                 
-        # Custo
-        custo = 0.0
-        model_usages = [ev for ev in run_evs if ev.get("evento") == "modelo.uso"]
-        if model_usages:
-            precos = carregar_precos()
-            for mu in model_usages:
-                model = mu.get("modelo")
-                prompt = mu.get("prompt_tokens", 0)
-                completion = mu.get("completion_tokens", 0)
-                if model in precos:
-                    custo += (prompt / 1000.0) * precos[model]["in_por_1k"] + (completion / 1000.0) * precos[model]["out_por_1k"]
-        else:
-            acumulados = [float(ev["acumulado"]) for ev in run_evs if ev.get("acumulado") is not None]
-            if acumulados:
-                custo = max(acumulados)
+        # Telemetria de tokens nao possui autoridade monetaria.
+        custo = None
                 
         inicio = run_evs[0].get("t", 0.0) if run_evs else 0.0
         
@@ -246,7 +215,8 @@ def obter_runs(eventos: list[dict]) -> list[dict]:
 
 
 def obter_gates_pendentes(eventos: list[dict]) -> list[dict]:
-    runs_events = agrupar_eventos_por_run(eventos)
+    # Eventos v1 permanecem visiveis, mas nunca possuem autoridade operacional.
+    runs_events = agrupar_eventos_por_run([ev for ev in eventos if "seq" in ev])
     gates_pendentes: list[dict] = []
     
     for idx, run_evs in enumerate(runs_events, start=1):
@@ -564,10 +534,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             
         if path == "/dados/custos":
             eventos = parse_eventos(self.log_path)
-            precos = carregar_precos()
             runs_events = agrupar_eventos_por_run(eventos)
-            
-            total_custo = 0.0
+
             total_tokens = 0
             n_chamadas = 0
             
@@ -584,7 +552,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if not rid:
                     rid = f"run_{idx}"
                     
-                r_custo = 0.0
                 r_tokens = 0
                 r_chamadas = 0
                 
@@ -599,25 +566,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         tokens = ev.get("total_tokens", prompt + completion)
                         model = ev.get("modelo")
                         
-                        cost = 0.0
-                        if model and model in precos:
-                            cost = (prompt / 1000.0) * precos[model]["in_por_1k"] + (completion / 1000.0) * precos[model]["out_por_1k"]
-                            
-                        total_custo += cost
                         total_tokens += tokens
-                        r_custo += cost
                         r_tokens += tokens
-                        
+
                         if model:
                             if model not in por_modelo:
-                                por_modelo[model] = {"modelo": model, "custo_total": 0.0, "tokens_total": 0, "n_chamadas": 0}
-                            por_modelo[model]["custo_total"] += cost
+                                por_modelo[model] = {"modelo": model, "custo_total": None, "tokens_total": 0, "n_chamadas": 0}
                             por_modelo[model]["tokens_total"] += tokens
                             por_modelo[model]["n_chamadas"] += 1
                             
                 por_run.append({
                     "id": rid,
-                    "custo_total": r_custo,
+                    "custo_total": None,
                     "tokens_total": r_tokens,
                     "n_chamadas": r_chamadas
                 })
@@ -626,7 +586,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 "por_run": por_run,
                 "por_modelo": list(por_modelo.values()),
                 "total": {
-                    "custo_total": total_custo,
+                    "custo_total": None,
                     "tokens_total": total_tokens,
                     "n_chamadas": n_chamadas
                 }

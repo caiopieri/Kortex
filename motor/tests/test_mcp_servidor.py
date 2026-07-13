@@ -137,7 +137,7 @@ def test_mcp_eventos_retorna_stream_incremental(tmp_path):
         await aguardar_estado(app, inicio["job_id"], "gate_pendente")
 
         primeiro = await chamar(app, "metafabrica.eventos", {"job_id": inicio["job_id"], "desde": 0})
-        assert primeiro["schema_versao"] == 1
+        assert primeiro["schema_versao"] == 2
         assert primeiro["proximo_offset"] == len(primeiro["eventos"])
         assert primeiro["proximo_offset"] > 0
         assert any(evento["evento"] == "spec.criada" for evento in primeiro["eventos"])

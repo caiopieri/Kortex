@@ -32,9 +32,9 @@ def _tipos_emitidos() -> set[str]:
 
 
 def test_schema_tem_versao_e_helpers():
-    assert SCHEMA_VERSAO == 1
+    assert SCHEMA_VERSAO == 2
     assert "executor.chamado" in tipos()
-    assert valido({"evento": "executor.chamado"})
+    assert valido({"evento": "executor.chamado", "t": 0.0, "seq": 1, "executor": "e", "tentativa": 1})
     assert not valido({"evento": "evento.inexistente"})
     assert categoria_de("aresta.fluxo") == "fluxo"
 

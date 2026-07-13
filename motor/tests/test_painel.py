@@ -364,6 +364,7 @@ def test_get_dados_custos():
     assert isinstance(payload["por_run"], list)
     assert isinstance(payload["por_modelo"], list)
     assert set(payload["total"].keys()) == {"custo_total", "tokens_total", "n_chamadas"}
+    assert payload["total"]["custo_total"] is None
 
 
 def test_get_dados_catalogo():
@@ -414,11 +415,11 @@ def _http_post_safe(path: str, body: dict, log_path: Path, db_path: Path):
 
 
 _LOG_GATE_PENDENTE = [
-    json.dumps({"t": 0.0, "evento": "spec.recebida", "missao": "m-gate", "objetivo": "x"}),
-    json.dumps({"t": 0.1, "evento": "portao.reprovado", "portao": "cobertura",
-                "lacunas": ["falta x"], "missao": "m-gate"}),
-    json.dumps({"t": 0.2, "evento": "escalado", "para": "fundador",
-                "portao": "cobertura", "missao": "m-gate"}),
+    json.dumps({"t": 0.0, "seq": 1, "evento": "spec.recebida",
+                "missao": "m-gate", "subagentes": 1}),
+    json.dumps({"t": 0.1, "seq": 2, "evento": "portao.reprovado",
+                "portao": "cobertura", "lacunas": ["falta x"]}),
+    json.dumps({"t": 0.2, "seq": 3, "evento": "escalado", "para": "fundador"}),
 ]
 
 

@@ -1,10 +1,21 @@
 """Contrato versionado dos eventos emitidos pelo motor para superfícies read-only."""
 from __future__ import annotations
 
-from typing import Any
+import math
+import re
+from decimal import Decimal, InvalidOperation, localcontext
+from typing import Any, cast
 
 
-SCHEMA_VERSAO = 1
+SCHEMA_VERSAO = 2
+
+EVENTOS_MONETARIOS = frozenset({
+    "custo.reservado", "custo.reconciliado", "custo.bloqueado", "custo.contrato_violado",
+})
+_CAMPOS_ORCAMENTO = ["run_id", "thread_id", "call_id", "rota", "tentativa", "moeda", "teto", "gasto", "reservado"]
+_MAX_DECIMAL_CHARS = 128
+_PRECISAO_DECIMAL = 2 * _MAX_DECIMAL_CHARS + 1
+_DECIMAL_TEXTO = re.compile(r"(?:0|[1-9][0-9]*)(?:\.[0-9]+)?\Z")
 
 
 ESQUEMA: dict[str, dict[str, Any]] = {
@@ -20,8 +31,50 @@ ESQUEMA: dict[str, dict[str, Any]] = {
     },
     "custo.tick": {
         "categoria": "modelo",
-        "campos": ["papel", "provedor", "modelo", "prompt_tokens", "completion_tokens", "total_tokens"],
+        "campos": ["papel", "provedor", "modelo", "prompt_tokens", "completion_tokens", "total_tokens", "estimado"],
         "descricao": "Tick incremental de uso/custo derivado de uma chamada de modelo.",
+    },
+    "custo.reservado": {
+        "categoria": "orcamento",
+        "campos": [*_CAMPOS_ORCAMENTO, "reservation_id", "maximo", "pricing_version"],
+        "descricao": "Registra reserva monetaria aceita e os totais da sessao apos a reserva.",
+    },
+    "custo.reconciliado": {
+        "categoria": "orcamento",
+        "campos": [*_CAMPOS_ORCAMENTO, "reservation_id", "maximo", "custo_real",
+                   "delta_liberado", "pricing_version"],
+        "descricao": "Registra custo real reconciliado e os totais resultantes da sessao.",
+    },
+    "custo.bloqueado": {
+        "categoria": "orcamento",
+        "campos": [*_CAMPOS_ORCAMENTO, "motivo"],
+        "descricao": "Registra bloqueio antes de efeito externo com snapshot monetario sanitizado.",
+    },
+    "custo.contrato_violado": {
+        "categoria": "orcamento",
+        "campos": [*_CAMPOS_ORCAMENTO, "reservation_id", "maximo", "custo_real",
+                   "moeda_recebida", "pricing_version", "motivo"],
+        "descricao": "Registra violacao de maximo, moeda ou custo real do contrato monetario.",
+    },
+    "curador.certificou": {
+        "categoria": "curador",
+        "campos": ["slot", "titular", "candidato", "motivo"],
+        "descricao": "Registra certificacao do candidato avaliado em sombra.",
+    },
+    "curador.promocao_pendente": {
+        "categoria": "curador",
+        "campos": ["slot", "de", "para"],
+        "descricao": "Registra intencao de promocao sujeita a gate humano.",
+    },
+    "curador.rejeitou": {
+        "categoria": "curador",
+        "campos": ["slot", "titular", "candidato", "motivo"],
+        "descricao": "Registra rejeicao do candidato avaliado em sombra.",
+    },
+    "curador.sombra": {
+        "categoria": "curador",
+        "campos": ["slot", "titular", "candidato", "casos", "aprovados_titular", "aprovados_candidato"],
+        "descricao": "Resume a comparacao read-only entre titular e candidato.",
     },
     "decisao.fundador": {
         "categoria": "gate",
@@ -150,7 +203,7 @@ ESQUEMA: dict[str, dict[str, Any]] = {
     },
     "modelo.uso": {
         "categoria": "modelo",
-        "campos": ["papel", "provedor", "modelo", "prompt_tokens", "completion_tokens", "total_tokens"],
+        "campos": ["papel", "provedor", "modelo", "prompt_tokens", "completion_tokens", "total_tokens", "estimado"],
         "descricao": "Registra uso de tokens reportado pelo provedor de modelo.",
     },
     "onda.concluida": {
@@ -260,9 +313,279 @@ def tipos() -> set[str]:
     return set(ESQUEMA)
 
 
+NoneType = type(None)
+NUMERO = (int, float)
+SEQUENCIA = (list, tuple)
+BOOL_OU_NULO = (bool, NoneType)
+DICT_OU_NULO = (dict, NoneType)
+INT_OU_NULO = (int, NoneType)
+STR_OU_NULO = (str, NoneType)
+SEQUENCIA_OU_NULO = (SEQUENCIA, NoneType)
+
+TIPOS_CAMPO: dict[str, Any] = {
+    "alvo": str,
+    "aprovado": bool,
+    "aprovados_candidato": int,
+    "aprovados_titular": int,
+    "capacidades": SEQUENCIA,
+    "caminho": str,
+    "candidato": str,
+    "casos": int,
+    "call_id": str,
+    "ciclo": INT_OU_NULO,
+    "commitados": int,
+    "completion_tokens": int,
+    "custo_real": str,
+    "de": str,
+    "decisao": str,
+    "delta_liberado": str,
+    "edicoes": DICT_OU_NULO,
+    "estimado": BOOL_OU_NULO,
+    "evitar": str,
+    "executor": str,
+    "fallback": bool,
+    "ferramenta": str,
+    "ferramentas": SEQUENCIA,
+    "fonte": str,
+    "gasto": str,
+    "id": str,
+    "ids": SEQUENCIA,
+    "k": int,
+    "kind": str,
+    "lacunas": SEQUENCIA_OU_NULO,
+    "metricas": DICT_OU_NULO,
+    "missao": str,
+    "moeda": str,
+    "moeda_recebida": STR_OU_NULO,
+    "modelo": str,
+    "maximo": str,
+    "motivo": str,
+    "nome": str,
+    "nos": SEQUENCIA,
+    "nota": str,
+    "padrao": str,
+    "papel": str,
+    "para": str,
+    "perfil": str,
+    "portao": str,
+    "prazo_s": NUMERO,
+    "pricing_version": str,
+    "prompt_tokens": int,
+    "provedor": str,
+    "provedores": SEQUENCIA,
+    "recuperados": int,
+    "reservation_id": str,
+    "reservado": str,
+    "restantes": SEQUENCIA,
+    "rodadas": int,
+    "rota": str,
+    "run_id": str,
+    "slot": str,
+    "subagente": str,
+    "subagentes": SEQUENCIA,
+    "template": str,
+    "tentativa": int,
+    "teto": str,
+    "thread_id": str,
+    "tier": str,
+    "tipo": str,
+    "titular": str,
+    "total_tokens": int,
+    "versao_template": str,
+}
+
+TIPOS_POR_EVENTO: dict[str, dict[str, Any]] = {
+    "custo.contrato_violado": {"custo_real": STR_OU_NULO},
+    "decisao.plano": {"decisao": STR_OU_NULO},
+    "executor.chamado": {
+        "modelo": STR_OU_NULO,
+        "papel": STR_OU_NULO,
+        "template": STR_OU_NULO,
+        "tentativa": INT_OU_NULO,
+        "tier": STR_OU_NULO,
+        "versao_template": STR_OU_NULO,
+    },
+    "modelo.roteado_capacidade": {"provedor": STR_OU_NULO},
+    "portao.reprovado": {"motivo": STR_OU_NULO},
+    "spec.criada": {"subagentes": int},
+    "spec.recebida": {"subagentes": int},
+    "validador.rodou": {"motivo": STR_OU_NULO},
+}
+
+CAMPOS_OPCIONAIS: dict[str, set[str]] = {
+    "custo.tick": {"estimado"},
+    "decisao.plano": {"decisao", "edicoes"},
+    "executor.chamado": {
+        "modelo",
+        "papel",
+        "template",
+        "tentativa",
+        "tier",
+        "versao_template",
+    },
+    "ferramenta.executada": {"metricas"},
+    "modelo.uso": {"estimado"},
+    "portao.aprovado": {"ciclo"},
+    "portao.reprovado": {"ciclo", "lacunas", "motivo"},
+    "validador.rodou": {"motivo"},
+}
+
+
+def _tipo_esperado(tipo_evento: str, campo: str) -> Any:
+    return TIPOS_POR_EVENTO.get(tipo_evento, {}).get(campo, TIPOS_CAMPO.get(campo))
+
+
+def _tipo_valido(valor: Any, esperado: Any) -> bool:
+    if isinstance(esperado, tuple):
+        return any(_tipo_valido(valor, alternativa) for alternativa in esperado)
+    if esperado is bool:
+        return type(valor) is bool
+    if esperado is int:
+        return type(valor) is int
+    if esperado is float:
+        return type(valor) in (int, float) and math.isfinite(valor)
+    return isinstance(esperado, type) and isinstance(valor, esperado)
+
+
+def _identificador_valido(valor: Any) -> bool:
+    return type(valor) is str and 0 < len(valor) <= 256 and valor == valor.strip() and valor.isprintable()
+
+
+def _decimal_canonico(valor: Any) -> Decimal | None:
+    if type(valor) is not str or not 0 < len(valor) <= _MAX_DECIMAL_CHARS or _DECIMAL_TEXTO.fullmatch(valor) is None:
+        return None
+    try:
+        numero = Decimal(valor)
+    except InvalidOperation:
+        return None
+    return numero if numero.is_finite() else None
+
+
+def _soma_exata(esquerda: Decimal, direita: Decimal) -> Decimal:
+    # Cobre os dois textos inteiros mais um carry, inclusive com escalas opostas.
+    with localcontext() as contexto:
+        contexto.prec = _PRECISAO_DECIMAL
+        return esquerda + direita
+
+
+def _subtracao_exata(esquerda: Decimal, direita: Decimal) -> Decimal:
+    with localcontext() as contexto:
+        contexto.prec = _PRECISAO_DECIMAL
+        return esquerda - direita
+
+
+def _dominio_monetario_valido(tipo: str, evento: dict[str, Any]) -> bool:
+    if tipo not in EVENTOS_MONETARIOS:
+        return True
+
+    ids = ("run_id", "thread_id", "call_id", "rota")
+    if not all(_identificador_valido(evento[campo]) for campo in ids):
+        return False
+    for campo in ("reservation_id", "pricing_version"):
+        if campo in evento and not _identificador_valido(evento[campo]):
+            return False
+    if evento["moeda"] != "BRL" or evento["tentativa"] < 1:
+        return False
+
+    teto = _decimal_canonico(evento["teto"])
+    gasto = _decimal_canonico(evento["gasto"])
+    reservado = _decimal_canonico(evento["reservado"])
+    if teto is None or teto <= 0 or gasto is None or reservado is None:
+        return False
+    comprometido = _soma_exata(gasto, reservado)
+
+    motivo = evento.get("motivo")
+    snapshot_regular = tipo in {"custo.reservado", "custo.reconciliado"} or (
+        tipo == "custo.bloqueado" and motivo != "sessao_invalida"
+    )
+    if snapshot_regular and comprometido > teto:
+        return False
+
+    if tipo == "custo.bloqueado":
+        return motivo in {"sem_cotacao", "sem_adapter", "teto", "sessao_invalida"}
+
+    maximo = _decimal_canonico(evento["maximo"])
+    if maximo is None or maximo <= 0:
+        return False
+    if tipo == "custo.reservado":
+        return reservado >= maximo
+
+    custo_real_raw = evento["custo_real"]
+    custo_real = None if custo_real_raw is None else _decimal_canonico(custo_real_raw)
+    if custo_real_raw is not None and custo_real is None:
+        return False
+
+    if tipo == "custo.reconciliado":
+        delta = _decimal_canonico(evento["delta_liberado"])
+        return (
+            custo_real is not None
+            and custo_real <= maximo
+            and delta is not None
+            and delta == _subtracao_exata(maximo, custo_real)
+            and gasto >= custo_real
+        )
+
+    moeda_recebida = evento["moeda_recebida"]
+    if motivo == "custo_acima_maximo":
+        return (
+            custo_real is not None
+            and custo_real > maximo
+            and moeda_recebida == "BRL"
+            and gasto >= custo_real
+        )
+    if motivo == "moeda_divergente":
+        return (
+            custo_real is not None
+            and _identificador_valido(moeda_recebida)
+            and moeda_recebida != "BRL"
+            and comprometido <= teto
+            and reservado >= maximo
+        )
+    return (
+        motivo == "custo_invalido"
+        and custo_real is None
+        and moeda_recebida == "BRL"
+        and comprometido <= teto
+        and reservado >= maximo
+    )
+
+
 def valido(evento: dict[str, Any]) -> bool:
+    if not isinstance(evento, dict):
+        return False
+
     tipo = evento.get("evento")
-    return isinstance(tipo, str) and tipo in ESQUEMA
+    instante = evento.get("t")
+    if not isinstance(tipo, str) or tipo not in ESQUEMA:
+        return False
+    if not _tipo_valido(instante, NUMERO):
+        return False
+    if cast(int | float, instante) < 0:
+        return False
+    if "seq" not in evento or not _tipo_valido(evento["seq"], int):
+        return False
+    if cast(int, evento["seq"]) < 1:
+        return False
+
+    campos = set(ESQUEMA[tipo]["campos"])
+    payload = set(evento) - {"evento", "t", "seq"}
+    if not payload <= campos:
+        return False
+
+    opcionais = CAMPOS_OPCIONAIS.get(tipo, set())
+    for campo in campos:
+        esperado = _tipo_esperado(tipo, campo)
+        if esperado is None:
+            return False
+        if campo not in evento:
+            if campo not in opcionais:
+                return False
+        elif not _tipo_valido(evento[campo], esperado):
+            return False
+
+    if tipo == "decisao.plano" and not payload & {"decisao", "edicoes"}:
+        return False
+    return _dominio_monetario_valido(tipo, evento)
 
 
 def categoria_de(tipo: str) -> str:
