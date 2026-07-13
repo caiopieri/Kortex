@@ -167,6 +167,17 @@ como dinheiro.
 
 Cada landing pousa com seus testes; nao acumular H12b0-H12b4 em um unico PR.
 
+### Evidencia H12b2c2
+
+O relay generico publica no maximo um evento pendente por chamada e transporta `event_id`,
+tipo e uma copia defensiva do payload. A chamada ao publicador ocorre fora da transacao
+SQLite; o ACK so ocorre depois de seu retorno. Falha antes do ACK conserva o claim ate o
+lease expirar e permite redelivery com o mesmo `event_id`, exigindo deduplicacao duravel no
+consumidor. Esse contrato e at-least-once e nao promete exactly-once.
+
+Evidencia da integracao sobre `901ce2c`: 100 testes focados H12b0-H12b2c2 e 726 testes na
+suite completa. Ruff, mypy, Bandit high/high, compileall e `git diff --check` passaram.
+
 ## Testes Causais
 
 - Chamada inicial reserva antes de o fake observar qualquer efeito.

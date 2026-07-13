@@ -7,6 +7,7 @@ import os
 import re
 import sqlite3
 import stat
+from copy import deepcopy
 from dataclasses import dataclass
 from decimal import Decimal, localcontext
 from pathlib import Path
@@ -96,6 +97,10 @@ class EventoOrcamentoPendente:
 class ClienteTentativaCusteada(Protocol):
     def cotar_tentativa(self) -> CotacaoTentativa: ...
     def tentar_uma_vez(self) -> ResultadoTentativa: ...
+
+
+class PublicadorEventoOrcamento(Protocol):
+    def __call__(self, event_id: str, tipo: str, payload: dict[str, object], /) -> None: ...
 
 
 @dataclass(frozen=True)
@@ -618,6 +623,27 @@ def executar_tentativa_custeada(
         return None
     estado = repositorio.reconciliar(sessao, reserva, resultado.custo_real, resultado.moeda)
     return resultado if estado.status == "RECONCILED" else None
+
+
+def publicar_um_pendente(
+    repositorio: RepositorioOrcamento,
+    run_id: str,
+    owner: str,
+    agora: int,
+    lease_s: int,
+    publicador: PublicadorEventoOrcamento,
+) -> bool:
+    """Publica no máximo um evento; falha antes do ACK permite redelivery pelo event_id."""
+    if not isinstance(repositorio, RepositorioOrcamento):
+        raise ErroOrcamento("repositorio invalido")
+    if not callable(publicador):
+        raise ErroOrcamento("publicador invalido")
+    evento = repositorio.reivindicar_pendente(run_id, owner, agora, lease_s)
+    if evento is None:
+        return False
+    publicador(evento.event_id, evento.tipo, deepcopy(evento.payload))
+    repositorio.confirmar_pendente(run_id, evento.event_id, owner)
+    return True
 
 
 def _resultado_tentativa_valido(valor: object) -> bool:
