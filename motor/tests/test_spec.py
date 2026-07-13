@@ -107,13 +107,14 @@ def test_validador_comando_valido_sem_papel_ou_rubrica():
     assert validador.tipo == "validador"
     assert validador.papel is None
     assert validador.rubrica == []
-    assert validador.validador["kind"] == "comando"
+    assert validador.validador is not None
+    assert validador.validador.kind == "comando"
 
 
 def test_validador_comando_exige_config_comando():
     sem_config = _spec_com_validador_comando()
     sem_config["subagentes"][1]["validador"].pop("config")
-    with pytest.raises(ValidationError, match="exige config"):
+    with pytest.raises(ValidationError, match="validador.comando.config"):
         WorkflowSpec.model_validate(sem_config)
 
     sem_comando = _spec_com_validador_comando()

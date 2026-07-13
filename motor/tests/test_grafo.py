@@ -21,6 +21,8 @@ from motor.politica import PoliticaGates
 SPEC = json.loads(
     (Path(__file__).parent.parent / "exemplos" / "missao-pesquisa.json").read_text(encoding="utf-8")
 )
+for _sub in SPEC["subagentes"]:
+    _sub.setdefault("capacidades_requeridas", ["pesquisa"])
 
 
 def spec_dependencias():
@@ -610,7 +612,10 @@ def test_gate_cobertura_preencher_sem_no_nomeado_eh_inerte(tmp_path):
 def _cliente_roteador(roteador):
     stub = ClienteStub(roteador)
     stub.provedor = "stub"
-    return ClienteRoteador(padrao=stub)
+    return ClienteRoteador(
+        padrao=stub,
+        catalogo=[(stub, frozenset({"pesquisa", "redacao", "codigo"}), 1)],
+    )
 
 
 def test_revisao_plano_auto_mode_nao_interrompe(tmp_path):
@@ -673,6 +678,17 @@ def test_revisao_plano_resume_dict_edita_tier_antes_do_fanout(tmp_path):
                for e in eventos)
 
 
+def test_revisao_plano_rejeita_edicao_de_id_desconhecido(tmp_path):
+    log = LogEventos(tmp_path / "log.jsonl")
+    grafo = construir_grafo(_cliente_roteador(faz_roteador()), log,
+                            checkpointer=InMemorySaver())
+    config = {"configurable": {"thread_id": "plano-id-desconhecido"}}
+    grafo.invoke({"spec": SPEC}, config)
+
+    with pytest.raises(ValueError, match="subagente desconhecido"):
+        grafo.invoke(Command(resume={"nao-existe": "complexa"}), config)
+
+
 def test_subagente_usa_catalogo_por_capacidade(tmp_path):
     spec = {
         **SPEC,
@@ -715,6 +731,8 @@ def test_proximo_tier(tier, esperado):
 
 
 class ClienteTierFake:
+    roteamento_capacidades_runtime = True
+
     def __init__(self, aprovar_na_tentativa: int = 3):
         self.aprovar_na_tentativa = aprovar_na_tentativa
         self.chamadas: list[tuple[str, str | None]] = []
@@ -772,6 +790,7 @@ def test_executor_chamado_loga_modelo_resolvido_com_roteador(tmp_path):
         padrao=padrao,
         tiers={"simples": executor},
         pins={"synthesizer": synthesizer},
+        catalogo=[(executor, frozenset({"pesquisa"}), 1)],
     )
     log = LogEventos(tmp_path / "log.jsonl")
     grafo = construir_grafo(cliente, log, checkpointer=InMemorySaver(),

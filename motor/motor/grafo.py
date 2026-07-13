@@ -15,9 +15,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shlex
-import shutil
-import subprocess
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any, Optional, TypedDict, cast
@@ -25,11 +24,19 @@ from uuid import uuid4
 
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send, interrupt
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from .eventos import LogEventos
 from .modelos import ClienteModelo, extrai_json
 from .politica import PoliticaGates
 from .rag import carregar_dataset, recuperar
+from .runner import (
+    MAX_TIMEOUT_S,
+    MIN_TIMEOUT_S,
+    CommandRequest,
+    CommandRunner,
+    DenyCommandRunner,
+)
 from .spec import WorkflowSpec
 
 try:
@@ -55,6 +62,39 @@ class EstadoMotor(TypedDict, total=False):
     resultados: Annotated[list[dict[str, Any]], mesclar_resultados]
     avaliacao: dict[str, Any]
     resposta_final: str
+
+
+class _VereditoVerifier(BaseModel):
+    model_config = ConfigDict(strict=True)
+
+    aprovado: bool
+    motivo: str = "sem motivo"
+
+
+class _VereditoEvaluator(BaseModel):
+    model_config = ConfigDict(strict=True)
+
+    aprovado: bool
+    lacunas: list[str] = Field(default_factory=list)
+    nos_a_refazer: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _coerente(self) -> "_VereditoEvaluator":
+        if self.aprovado and (self.lacunas or self.nos_a_refazer):
+            raise ValueError("evaluator aprovado nao pode declarar lacunas")
+        return self
+
+
+class _SaidaFerramentaJSON(BaseModel):
+    model_config = ConfigDict(strict=True)
+
+    aprovado: bool
+    metricas: dict[str, Any] = Field(default_factory=dict)
+    motivo: str = ""
+
+
+def _decisao_texto(valor: Any) -> str | None:
+    return valor.strip().lower() if isinstance(valor, str) else None
 
 
 GABARITO_ROTA_DEFAULT = (
@@ -338,7 +378,8 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                     escalar_em_retry: bool = False,
                     max_rodadas_reconciliacao: int = 1,
                     perfil_execucao: str = "certificado",
-                    ferramentas_permitidas: list[str] | None = None):
+                    ferramentas_permitidas: list[str] | None = None,
+                    command_runner: CommandRunner | None = None):
     """Compila o grafo. `cliente` e `log` são injetados — o grafo não conhece backends.
     `politica` decide quais gates pausam (manual) ou resolvem sozinhos (auto-mode);
     ausente = tudo manual (comportamento default).
@@ -347,12 +388,19 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
     politica = politica or PoliticaGates()
     workspace_base = Path(workspace_base)
     ferramentas = ferramentas or {}
+    command_runner = command_runner if command_runner is not None else DenyCommandRunner()
     perfil_execucao = "rascunho" if perfil_execucao == "rascunho" else "certificado"
-    executaveis_permitidos = {
-        Path(executavel).name
-        for executavel in (ferramentas_permitidas or [])
-        if str(executavel).strip()
-    }
+    executaveis_permitidos: set[Path] = set()
+    for executavel_bruto in ferramentas_permitidas or []:
+        executavel = Path(str(executavel_bruto).strip())
+        if not executavel.is_absolute():
+            continue
+        try:
+            identidade = executavel.resolve(strict=True)
+        except OSError:
+            continue
+        if identidade.is_file() and os.access(identidade, os.X_OK):
+            executaveis_permitidos.add(identidade)
 
     def run_id_de(state: EstadoMotor) -> str:
         return state.get("run_id") or f"{datetime.now():%Y%m%d-%H%M%S}-{uuid4().hex[:6]}"
@@ -434,9 +482,11 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
     def revisar_plano(state: EstadoMotor) -> dict:
         spec = state["spec"]
         plano = plano_de(spec)
-        auto = politica.decisao_auto("plano", default="prosseguir")
-        if auto is not None:
+        auto = _decisao_texto(politica.decisao_auto("plano", default="prosseguir"))
+        if auto in {"prosseguir", "abortar"}:
             log.evento("gate.auto", portao="plano", decisao=auto)
+            if auto == "abortar":
+                return {"avaliacao": {"abortada": True, "motivo": "plano rejeitado"}}
             return {}
 
         log.evento("escalado", para="plano")
@@ -450,17 +500,26 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         if isinstance(decisao, dict):
             edicoes = dict(decisao)
             spec_editada = {**spec, "subagentes": [dict(s) for s in spec["subagentes"]]}
+            ids = {sub["id"] for sub in spec_editada["subagentes"]}
+            desconhecidos = set(edicoes) - ids
+            if desconhecidos:
+                raise ValueError(
+                    f"edicao referencia subagente desconhecido: {sorted(map(str, desconhecidos))}"
+                )
             for sub in spec_editada["subagentes"]:
                 if sub["id"] in edicoes:
                     sub["tier"] = edicoes[sub["id"]]
+            spec_validada = WorkflowSpec.model_validate(spec_editada).model_dump()
             log.evento("decisao.plano", edicoes=edicoes)
-            return {"spec": spec_editada}
+            return {"spec": spec_validada}
 
-        decisao_txt = str(decisao).strip().lower()
+        decisao_txt = _decisao_texto(decisao)
         log.evento("decisao.plano", decisao=str(decisao))
-        if decisao_txt.startswith("abort"):
+        if decisao_txt == "prosseguir":
+            return {}
+        if decisao_txt == "abortar":
             return {"avaliacao": {"abortada": True, "motivo": "plano rejeitado"}}
-        return {}
+        return {"avaliacao": {"abortada": True, "motivo": "decisao de plano invalida"}}
 
     def despachar(state: EstadoMotor):
         spec = state["spec"]
@@ -489,6 +548,16 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
             return executar_ferramenta(sub, payload["workspace"])
         if sub.get("tipo", "modelo") == "validador":
             return executar_validador(sub, deps, payload["workspace"])
+
+        capacidades = sub.get("capacidades_requeridas")
+        if capacidades and getattr(cliente, "roteamento_capacidades_runtime", False) is not True:
+            motivo = "cliente sem roteamento runtime por capacidade"
+            log.evento("registro.sem_executor", papel=sub["papel"], capacidades=capacidades)
+            log.evento("executor.erro", executor=sub["id"], motivo=motivo, tentativa=1)
+            return {"resultados": [{
+                "id": sub["id"], "saida": "", "tentativas": 0,
+                "aprovado": False, "motivo": motivo,
+            }]}
 
         # Guard de independência: o verifier deve evitar o provedor DO executor desta
         # tarefa (cross-model anti-auto-aprovação). Só quando o cliente sabe rotear.
@@ -545,23 +614,54 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                 deps_txt=deps_txt, rubrica_txt=rubrica_txt,
                 feedback=bloco_feedback,
             )
-            ultima = cliente.chamar(
-                sub["papel"],
-                prompt_subagente,
-                ferramentas=sub.get("ferramentas"),
-                tier=tier_atual,
-                capacidades=sub.get("capacidades_requeridas"),
-            )
+            try:
+                ultima = cliente.chamar(
+                    sub["papel"],
+                    prompt_subagente,
+                    ferramentas=sub.get("ferramentas"),
+                    tier=tier_atual,
+                    capacidades=sub.get("capacidades_requeridas"),
+                )
+            except Exception:
+                feedback = "falha externa do executor"
+                log.evento(
+                    "executor.erro",
+                    executor=sub["id"],
+                    motivo=feedback,
+                    tentativa=tentativa,
+                )
+                continue
             if not ultima:
                 feedback = "modelo não respondeu"
                 log.evento("executor.erro", executor=sub["id"], motivo=feedback, tentativa=tentativa)
                 continue
             log.evento("executor.respondeu", executor=sub["id"], tentativa=tentativa)
-            veredito = extrai_json(cliente.chamar("verifier", PROMPT_VERIFIER.format(
-                id=sub["id"], objetivo=sub["objetivo"],
-                rubrica="\n".join(f"- {c}" for c in sub["rubrica"]), saida=ultima,
-            ), **kw_verifier) or "") or {"aprovado": False, "motivo": "verifier sem JSON"}
-            if veredito.get("aprovado"):
+            try:
+                resposta_verifier = cliente.chamar(
+                    "verifier",
+                    PROMPT_VERIFIER.format(
+                        id=sub["id"],
+                        objetivo=sub["objetivo"],
+                        rubrica="\n".join(f"- {c}" for c in sub["rubrica"]),
+                        saida=ultima,
+                    ),
+                    **kw_verifier,
+                )
+            except Exception:
+                feedback = "falha externa do verifier"
+                log.evento(
+                    "executor.erro",
+                    executor=sub["id"],
+                    motivo=feedback,
+                    tentativa=tentativa,
+                )
+                continue
+            bruto_veredito = extrai_json(resposta_verifier or "")
+            try:
+                veredito = _VereditoVerifier.model_validate(bruto_veredito)
+            except ValidationError:
+                veredito = _VereditoVerifier(aprovado=False, motivo="verifier sem veredito valido")
+            if veredito.aprovado:
                 log.evento("portao.aprovado", portao=f"verifier:{sub['id']}", ciclo=tentativa)
                 resultado = {"id": sub["id"], "saida": ultima,
                              "tentativas": tentativa, "aprovado": True}
@@ -579,7 +679,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                     )
                     resultado["artefatos"] = [ref]
                 return {"resultados": [resultado]}
-            feedback = veredito.get("motivo", "sem motivo")
+            feedback = veredito.motivo
             log.evento("portao.reprovado", portao=f"verifier:{sub['id']}", ciclo=tentativa, motivo=feedback)
             if escalar_em_retry:
                 novo = _proximo_tier(tier_atual)
@@ -593,10 +693,23 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
     def executar_comando_seguro(
         comando_tpl: str,
         valores: dict[str, Any],
-        timeout_s: int,
+        timeout_s: Any,
         *,
-        cwd: Path | None = None,
+        cwd: Path,
     ) -> dict[str, Any]:
+        if (
+            not isinstance(timeout_s, int)
+            or isinstance(timeout_s, bool)
+            or not MIN_TIMEOUT_S <= timeout_s <= MAX_TIMEOUT_S
+        ):
+            return {
+                "ok": False,
+                "erro": "timeout",
+                "motivo": (
+                    f"timeout inválido: esperado inteiro entre {MIN_TIMEOUT_S} e {MAX_TIMEOUT_S}"
+                ),
+                "saida": "",
+            }
         try:
             partes_tpl = shlex.split(comando_tpl)
         except ValueError as ex:
@@ -604,44 +717,67 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         valores_fmt = {chave: str(valor) for chave, valor in valores.items()}
         try:
             partes = [parte.format_map(valores_fmt) for parte in partes_tpl]
-        except KeyError as ex:
-            return {"ok": False, "erro": "placeholder", "motivo": f"placeholder sem entrada: {ex.args[0]}", "saida": ""}
+        except (KeyError, ValueError) as ex:
+            detalhe = ex.args[0] if isinstance(ex, KeyError) else "formato invalido"
+            return {"ok": False, "erro": "placeholder", "motivo": f"placeholder invalido: {detalhe}", "saida": ""}
         if not partes:
             return {"ok": False, "erro": "executavel_ausente", "motivo": "executável ausente: ", "saida": ""}
-        executavel = Path(partes[0]).name
-        if executaveis_permitidos and executavel not in executaveis_permitidos:
+        if partes_tpl[0] != partes[0]:
             return {
                 "ok": False,
                 "erro": "executavel_nao_permitido",
-                "motivo": f"executável não permitido: {executavel}",
+                "motivo": "placeholder não pode selecionar executável",
                 "saida": "",
             }
-        if shutil.which(partes[0]) is None:
+        fim_opcoes = False
+        for parte_tpl, parte in zip(partes_tpl[1:], partes[1:]):
+            if parte_tpl == "--":
+                fim_opcoes = True
+                continue
+            if not fim_opcoes and parte.startswith("-") and not parte_tpl.startswith("-"):
+                return {
+                    "ok": False,
+                    "erro": "argumento_nao_permitido",
+                    "motivo": "placeholder não pode selecionar opção de comando",
+                    "saida": "",
+                }
+        candidato = Path(partes[0])
+        if not candidato.is_absolute() or not executaveis_permitidos:
             return {
                 "ok": False,
-                "erro": "executavel_ausente",
-                "motivo": f"executável ausente: {partes[0]}",
+                "erro": "executavel_nao_permitido",
+                "motivo": f"executável não permitido: {partes[0]}",
                 "saida": "",
             }
         try:
-            proc = subprocess.run(
-                partes,
-                capture_output=True,
-                text=True,
-                timeout=timeout_s,
-                stdin=subprocess.DEVNULL,
-                cwd=cwd,
-            )
-        except FileNotFoundError:
+            identidade = candidato.resolve(strict=True)
+        except OSError:
             return {
                 "ok": False,
                 "erro": "executavel_ausente",
                 "motivo": f"executável ausente: {partes[0]}",
                 "saida": "",
             }
-        except subprocess.TimeoutExpired:
-            return {"ok": False, "erro": "timeout", "motivo": "timeout ao executar comando", "saida": ""}
+        if (
+            identidade not in executaveis_permitidos
+            or not identidade.is_file()
+            or not os.access(identidade, os.X_OK)
+        ):
+            return {
+                "ok": False,
+                "erro": "executavel_nao_permitido",
+                "motivo": f"executável não permitido: {partes[0]}",
+                "saida": "",
+            }
+        partes[0] = str(identidade)
+        proc = command_runner.run(CommandRequest(
+            argv=tuple(partes),
+            workspace=cwd,
+            timeout_s=timeout_s,
+        ))
         saida = "\n".join(p for p in [proc.stdout.strip(), proc.stderr.strip()] if p)
+        if proc.erro is not None:
+            return {"ok": False, "erro": proc.erro, "motivo": proc.motivo, "saida": saida}
         return {"ok": True, "proc": proc, "saida": saida, "partes": partes}
 
     def executar_ferramenta(sub: dict[str, Any], workspace: Path) -> dict:
@@ -670,8 +806,8 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                 caminho_saida = workspace / f"{sub['id']}__{nome}"
                 valores[placeholder] = str(caminho_saida)
                 saidas_por_placeholder[placeholder] = {"nome": nome, "tipo": tipo, "caminho": str(caminho_saida)}
-        timeout_s = int(ferramenta.get("timeout", 300))
-        execucao = executar_comando_seguro(comando_tpl, valores, timeout_s)
+        timeout_s = ferramenta.get("timeout", 300)
+        execucao = executar_comando_seguro(comando_tpl, valores, timeout_s, cwd=workspace)
         if not execucao["ok"]:
             motivo = str(execucao["motivo"])
             if execucao.get("erro") == "timeout":
@@ -693,16 +829,19 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         elif modo == "json":
             try:
                 dados = json.loads(proc.stdout)
-                if not isinstance(dados, dict) or "aprovado" not in dados:
-                    raise ValueError("json sem 'aprovado'")
-                aprovado = bool(dados["aprovado"])
-                metricas = dados.get("metricas") or {}
-                if not isinstance(metricas, dict):
-                    metricas = {}
-                motivo_json = str(dados.get("motivo") or "")
-            except (json.JSONDecodeError, ValueError) as ex:
+                saida_json = _SaidaFerramentaJSON.model_validate(dados)
+                aprovado = saida_json.aprovado
+                metricas = saida_json.metricas
+                motivo_json = saida_json.motivo
+            except json.JSONDecodeError:
                 aprovado = False
-                motivo_json = f"saída inválida: {ex}"
+                motivo_json = "saída inválida: JSON malformado"
+                log.evento("ferramenta.saida_invalida", ferramenta=nome_ferramenta,
+                           subagente=sub["id"], motivo=motivo_json)
+            except ValidationError:
+                aprovado = False
+                detalhe = "json sem 'aprovado'" if isinstance(dados, dict) and "aprovado" not in dados else "contrato de ferramenta"
+                motivo_json = f"saída inválida: {detalhe}"
                 log.evento("ferramenta.saida_invalida", ferramenta=nome_ferramenta,
                            subagente=sub["id"], motivo=motivo_json)
         else:
@@ -757,7 +896,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
             aprovado, motivo, evidencia = _validar_contem(saida_alvo, config)
         elif kind == "comando":
             workspace.mkdir(parents=True, exist_ok=True)
-            timeout_s = int(config.get("timeout", 30))
+            timeout_s = config.get("timeout", 30)
             comando_tpl = str(config.get("comando") or "")
             execucao = executar_comando_seguro(comando_tpl, sub.get("entradas", {}), timeout_s, cwd=workspace)
             if execucao["ok"]:
@@ -787,6 +926,26 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
             resultado["refazer"] = alvo
         return {"resultados": [resultado]}
 
+    def resultado_bloqueado(
+        sid: str,
+        dependencias: list[str],
+        concluidos: dict[str, dict[str, Any]],
+    ) -> dict[str, Any] | None:
+        reprovadas = [
+            dep for dep in dependencias if concluidos[dep].get("aprovado") is not True
+        ]
+        if not reprovadas:
+            return None
+        motivo = f"dependencias reprovadas: {', '.join(reprovadas)}"
+        log.evento("portao.reprovado", portao=f"dependencias:{sid}", motivo=motivo)
+        return {
+            "id": sid,
+            "saida": "",
+            "tentativas": 0,
+            "aprovado": False,
+            "motivo": motivo,
+        }
+
     def executar_grafo_dep(state: EstadoMotor) -> dict:
         spec = state["spec"]
         subs = {s["id"]: s for s in spec["subagentes"]}
@@ -805,12 +964,22 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                 break
             log.evento("onda.iniciada", ids=onda)
             for sid in onda:
-                sub = {**subs[sid], "entradas": resolver_refs_artefato(subs[sid].get("entradas", {}), concluidos)}
-                for dep in sub.get("depende_de", []):
+                dependencias = list(subs[sid].get("depende_de", []))
+                for dep in dependencias:
                     log.evento("aresta.fluxo", de=dep, para=sid)
-                deps = {d: texto_dependencia(concluidos[d]) for d in sub.get("depende_de", [])}
-                retorno = subagente({"sub": sub, "spec": spec, "deps": deps, "workspace": workspace})
-                resultado = retorno["resultados"][0]
+                resultado = resultado_bloqueado(sid, dependencias, concluidos)
+                if resultado is None:
+                    sub = {
+                        **subs[sid],
+                        "entradas": resolver_refs_artefato(
+                            subs[sid].get("entradas", {}), concluidos
+                        ),
+                    }
+                    deps = {d: texto_dependencia(concluidos[d]) for d in dependencias}
+                    retorno = subagente(
+                        {"sub": sub, "spec": spec, "deps": deps, "workspace": workspace}
+                    )
+                    resultado = retorno["resultados"][0]
                 concluidos[sid] = resultado
                 resultados.append(resultado)
                 restantes.discard(sid)
@@ -849,11 +1018,16 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         log.evento("executor.chamado", executor="global_evaluator",
                    modelo=_descricao_modelo("evaluator"),
                    **_template_evento(spec))
-        veredito = extrai_json(cliente.chamar("evaluator", PROMPT_EVALUATOR.format(
+        bruto_veredito = extrai_json(cliente.chamar("evaluator", PROMPT_EVALUATOR.format(
             missao_objetivo=spec["missao"]["objetivo"],
             criterios="\n".join(f"- {c}" for c in spec["missao"]["criterios_cobertura"]),
             resultados=json.dumps(resultados, ensure_ascii=False),
-        )) or "") or {"aprovado": False, "lacunas": ["evaluator sem JSON"]}
+        )) or "")
+        try:
+            tipado = _VereditoEvaluator.model_validate(bruto_veredito)
+        except ValidationError:
+            tipado = _VereditoEvaluator(aprovado=False, lacunas=["evaluator sem veredito valido"])
+        veredito = tipado.model_dump()
         if reprovados:
             veredito = {"aprovado": False,
                         "lacunas": list(veredito.get("lacunas", [])) + [f"subagente reprovado: {i}" for i in reprovados]}
@@ -865,7 +1039,9 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         return veredito
 
     def decidir_cobertura(veredito: dict[str, Any], permitir_preencher: bool) -> Any:
-        auto = politica.decisao_auto("cobertura", default="prosseguir")
+        auto = _decisao_texto(politica.decisao_auto("cobertura", default="prosseguir"))
+        if auto not in {None, "prosseguir", "preencher", "abortar"}:
+            auto = None
         if auto == "preencher" and not permitir_preencher:
             auto = "prosseguir"
         if auto is not None:  # auto-mode (ou override): resolve sozinho, sem pausar
@@ -923,34 +1099,44 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                 log.evento("grafo_dep.travado", restantes=sorted(restantes))
                 break
             for sid in onda:
-                sub = {**por_id[sid], "entradas": resolver_refs_artefato(por_id[sid].get("entradas", {}), concluidos)}
-                deps = {d: texto_dependencia(concluidos[d]) for d in sub.get("depende_de", [])}
-                feedback_lacunas = [lac for lac in lacunas if sid in lac] or lacunas[:]
-                if sid not in alvo_set:
-                    feedback_lacunas.append("uma dependência foi revista; realinhe-se a ela")
-                feedback = "; ".join(feedback_lacunas)
-                retorno = subagente({
-                    "sub": sub,
-                    "spec": spec,
-                    "deps": deps,
-                    "feedback": feedback,
-                    "rascunho_anterior": por_id_resultado.get(sid, {}).get("saida"),
-                    "workspace": workspace,
-                })
-                resultado = retorno["resultados"][0]
+                dependencias = list(por_id[sid].get("depende_de", []))
+                resultado = resultado_bloqueado(sid, dependencias, concluidos)
+                if resultado is None:
+                    sub = {
+                        **por_id[sid],
+                        "entradas": resolver_refs_artefato(
+                            por_id[sid].get("entradas", {}), concluidos
+                        ),
+                    }
+                    deps = {d: texto_dependencia(concluidos[d]) for d in dependencias}
+                    feedback_lacunas = [lac for lac in lacunas if sid in lac] or lacunas[:]
+                    if sid not in alvo_set:
+                        feedback_lacunas.append(
+                            "uma dependência foi revista; realinhe-se a ela"
+                        )
+                    feedback = "; ".join(feedback_lacunas)
+                    retorno = subagente({
+                        "sub": sub,
+                        "spec": spec,
+                        "deps": deps,
+                        "feedback": feedback,
+                        "rascunho_anterior": por_id_resultado.get(sid, {}).get("saida"),
+                        "workspace": workspace,
+                    })
+                    resultado = retorno["resultados"][0]
+                    log.evento("lacuna.preenchida", subagente=sid)
                 concluidos[sid] = resultado
                 novos.append(resultado)
                 ordem_recomputada.append(sid)
                 restantes.discard(sid)
-                log.evento("lacuna.preenchida", subagente=sid)
         log.evento("reconciliacao.concluida", nos=ordem_recomputada)
         return mesclar_resultados(resultados, novos), novos
 
     def finalizar_cobertura(veredito: dict[str, Any], decisao: Any) -> dict[str, Any]:
-        if str(decisao).strip().lower().startswith("abort"):
-            log.evento("tarefa.abortada", motivo="decisão do fundador")
-            return {**veredito, "abortada": True}
-        return {**veredito, "prosseguir_parcial": True}
+        if _decisao_texto(decisao) == "prosseguir":
+            return {**veredito, "prosseguir_parcial": True}
+        log.evento("tarefa.abortada", motivo="decisão do fundador inválida ou abortar")
+        return {**veredito, "abortada": True}
 
     def avaliar(state: EstadoMotor) -> dict:
         spec, resultados = state["spec"], state["resultados"]
@@ -959,13 +1145,13 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         acumulados: list[dict[str, Any]] = []
         rodada = 0
 
-        while not veredito.get("aprovado"):
+        while veredito["aprovado"] is False:
             log.evento("portao.reprovado", portao="cobertura", lacunas=veredito.get("lacunas", []))
             permitir = rodada < max_rodadas_reconciliacao
             if not permitir:
                 log.evento("reconciliacao.esgotada", rodadas=rodada)
             decisao = decidir_cobertura(veredito, permitir_preencher=permitir)
-            if not (permitir and str(decisao).strip().lower().startswith("preench")):
+            if not (permitir and _decisao_texto(decisao) == "preencher"):
                 base = {"resultados": acumulados} if acumulados else {}
                 return {**base, "avaliacao": finalizar_cobertura(veredito, decisao)}
 

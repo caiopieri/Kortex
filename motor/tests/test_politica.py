@@ -10,8 +10,8 @@ def test_default_tudo_manual():
 def test_auto_mode_resolve_com_default_do_gate():
     p = PoliticaGates(auto_mode=True)
     assert p.decisao_auto("cobertura", default="prosseguir") == "prosseguir"
-    # gate sem default conhecido cai no "prosseguir" genérico
-    assert p.decisao_auto("desconhecido") == "prosseguir"
+    # Gate desconhecido falha fechado em modo manual.
+    assert p.decisao_auto("desconhecido") is None
 
 
 def test_override_manual_vence_auto_mode():

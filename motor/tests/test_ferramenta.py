@@ -13,6 +13,7 @@ from motor.grafo import construir_grafo
 from motor.modelos import ClienteStub
 from motor.politica import PoliticaGates
 from motor.registro import ferramentas_de_registro, ferramentas_permitidas_de_registro
+from tests.runner_fake import RunnerFake
 
 
 def _tool_sub(nome="fake", entradas=None) -> dict:
@@ -49,7 +50,10 @@ def _script(tmp_path, nome: str, corpo: str) -> Path:
     return caminho
 
 
-def _rodar(tmp_path, spec: dict, ferramentas: dict, ferramentas_permitidas=None):
+_POLITICA_PADRAO = object()
+
+
+def _rodar(tmp_path, spec: dict, ferramentas: dict, ferramentas_permitidas=_POLITICA_PADRAO):
     def roteador(papel: str, prompt: str):
         if papel == "evaluator":
             return json.dumps({"aprovado": True, "lacunas": []})
@@ -58,6 +62,7 @@ def _rodar(tmp_path, spec: dict, ferramentas: dict, ferramentas_permitidas=None)
         raise AssertionError(f"modelo não deveria ser chamado para papel {papel}")
 
     log = LogEventos(tmp_path / "log.jsonl")
+    permitidas = [sys.executable] if ferramentas_permitidas is _POLITICA_PADRAO else ferramentas_permitidas
     grafo = construir_grafo(
         ClienteStub(roteador),
         log,
@@ -65,7 +70,8 @@ def _rodar(tmp_path, spec: dict, ferramentas: dict, ferramentas_permitidas=None)
         politica=PoliticaGates(overrides={"plano": "prosseguir", "cobertura": "prosseguir"}),
         workspace_base=tmp_path / "runs",
         ferramentas=ferramentas,
-        ferramentas_permitidas=ferramentas_permitidas,
+        ferramentas_permitidas=permitidas,
+        command_runner=RunnerFake(),
     )
     resultado = grafo.invoke({"spec": spec}, {"configurable": {"thread_id": "ferramenta"}})
     eventos = [
@@ -237,6 +243,8 @@ def test_metricas_json_chegam_em_no_dependente(tmp_path):
         politica=PoliticaGates(overrides={"plano": "prosseguir", "cobertura": "prosseguir"}),
         workspace_base=tmp_path / "runs",
         ferramentas=ferramentas,
+        ferramentas_permitidas=[sys.executable],
+        command_runner=RunnerFake(),
     )
     resultado = grafo.invoke({"spec": spec}, {"configurable": {"thread_id": "metricas-dep"}})
 
@@ -254,7 +262,7 @@ def test_ferramenta_nao_registrada_ou_executavel_ausente_falha_explicita(tmp_pat
     assert "não registrada" in resultado_sem_registro["resultados"][0]["motivo"]
     assert any(e["evento"] == "ferramenta.indisponivel" for e in eventos_sem_registro)
     assert resultado_sem_exec["resultados"][0]["aprovado"] is False
-    assert "executável ausente" in resultado_sem_exec["resultados"][0]["motivo"]
+    assert "executável não permitido" in resultado_sem_exec["resultados"][0]["motivo"]
     assert any(e["evento"] == "ferramenta.indisponivel" for e in eventos_sem_exec)
 
 
@@ -262,7 +270,7 @@ def test_ferramenta_bloqueia_executavel_fora_da_allowlist_sem_subprocess(tmp_pat
     def subprocess_proibido(*args, **kwargs):
         raise AssertionError("subprocess.run não deveria ser chamado")
 
-    monkeypatch.setattr("motor.grafo.subprocess.run", subprocess_proibido)
+    monkeypatch.setattr(RunnerFake, "run", subprocess_proibido)
     ferramentas = {"fake": {"comando": "bash -c 'echo nao-roda'", "interpreta_saida": "exit_code"}}
 
     resultado, eventos = _rodar(
@@ -290,20 +298,23 @@ def test_ferramenta_allowlist_permite_executavel_configurado(tmp_path):
         tmp_path,
         _spec(_tool_sub()),
         ferramentas,
-        ferramentas_permitidas=[Path(sys.executable).name],
+        ferramentas_permitidas=[sys.executable],
     )
 
     assert resultado["resultados"][0]["aprovado"] is True
     assert resultado["resultados"][0]["saida"] == "ok"
 
 
-def test_ferramenta_allowlist_ausente_mantem_comportamento_atual(tmp_path):
+def test_ferramenta_allowlist_ausente_falha_fechado(tmp_path):
     script = _script(tmp_path, "ok.py", "print('ok')\n")
     ferramentas = {"fake": {"comando": f"{sys.executable} {script}", "interpreta_saida": "exit_code"}}
 
-    resultado, _ = _rodar(tmp_path, _spec(_tool_sub()), ferramentas)
+    resultado, _ = _rodar(
+        tmp_path, _spec(_tool_sub()), ferramentas, ferramentas_permitidas=None
+    )
 
-    assert resultado["resultados"][0]["aprovado"] is True
+    assert resultado["resultados"][0]["aprovado"] is False
+    assert "executável não permitido" in resultado["resultados"][0]["motivo"]
 
 
 def test_cli_propaga_ferramentas_permitidas_da_config(tmp_path, monkeypatch):

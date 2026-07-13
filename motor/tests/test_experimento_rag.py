@@ -320,8 +320,9 @@ def test_spec_lift_docs_metafabrica_valida():
 
     assert validada.missao.id == "lift-docs-metafabrica"
     validador = next(sub for sub in validada.subagentes if sub.tipo == "validador")
-    assert validador.validador["kind"] == "contem"
-    assert validador.validador["config"]["min"] == 5
+    assert validador.validador is not None
+    assert validador.validador.kind == "contem"
+    assert validador.validador.model_dump()["config"]["min"] == 5
 
 
 def test_specs_item3_validam():
@@ -342,6 +343,9 @@ def test_specs_item3_validam():
         "lift-derivado",
         "lift-v3-fatos",
     ]
-    assert validadas[0].subagentes[1].validador["kind"] == "contem"
-    assert validadas[1].subagentes[1].validador["kind"] == "schema_json"
-    assert validadas[2].subagentes[1].validador["config"]["min"] == 4
+    validadores = [spec.subagentes[1].validador for spec in validadas]
+    assert all(validador is not None for validador in validadores)
+    dumps = [validador.model_dump() for validador in validadores if validador is not None]
+    assert dumps[0]["kind"] == "contem"
+    assert dumps[1]["kind"] == "schema_json"
+    assert dumps[2]["config"]["min"] == 4

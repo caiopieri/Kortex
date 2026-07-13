@@ -207,68 +207,72 @@ def main() -> int:
 
     raiz = Path(__file__).parent.parent
     log = LogEventos(raiz / "log.jsonl")
-    config = {"configurable": {"thread_id": "cli"}}
-    ferramentas = ferramentas_de_registro(dir_registro) if dir_registro is not None else {}
-    ferramentas_permitidas = _lista_str((cfg_modelos or {}).get("ferramentas_permitidas"))
-    if not ferramentas_permitidas and dir_registro is not None:
-        ferramentas_permitidas = ferramentas_permitidas_de_registro(dir_registro)
-    if cfg_modelos and cfg_modelos.get("pins") and not (
-        "provedores" in cfg_modelos or "base_url" in cfg_modelos
-    ):
-        print("aviso: pins ignorados — precisam de 'provedores' (via --modelos ou ~/.motor/pins.json).")
-    cliente_por_config = bool(
-        cfg_modelos and ("provedores" in cfg_modelos or "base_url" in cfg_modelos)
-    )
     try:
-        cliente = construir_cliente(cfg_modelos, None if cliente_por_config else dir_registro, log=log)
-    except ProvedorIndisponivel as ex:
-        print(f"erro: {ex}")
-        return 1
-    if esgotados:
-        if hasattr(cliente, "esgotados"):
-            cliente.esgotados |= set(esgotados)
-            log.evento("provedor.esgotado", provedores=esgotados)
+        config = {"configurable": {"thread_id": "cli"}}
+        ferramentas = ferramentas_de_registro(dir_registro) if dir_registro is not None else {}
+        ferramentas_permitidas = _lista_str((cfg_modelos or {}).get("ferramentas_permitidas"))
+        if not ferramentas_permitidas and dir_registro is not None:
+            ferramentas_permitidas = ferramentas_permitidas_de_registro(dir_registro)
+        if cfg_modelos and cfg_modelos.get("pins") and not (
+            "provedores" in cfg_modelos or "base_url" in cfg_modelos
+        ):
+            print("aviso: pins ignorados — precisam de 'provedores' (via --modelos ou ~/.motor/pins.json).")
+        cliente_por_config = bool(
+            cfg_modelos and ("provedores" in cfg_modelos or "base_url" in cfg_modelos)
+        )
+        try:
+            cliente = construir_cliente(cfg_modelos, None if cliente_por_config else dir_registro, log=log)
+        except ProvedorIndisponivel as ex:
+            print(f"erro: {ex}")
+            return 1
+        if esgotados:
+            if hasattr(cliente, "esgotados"):
+                cliente.esgotados |= set(esgotados)
+                log.evento("provedor.esgotado", provedores=esgotados)
+            else:
+                print(f"aviso: --esgotado {esgotados} ignorado (precisa de --modelos com roteador).")
+
+        if dir_caixa:
+            # Persistente: sobrevive a crash. Conexão própria (check_same_thread=False)
+            # para não fechar ao sair de um context manager — durabilidade real exige
+            # que o arquivo motor.db permaneça consistente entre execuções.
+            conn = sqlite3.connect(str(raiz / "motor.db"), check_same_thread=False)
+            try:
+                checkpointer = SqliteSaver(conn)
+                checkpointer.setup()
+                grafo = construir_grafo(cliente, log, checkpointer=checkpointer, politica=politica,
+                                        workspace_base=workspace_base, ferramentas=ferramentas,
+                                        rota=rota, rotas=rotas,
+                                        escalar_em_retry=escalar_em_retry,
+                                        max_rodadas_reconciliacao=max_rodadas_reconciliacao,
+                                        perfil_execucao=perfil_execucao,
+                                        ferramentas_permitidas=ferramentas_permitidas)
+                caixa = CaixaFundador(dir_caixa, log)
+                resultado = rodar_com_caixa(grafo, entrada, config, caixa, log)
+            finally:
+                conn.close()
         else:
-            print(f"aviso: --esgotado {esgotados} ignorado (precisa de --modelos com roteador).")
+            # Comportamento default intacto: input() + InMemorySaver (volátil).
+            grafo = construir_grafo(cliente, log, checkpointer=InMemorySaver(), politica=politica,
+                                    workspace_base=workspace_base, ferramentas=ferramentas,
+                                    rota=rota, rotas=rotas,
+                                    escalar_em_retry=escalar_em_retry,
+                                    max_rodadas_reconciliacao=max_rodadas_reconciliacao,
+                                    perfil_execucao=perfil_execucao,
+                                    ferramentas_permitidas=ferramentas_permitidas)
+            resultado = grafo.invoke(entrada, config)
+            while "__interrupt__" in resultado:  # gate do fundador
+                pedido = resultado["__interrupt__"][0].value
+                print(f"\n[GATE {pedido['portao']}] {pedido['pergunta']}")
+                print(f"  lacunas: {pedido.get('lacunas')}\n  opções: {pedido['opcoes']}")
+                decisao = input("decisão> ").strip()
+                resultado = grafo.invoke(Command(resume=decisao), config)
 
-    if dir_caixa:
-        # Persistente: sobrevive a crash. Conexão própria (check_same_thread=False)
-        # para não fechar ao sair de um context manager — durabilidade real exige
-        # que o arquivo motor.db permaneça consistente entre execuções.
-        conn = sqlite3.connect(str(raiz / "motor.db"), check_same_thread=False)
-        checkpointer = SqliteSaver(conn)
-        checkpointer.setup()
-        grafo = construir_grafo(cliente, log, checkpointer=checkpointer, politica=politica,
-                                workspace_base=workspace_base, ferramentas=ferramentas,
-                                rota=rota, rotas=rotas,
-                                escalar_em_retry=escalar_em_retry,
-                                max_rodadas_reconciliacao=max_rodadas_reconciliacao,
-                                perfil_execucao=perfil_execucao,
-                                ferramentas_permitidas=ferramentas_permitidas)
-        caixa = CaixaFundador(dir_caixa, log)
-        resultado = rodar_com_caixa(grafo, entrada, config, caixa, log)
-        conn.close()
-    else:
-        # Comportamento default intacto: input() + InMemorySaver (volátil).
-        grafo = construir_grafo(cliente, log, checkpointer=InMemorySaver(), politica=politica,
-                                workspace_base=workspace_base, ferramentas=ferramentas,
-                                rota=rota, rotas=rotas,
-                                escalar_em_retry=escalar_em_retry,
-                                max_rodadas_reconciliacao=max_rodadas_reconciliacao,
-                                perfil_execucao=perfil_execucao,
-                                ferramentas_permitidas=ferramentas_permitidas)
-        resultado = grafo.invoke(entrada, config)
-        while "__interrupt__" in resultado:  # gate do fundador
-            pedido = resultado["__interrupt__"][0].value
-            print(f"\n[GATE {pedido['portao']}] {pedido['pergunta']}")
-            print(f"  lacunas: {pedido.get('lacunas')}\n  opções: {pedido['opcoes']}")
-            decisao = input("decisão> ").strip()
-            resultado = grafo.invoke(Command(resume=decisao), config)
-
-    print("\n=== RESPOSTA FINAL ===\n")
-    print(resultado.get("resposta_final", "(missão abortada)"))
-    log.fechar()
-    return 0
+        print("\n=== RESPOSTA FINAL ===\n")
+        print(resultado.get("resposta_final", "(missão abortada)"))
+        return 0
+    finally:
+        log.fechar()
 
 
 if __name__ == "__main__":

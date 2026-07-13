@@ -31,7 +31,8 @@ def test_spec_especialista_csv_json_valida():
     spec = WorkflowSpec.model_validate(json.loads(path.read_text(encoding="utf-8")))
     assert spec.missao.id == "especialista-csv-json"
     assert spec.subagentes[0].fonte_rag
-    assert spec.subagentes[1].validador["kind"] == "schema_json"
+    assert spec.subagentes[1].validador is not None
+    assert spec.subagentes[1].validador.kind == "schema_json"
 
 
 def test_preparar_spec_liga_e_remove_rag():

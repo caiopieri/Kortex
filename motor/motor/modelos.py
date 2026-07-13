@@ -136,6 +136,8 @@ class ClienteModelo(Protocol):
 class ClienteStub:
     """Determinístico para testes: roteador(papel, prompt) -> str | None."""
 
+    roteamento_capacidades_runtime = True
+
     def __init__(self, roteador: Callable[[str, str], Optional[str]], sempre_none: bool = False):
         self.roteador = roteador
         self.sempre_none = sempre_none
@@ -157,21 +159,21 @@ class ClienteRoteador:
     """Multi-provider: roteia papel → cliente. O grafo continua cego a modelos.
 
     Decisões de design (travadas):
-    - Resolução do cliente, em ordem: (0) pin manual; (1) `tier` da tarefa, se presente e na tabela
-      `tiers` — é o roteamento por custo (o planner classifica, a tabela mapeia
-      tier→modelo); (2) capacidade via catálogo, se declarada; (3) senão, `mapa`
-      por papel (rota legada); (4) senão, `padrao`. Tier presente mas fora da
-      tabela → pode cair em capacidade/papel/padrão (seguro). Evento
-      `modelo.roteado_tier` ou `modelo.roteado_capacidade`.
+    - Sem capacidades, preserva a resolução legada pin → tier → papel → padrão.
+      Quando capacidades são declaradas, todo caminho (inclusive pin, tier e
+      fallback) exige uma entrada íntegra de catálogo que cubra todas elas;
+      ausência ou ambiguidade falha fechada com `registro.sem_executor`.
     - `mapa`: papel → cliente (DeepSeek/Kimi via OpenAI-compat ou Codex). Papel fora
       do mapa (e sem tier) vai ao `padrao` (claude).
-    - Regra dura de ferramentas: se `ferramentas` foi pedido e o cliente resolvido
-      declara `suporta_ferramentas = False`, roteia ao `padrao` SEM tentar o barato
-      (WebSearch etc.). Evento `modelo.roteado_ferramentas`.
+    - Regra dura de ferramentas: no legado, cliente sem suporte desvia ao `padrao`;
+      com capacidades, só uma entrada capaz e com suporte pode ser selecionada.
     - Fallback de qualidade-zero: cliente resolvido devolveu None (infra esgotada)
-      → tenta o `padrao` uma vez. Evento `modelo.fallback`. Falha vira evento, não crash.
+      → legado tenta o `padrao`; rota por capacidade tenta apenas outro capaz.
+      Evento `modelo.fallback`. Falha vira evento, não crash.
     - O retry de CONTEÚDO continua no grafo (attempt→verifier); aqui só infra.
     """
+
+    roteamento_capacidades_runtime = True
 
     def __init__(self, padrao: "ClienteModelo", mapa: Optional[dict[str, "ClienteModelo"]] = None,
                  tiers: Optional[dict[str, "ClienteModelo"]] = None,
@@ -194,7 +196,8 @@ class ClienteRoteador:
         # de clientes quando o provedor resolvido está esgotado.
         self.esgotados = set(esgotados or ())
         self.cadeia = list(cadeia or ())
-        self.catalogo = list(catalogo or [])
+        self.catalogo = (list(catalogo) if isinstance(catalogo, list)
+                         else ([] if catalogo is None else [catalogo]))
         self.auto_esgotar = auto_esgotar
         self.log = log
 
@@ -239,26 +242,145 @@ class ClienteRoteador:
     def _eh_pin(self, papel: str, tier: Optional[str]) -> bool:
         return bool(self.pins.get(papel) or (self.pins.get(tier) if tier else None) or self.pins.get("*"))
 
+    @staticmethod
+    def _usa_capacidades(capacidades: Any) -> bool:
+        return capacidades is not None and not (
+            isinstance(capacidades, list) and not capacidades
+        )
+
+    @staticmethod
+    def _normalizar_capacidades(capacidades: Any) -> frozenset[str] | None:
+        if not isinstance(capacidades, list) or not capacidades:
+            return None
+        normalizadas: set[str] = set()
+        for capacidade in capacidades:
+            if not isinstance(capacidade, str):
+                return None
+            valor = capacidade.strip()
+            if (
+                not valor
+                or valor != capacidade
+                or len(valor) > 128
+                or any(ord(c) < 32 for c in valor)
+            ):
+                return None
+            normalizadas.add(valor)
+        return frozenset(normalizadas)
+
+    def _catalogo_validado(self) -> list[tuple["ClienteModelo", frozenset[str], int]] | None:
+        catalogo: list[tuple["ClienteModelo", frozenset[str], int]] = []
+        clientes: set[int] = set()
+        for entrada in self.catalogo:
+            if not isinstance(entrada, tuple) or len(entrada) != 3:
+                return None
+            cliente, capacidades, ordem = entrada
+            provedor = getattr(cliente, "provedor", None)
+            suporta_ferramentas = getattr(cliente, "suporta_ferramentas", True)
+            if (
+                not callable(getattr(cliente, "chamar", None))
+                or (provedor is not None and (
+                    not isinstance(provedor, str) or not provedor.strip()
+                ))
+                or not isinstance(suporta_ferramentas, bool)
+                or not isinstance(capacidades, frozenset)
+                or not capacidades
+                or isinstance(ordem, bool)
+                or not isinstance(ordem, int)
+                or ordem < 0
+                or id(cliente) in clientes
+            ):
+                return None
+            normalizadas = self._normalizar_capacidades(list(capacidades))
+            if normalizadas is None or normalizadas != capacidades:
+                return None
+            clientes.add(id(cliente))
+            catalogo.append((cliente, capacidades, ordem))
+        return catalogo or None
+
+    def _candidatos_capazes(
+        self,
+        capacidades: Any,
+        *,
+        evitar: str | None = None,
+        ferramentas: str | None = None,
+        excluir: "ClienteModelo" | None = None,
+    ) -> list["ClienteModelo"] | None:
+        req = self._normalizar_capacidades(capacidades)
+        catalogo = self._catalogo_validado()
+        if req is None or catalogo is None:
+            return None
+        candidatos = [
+            (ordem, indice, cliente)
+            for indice, (cliente, declaradas, ordem) in enumerate(catalogo)
+            if req <= declaradas
+            and cliente is not excluir
+            and getattr(cliente, "provedor", None) not in self.esgotados
+            and (evitar is None or getattr(cliente, "provedor", None) != evitar)
+            and (not ferramentas or getattr(cliente, "suporta_ferramentas", True))
+        ]
+        candidatos.sort(key=lambda item: (item[0], item[1]))
+        return [cliente for _, _, cliente in candidatos]
+
     def selecionar_por_capacidade(self, capacidades, evitar=None, emitir: bool = True):
         """Escolhe o cliente mais barato que cobre todas as capacidades pedidas."""
-        req = set(capacidades or ())
-        candidatos = [
-            (ordem, i, cli) for i, (cli, caps, ordem) in enumerate(self.catalogo)
-            if req <= caps
-            and getattr(cli, "provedor", None) not in self.esgotados
-            and (evitar is None or getattr(cli, "provedor", None) != evitar)
-        ]
-        if not candidatos:
-            return None
-        candidatos.sort()
-        return candidatos[0][2]
+        candidatos = self._candidatos_capazes(capacidades, evitar=evitar)
+        return candidatos[0] if candidatos else None
 
     def _resolver(self, papel: str, tier: Optional[str], ferramentas: Optional[str],
                   capacidades: Optional[list[str]] = None, evitar: Optional[str] = None,
-                  emitir: bool = True) -> "ClienteModelo":
+                  emitir: bool = True) -> Optional["ClienteModelo"]:
         """Resolve o cliente: pin > tier > capacidade > papel > padrão, depois esgotamento e desvio
         de ferramentas. `emitir=False` para consulta sem efeitos (provedor_de)."""
+        campos_rota = (papel, tier, ferramentas, evitar)
+        if (
+            not isinstance(papel, str)
+            or not papel.strip()
+            or any(valor is not None and (
+                not isinstance(valor, str) or not valor.strip()
+            ) for valor in campos_rota[1:])
+        ):
+            if emitir and capacidades is not None:
+                caps_evento = (
+                    [c for c in capacidades if isinstance(c, str)]
+                    if isinstance(capacidades, list) else []
+                )
+                self._evento(
+                    "registro.sem_executor",
+                    papel=papel if isinstance(papel, str) and papel.strip() else "<invalido>",
+                    capacidades=caps_evento,
+                )
+            return None
         pin = self.pins.get(papel) or (self.pins.get(tier) if tier else None) or self.pins.get("*")
+        if self._usa_capacidades(capacidades):
+            assert capacidades is not None
+            candidatos = self._candidatos_capazes(
+                capacidades,
+                evitar=None if pin is not None else evitar,
+                ferramentas=ferramentas,
+            )
+            if not candidatos:
+                if emitir:
+                    caps_evento = [c for c in capacidades if isinstance(c, str)] if isinstance(capacidades, list) else []
+                    self._evento("registro.sem_executor", papel=papel, capacidades=caps_evento)
+                return None
+            preferido = pin or (self.tiers.get(tier) if tier else None)
+            if preferido is not None:
+                if preferido not in candidatos:
+                    if emitir:
+                        self._evento("registro.sem_executor", papel=papel,
+                                     capacidades=list(capacidades))
+                    return None
+                cliente = preferido
+                if emitir:
+                    evento = "modelo.pin" if pin is not None else "modelo.roteado_tier"
+                    self._evento(evento, papel=papel, tier=tier)
+            else:
+                cliente = candidatos[0]
+                if emitir:
+                    self._evento("modelo.roteado_capacidade", papel=papel,
+                                 capacidades=list(capacidades),
+                                 provedor=getattr(cliente, "provedor", None))
+            return cliente
         if pin is not None:                          # pin manual vence tier e papel
             cliente = pin
             if emitir:
@@ -267,19 +389,6 @@ class ClienteRoteador:
             cliente = self.tiers[tier]
             if emitir:
                 self._evento("modelo.roteado_tier", papel=papel, tier=tier)
-        elif capacidades and self.catalogo:
-            cli = self.selecionar_por_capacidade(capacidades, evitar=evitar, emitir=emitir)
-            if cli is not None:
-                cliente = cli
-                if emitir:
-                    self._evento("modelo.roteado_capacidade", papel=papel,
-                                 capacidades=list(capacidades),
-                                 provedor=getattr(cli, "provedor", None))
-            else:
-                if emitir:
-                    self._evento("registro.sem_executor", papel=papel,
-                                 capacidades=list(capacidades))
-                cliente = self.mapa.get(papel, self.padrao)
         else:
             cliente = self.mapa.get(papel, self.padrao)
         cliente = self._disponivel(cliente, papel, emitir=emitir)   # provedor esgotado → reroteia
@@ -304,8 +413,15 @@ class ClienteRoteador:
         cliente = self._resolver(papel, tier, ferramentas, capacidades=capacidades, emitir=False)
         return _descricao_cliente(cliente, papel)
 
-    def _outro_provedor(self, evitar: str) -> Optional["ClienteModelo"]:
+    def _outro_provedor(self, evitar: str | None,
+                        capacidades: Optional[list[str]] = None,
+                        ferramentas: Optional[str] = None,
+                        excluir: "ClienteModelo" | None = None) -> Optional["ClienteModelo"]:
         """Primeiro cliente disponível (cadeia + padrao) cujo provedor != `evitar`."""
+        if self._usa_capacidades(capacidades):
+            candidatos = self._candidatos_capazes(
+                capacidades, evitar=evitar, ferramentas=ferramentas, excluir=excluir)
+            return candidatos[0] if candidatos else None
         for alt in [*self.cadeia, self.padrao]:
             prov = getattr(alt, "provedor", None)
             if prov != evitar and prov not in self.esgotados:
@@ -317,11 +433,13 @@ class ClienteRoteador:
                evitar: Optional[str] = None,
                capacidades: Optional[list[str]] = None) -> Optional[str]:
         cliente = self._resolver(papel, tier, ferramentas, capacidades=capacidades, evitar=evitar)
+        if cliente is None:
+            return None
         # Guard de independência do juiz: o verifier não pode rodar no MESMO provedor
         # do executor que ele julga (senão o modelo se auto-aprova). `evitar` = provedor
         # do executor. Um PIN explícito do Caio vence o guard (decisão consciente).
         if evitar and not self._eh_pin(papel, tier) and getattr(cliente, "provedor", None) == evitar:
-            alt = self._outro_provedor(evitar)
+            alt = self._outro_provedor(evitar, capacidades, ferramentas)
             if alt is not None:
                 self._evento("juiz.independencia", papel=papel, evitar=evitar,
                              para=getattr(alt, "provedor", None))
@@ -331,7 +449,16 @@ class ClienteRoteador:
         if resposta is not None:
             return resposta
         if not self.auto_esgotar:
-            if cliente is not self.padrao:
+            if self._usa_capacidades(capacidades):
+                alvo = self._outro_provedor(
+                    getattr(cliente, "provedor", None), capacidades, ferramentas, cliente)
+                if alvo is not cliente:
+                    if alvo is None:
+                        return None
+                    self._evento("modelo.fallback", papel=papel)
+                    resposta = alvo.chamar(papel, prompt, ferramentas=ferramentas, tier=tier,
+                                           timeout=timeout, capacidades=capacidades)
+            elif cliente is not self.padrao:
                 alvo = self._disponivel(self.padrao, papel)
                 if alvo is not cliente:
                     self._evento("modelo.fallback", papel=papel)
@@ -341,7 +468,11 @@ class ClienteRoteador:
 
         self._auto_esgotar(cliente, papel, motivo="sem resposta")
         ja_tentados = {_chave_provedor(cliente)}
-        for alt in self._cadeia_failover():
+        alternativas = (self._candidatos_capazes(capacidades, ferramentas=ferramentas)
+                        if self._usa_capacidades(capacidades) else self._cadeia_failover())
+        for alt in alternativas or []:
+            if getattr(alt, "provedor", None) in self.esgotados:
+                continue
             chave = _chave_provedor(alt)
             if chave in ja_tentados:
                 continue
