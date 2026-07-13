@@ -45,7 +45,7 @@ como dívida em vez de virar confiança verbal.
 | # | Invariante | Enforço | Teste que prova |
 |---|---|---|---|
 | E1 | O conjunto de tipos de evento é fechado; evento emitido no código e ausente do schema quebra o guard anti-drift. | `motor/motor/eventos_schema.py::ESQUEMA`; AST guard em teste | `motor/tests/test_eventos_schema.py::test_schema_cobre_todos_eventos_emitidos_no_codigo`, `test_guarda_anti_drift_falharia_com_evento_nao_declarado` |
-| E2 | Ledger JSONL v2 é append-only, durável e estrito: writer único, `seq` contígua, tempo não regressivo, recovery de tail com quarentena e defesa contra troca/link de arquivo. V1 permanece somente leitura e não autoriza gate. Painel e curador são projeções. | `motor/motor/eventos.py::LogEventos`; `motor_painel.painel::parse_eventos`; `motor/motor/curador.py::carregar_runs` | `motor/tests/test_hardening_h07a.py` até `test_hardening_h07e.py`; manifest em `motor/tests/test_hardening_h07.py` |
+| E2 | Ledger JSONL v2 é append-only, durável e estrito: writer único, `seq` contígua, tempo não regressivo, recovery de tail com quarentena e defesa contra troca/link de arquivo. Eventos monetários entregues pelo relay preservam `event_id` e deduplicam após reabertura; divergência falha antes do ACK. V1 permanece somente leitura e não autoriza gate. Painel e curador são projeções. | `motor/motor/eventos.py::LogEventos`; `motor_painel.painel::parse_eventos`; `motor/motor/curador.py::carregar_runs` | `motor/tests/test_hardening_h07a.py` até `test_hardening_h07e.py`; `motor/tests/test_hardening_h12b3.py`; manifest em `motor/tests/test_hardening_h07.py` |
 
 ## Curador
 

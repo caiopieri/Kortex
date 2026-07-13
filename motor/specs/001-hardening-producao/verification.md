@@ -4,7 +4,7 @@ Status: **not production certified**
 
 ## Verified scope
 
-The H00-H13 program and the H12b extension through H12b2c2 provide causal tests for:
+The H00-H13 program and the H12b extension through H12b3 provide causal tests for:
 
 - strict spec, verdict, capability and reconciliation behavior;
 - command identity, `argv` integrity and default-deny composition;
@@ -13,7 +13,9 @@ The H00-H13 program and the H12b extension through H12b2c2 provide causal tests 
 - durable human decisions, crash recovery and idempotent outbox processing;
 - monetary event schemas, SQLite reservations, replay, exclusive claims and lease/ack state;
 - at-least-once budget relay delivery with stable `event_id`, defensive payload copying and
-  ACK only after successful publication.
+  ACK only after successful publication;
+- durable consumer deduplication in the real JSONL event ledger across reopen/redelivery,
+  with divergent deliveries rejected before ACK.
 
 The public test corpus is content-addressed by `reproducer-manifest.jsonl` and
 `reproducer-corpus-00bbc07deca063f5.tar`. `tests/test_hardening_*.py` contains the maintained
@@ -29,6 +31,10 @@ For the H12b2c2 integration of source commit `3562a6c` over base `901ce2c`, the 
 H12b0-H12b2c2 chain completed with `100 passed` and the full suite with `726 passed`. Ruff,
 mypy, Bandit high/high, compileall and diff checks passed.
 
+For the H12b3 integration over base `df1a3f4`, the focused H12b0-H12b3 chain completed with
+`104 passed` and the full suite with `730 passed`. Ruff, mypy, Bandit high/high, compileall,
+Gitleaks and diff checks passed. Packaging was unchanged, so no build claim is added.
+
 Counts are evidence for that revision only. A release must rerun every gate from a clean
 checkout.
 
@@ -37,9 +43,9 @@ checkout.
 1. **Sandbox backend (H05b):** command execution remains unavailable in production until a
    concrete backend satisfies `sandbox-conformance.md`. String validation and a working
    directory are not sandboxing.
-2. **Budget integration:** H12b2c2 publishes claimed outbox events with stable `event_id`, but
-   graph callsite integration, consumer-side durable deduplication and real provider pricing
-   adapters remain incomplete.
+2. **Budget integration:** the relay now reaches the real event ledger with durable
+   consumer-side deduplication, but graph callsite/run-identity integration and real provider
+   pricing adapters remain incomplete.
 3. **Curator authority:** the protocol fails closed without an authoritative certification
    repository supplied by the deployment.
 
