@@ -1,7 +1,10 @@
+import json
+import sys
 from decimal import Decimal
 
 import pytest
 
+from motor.__main__ import main
 from motor.composicao_orcamento import (
     PRICING_CAPTURADO_EM, PRICING_MAX_AGE_S, ClienteSomenteOrcado,
     compor_orcamento_openai,
@@ -109,3 +112,81 @@ def test_config_hostil_falha_fechado(tmp_path, monkeypatch, mutacao):
         monkeypatch.delenv("OPENAI_API_KEY")
     with pytest.raises(ErroOrcamento):
         compor_orcamento_openai(cfg, tmp_path, relogio=lambda: PRICING_CAPTURADO_EM)
+
+
+def test_cli_injeta_identidade_repositorio_e_fabrica(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "segredo")
+    cfg = tmp_path / "modelos.json"
+    cfg.write_text(json.dumps(_cfg()), encoding="utf-8")
+    observado = {}
+
+    class Grafo:
+        def invoke(self, entrada, config):
+            observado.update(entrada=entrada, config=config)
+            return {"avaliacao": {"abortada": True}}
+
+    def construir(cliente, _log, **kwargs):
+        observado.update(cliente=cliente, kwargs=kwargs)
+        return Grafo()
+
+    monkeypatch.setattr("motor.__main__.construir_grafo", construir)
+    monkeypatch.setattr(sys, "argv", [
+        "motor", "missao", "--modelos", str(cfg), "--workspace", str(tmp_path),
+        "--run-id", "run-config-1",
+    ])
+
+    assert main() == 0
+    assert isinstance(observado["cliente"], ClienteSomenteOrcado)
+    assert observado["entrada"]["run_id"] == observado["entrada"]["thread_id"] == "run-config-1"
+    assert observado["config"]["configurable"]["thread_id"] == "run-config-1"
+    assert observado["kwargs"]["repositorio_orcamento"] is not None
+    assert callable(observado["kwargs"]["fabrica_tentativas_orcadas"])
+
+
+@pytest.mark.parametrize("argv", [
+    ["motor", "missao", "--run-id"],
+    ["motor", "missao", "--run-id", "a..b"],
+    ["motor", "missao", "--caixa", "caixa"],
+])
+def test_cli_rejeita_identidade_ausente_ou_invalida(monkeypatch, argv):
+    monkeypatch.setattr(sys, "argv", argv)
+    assert main() == 2
+
+
+def test_cli_caixa_injeta_mesma_identidade_e_dependencias(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "segredo")
+    cfg = tmp_path / "modelos.json"
+    cfg.write_text(json.dumps(_cfg()), encoding="utf-8")
+    observado = {}
+
+    class Conn:
+        def close(self):
+            observado["fechou"] = True
+
+    class Saver:
+        def __init__(self, _conn):
+            pass
+
+        def setup(self):
+            pass
+
+    monkeypatch.setattr("motor.__main__.sqlite3.connect", lambda *_args, **_kwargs: Conn())
+    monkeypatch.setattr("motor.__main__.SqliteSaver", Saver)
+    monkeypatch.setattr("motor.__main__.CaixaFundador", lambda *_args: object())
+    monkeypatch.setattr("motor.__main__.construir_grafo", lambda cliente, _log, **kwargs: (
+        observado.update(cliente=cliente, kwargs=kwargs) or object()
+    ))
+    monkeypatch.setattr("motor.__main__.rodar_com_caixa", lambda _g, entrada, config, *_args: (
+        observado.update(entrada=entrada, config=config) or {"avaliacao": {"abortada": True}}
+    ))
+    monkeypatch.setattr(sys, "argv", [
+        "motor", "missao", "--modelos", str(cfg), "--workspace", str(tmp_path),
+        "--caixa", str(tmp_path / "caixa"), "--run-id", "run-caixa-1",
+    ])
+
+    assert main() == 0
+    assert observado["entrada"]["run_id"] == "run-caixa-1"
+    assert observado["config"]["configurable"]["thread_id"] == "run-caixa-1"
+    assert observado["kwargs"]["repositorio_orcamento"] is not None
+    assert callable(observado["kwargs"]["fabrica_tentativas_orcadas"])
+    assert observado["fechou"] is True

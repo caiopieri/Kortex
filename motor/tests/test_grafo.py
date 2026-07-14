@@ -4,6 +4,7 @@ import json
 import sys
 from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from langgraph.types import Command
@@ -354,6 +355,9 @@ def test_cli_rascunho_propaga_perfil_para_grafo(tmp_path, monkeypatch):
     monkeypatch.setattr(sys, "argv", ["motor", "--spec", str(spec_path), "--rascunho"])
     monkeypatch.setattr(cli, "LogEventos", LogFake)
     monkeypatch.setattr(cli, "construir_cliente", lambda *args, **kwargs: ClienteStub(faz_roteador()))
+    monkeypatch.setattr(cli, "compor_orcamento_openai", lambda *_args, **_kwargs: SimpleNamespace(
+        cliente=ClienteStub(faz_roteador()), repositorio=object(), fabrica=lambda *_: [],
+    ))
     monkeypatch.setattr(cli, "construir_grafo", construir_fake)
 
     assert cli.main() == 0
@@ -974,6 +978,9 @@ def test_cli_escalar_liga_flag_e_default_mantem_inerte(monkeypatch, capsys):
             return {"resposta_final": "ok"}
 
     monkeypatch.setattr(cli, "construir_cliente", lambda cfg_modelos, dir_registro, log=None: ClienteStub(faz_roteador()))
+    monkeypatch.setattr(cli, "compor_orcamento_openai", lambda *_args, **_kwargs: SimpleNamespace(
+        cliente=ClienteStub(faz_roteador()), repositorio=object(), fabrica=lambda *_: [],
+    ))
 
     def construir_fake(*args, **kwargs):
         flags.append(kwargs["escalar_em_retry"])

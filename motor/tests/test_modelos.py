@@ -263,7 +263,7 @@ def test_construir_cliente_sem_config_com_claude_devolve_cliente_cli(monkeypatch
     assert isinstance(construir_cliente(None, None), ClienteClaudeCLI)
 
 
-def test_main_sem_claude_mantem_saida_humana(monkeypatch, capsys):
+def test_main_sem_config_orcada_mantem_saida_humana(monkeypatch, capsys):
     from motor import __main__ as cli
 
     monkeypatch.setattr(cli.sys, "argv", ["python -m motor", "missao"])
@@ -271,7 +271,7 @@ def test_main_sem_claude_mantem_saida_humana(monkeypatch, capsys):
 
     assert cli.main() == 1
     saida = capsys.readouterr().out
-    assert "erro: `claude` CLI não encontrado no PATH" in saida
+    assert "erro: orçamento indisponível: configuracao orcada ausente" in saida
 
 
 def test_config_esgotados_e_cadeia(monkeypatch):

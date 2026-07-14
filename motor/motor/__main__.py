@@ -26,9 +26,11 @@ gate pendente.
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 import sys
 from pathlib import Path
+from uuid import uuid4
 
 from langgraph.types import Command
 
@@ -40,9 +42,11 @@ except ImportError:  # nome antigo
 from langgraph.checkpoint.sqlite import SqliteSaver
 
 from .caixa import CaixaFundador, rodar_com_caixa
+from .composicao_orcamento import compor_orcamento_openai
 from .eventos import LogEventos
 from .grafo import construir_grafo
 from .modelos import ClienteClaudeCLI, ClienteModelo, ProvedorIndisponivel, cliente_de_config
+from .orcamento import ErroOrcamento
 from .registro import (
     cliente_de_registro,
     ferramentas_de_registro,
@@ -104,6 +108,24 @@ def main() -> int:
         i = args.index("--workspace")
         workspace_base = args[i + 1]
         args = args[:i] + args[i + 2:]
+
+    run_id = uuid4().hex
+    run_id_explicito = False
+    if "--run-id" in args:
+        i = args.index("--run-id")
+        if i + 1 >= len(args):
+            print("erro: --run-id exige um valor.")
+            return 2
+        run_id = args[i + 1]
+        run_id_explicito = True
+        args = args[:i] + args[i + 2:]
+    if (re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", run_id) is None
+            or ".." in run_id):
+        print("erro: --run-id inválido.")
+        return 2
+    if dir_caixa is not None and not run_id_explicito:
+        print("erro: --caixa exige --run-id estável para permitir retomada.")
+        return 2
 
     # --modelos <cfg.json>: multi-provider (papéis baratos → OpenAI-compat;
     # resto → claude). Sem a flag, comportamento intacto: tudo no claude.
@@ -199,16 +221,20 @@ def main() -> int:
         max_rodadas_reconciliacao = int(args[i + 1])
         args = args[:i] + args[i + 2:]
 
+    if not args:
+        print("erro: informe uma missão ou --spec.")
+        return 2
     entrada: dict
     if args[0] == "--spec":
         entrada = {"spec": json.loads(Path(args[1]).read_text(encoding="utf-8"))}
     else:
         entrada = {"missao_texto": " ".join(args)}
+    entrada.update({"run_id": run_id, "thread_id": run_id})
 
     raiz = Path(__file__).parent.parent
     log = LogEventos(raiz / "log.jsonl")
     try:
-        config = {"configurable": {"thread_id": "cli"}}
+        config = {"configurable": {"thread_id": run_id}}
         ferramentas = ferramentas_de_registro(dir_registro) if dir_registro is not None else {}
         ferramentas_permitidas = _lista_str((cfg_modelos or {}).get("ferramentas_permitidas"))
         if not ferramentas_permitidas and dir_registro is not None:
@@ -217,13 +243,11 @@ def main() -> int:
             "provedores" in cfg_modelos or "base_url" in cfg_modelos
         ):
             print("aviso: pins ignorados — precisam de 'provedores' (via --modelos ou ~/.motor/pins.json).")
-        cliente_por_config = bool(
-            cfg_modelos and ("provedores" in cfg_modelos or "base_url" in cfg_modelos)
-        )
         try:
-            cliente = construir_cliente(cfg_modelos, None if cliente_por_config else dir_registro, log=log)
-        except ProvedorIndisponivel as ex:
-            print(f"erro: {ex}")
+            deps_orcamento = compor_orcamento_openai(cfg_modelos or {}, workspace_base)
+            cliente = deps_orcamento.cliente
+        except ErroOrcamento as ex:
+            print(f"erro: orçamento indisponível: {ex}")
             return 1
         if esgotados:
             if hasattr(cliente, "esgotados"):
@@ -246,7 +270,9 @@ def main() -> int:
                                         escalar_em_retry=escalar_em_retry,
                                         max_rodadas_reconciliacao=max_rodadas_reconciliacao,
                                         perfil_execucao=perfil_execucao,
-                                        ferramentas_permitidas=ferramentas_permitidas)
+                                        ferramentas_permitidas=ferramentas_permitidas,
+                                        repositorio_orcamento=deps_orcamento.repositorio,
+                                        fabrica_tentativas_orcadas=deps_orcamento.fabrica)
                 caixa = CaixaFundador(dir_caixa, log)
                 resultado = rodar_com_caixa(grafo, entrada, config, caixa, log)
             finally:
@@ -259,7 +285,9 @@ def main() -> int:
                                     escalar_em_retry=escalar_em_retry,
                                     max_rodadas_reconciliacao=max_rodadas_reconciliacao,
                                     perfil_execucao=perfil_execucao,
-                                    ferramentas_permitidas=ferramentas_permitidas)
+                                    ferramentas_permitidas=ferramentas_permitidas,
+                                    repositorio_orcamento=deps_orcamento.repositorio,
+                                    fabrica_tentativas_orcadas=deps_orcamento.fabrica)
             resultado = grafo.invoke(entrada, config)
             while "__interrupt__" in resultado:  # gate do fundador
                 pedido = resultado["__interrupt__"][0].value

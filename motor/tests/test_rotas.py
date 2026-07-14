@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -97,20 +98,21 @@ def _cfg_modelos(path: Path) -> None:
 def _preparar_cli(monkeypatch, tmp_path):
     home = tmp_path / "home"
     home.mkdir()
-    chamadas: dict[str, list] = {"cliente": [], "grafo": []}
+    chamadas: dict[str, list] = {"grafo": [], "orcamento": []}
 
     monkeypatch.setattr(cli.Path, "home", staticmethod(lambda: home))
     monkeypatch.setattr(cli, "LogEventos", _LogCliFake)
 
-    def construir_cliente_fake(cfg_modelos, dir_registro, log=None):
-        chamadas["cliente"].append((cfg_modelos, dir_registro))
-        return ClienteStub(lambda papel, prompt: "ok")
+    def compor_orcamento_fake(cfg_modelos, workspace):
+        chamadas["orcamento"].append((cfg_modelos, workspace))
+        cliente = ClienteStub(lambda papel, prompt: "ok")
+        return SimpleNamespace(cliente=cliente, repositorio=object(), fabrica=lambda *_: [])
 
     def construir_grafo_fake(cliente, log, **kwargs):
         chamadas["grafo"].append(kwargs)
         return _GrafoCliFake()
 
-    monkeypatch.setattr(cli, "construir_cliente", construir_cliente_fake)
+    monkeypatch.setattr(cli, "compor_orcamento_openai", compor_orcamento_fake)
     monkeypatch.setattr(cli, "construir_grafo", construir_grafo_fake)
     return home, chamadas
 
@@ -191,12 +193,12 @@ def test_cli_combina_modelos_para_cliente_e_registro_para_rotas_ferramentas(
     assert cli.main() == 0
     saida = capsys.readouterr().out
     assert "use --registro OU --modelos" not in saida
-    assert chamadas["cliente"] == [(json.loads(cfg_path.read_text(encoding="utf-8")), None)]
+    assert chamadas["orcamento"][0][0] == json.loads(cfg_path.read_text(encoding="utf-8"))
     assert set(chamadas["grafo"][0]["rotas"]) == {"construcao"}
     assert set(chamadas["grafo"][0]["ferramentas"]) == {"busca"}
 
 
-def test_cli_registro_sozinho_continua_usando_cliente_do_registro(tmp_path, monkeypatch, capsys):
+def test_cli_registro_sozinho_compõe_orcamento_sem_config_modelos(tmp_path, monkeypatch, capsys):
     _, chamadas = _preparar_cli(monkeypatch, tmp_path)
     registro = tmp_path / "registro"
     registro.mkdir()
@@ -206,10 +208,10 @@ def test_cli_registro_sozinho_continua_usando_cliente_do_registro(tmp_path, monk
 
     assert cli.main() == 0
     capsys.readouterr()
-    assert chamadas["cliente"] == [(None, str(registro))]
+    assert chamadas["orcamento"][0][0] == {}
 
 
-def test_cli_modelos_sozinho_continua_usando_cliente_da_config(tmp_path, monkeypatch, capsys):
+def test_cli_modelos_sozinho_compõe_orcamento_da_config(tmp_path, monkeypatch, capsys):
     _, chamadas = _preparar_cli(monkeypatch, tmp_path)
     cfg_path = tmp_path / "modelos.json"
     _cfg_modelos(cfg_path)
@@ -218,7 +220,7 @@ def test_cli_modelos_sozinho_continua_usando_cliente_da_config(tmp_path, monkeyp
 
     assert cli.main() == 0
     capsys.readouterr()
-    assert chamadas["cliente"] == [(json.loads(cfg_path.read_text(encoding="utf-8")), None)]
+    assert chamadas["orcamento"][0][0] == json.loads(cfg_path.read_text(encoding="utf-8"))
     assert chamadas["grafo"][0]["rotas"] is None
     assert chamadas["grafo"][0]["ferramentas"] == {}
 
@@ -233,7 +235,7 @@ def test_cli_reconciliar_repassa_teto_para_grafo(tmp_path, monkeypatch, capsys):
     assert chamadas["grafo"][0]["max_rodadas_reconciliacao"] == 3
 
 
-def test_cli_pins_globais_sem_provedores_nao_sequestram_registro(tmp_path, monkeypatch, capsys):
+def test_cli_pins_globais_sem_provedores_preservam_config_orcada(tmp_path, monkeypatch, capsys):
     home, chamadas = _preparar_cli(monkeypatch, tmp_path)
     (home / ".motor").mkdir()
     (home / ".motor" / "pins.json").write_text(
@@ -248,7 +250,7 @@ def test_cli_pins_globais_sem_provedores_nao_sequestram_registro(tmp_path, monke
 
     assert cli.main() == 0
     assert "pins ignorados" in capsys.readouterr().out
-    assert chamadas["cliente"] == [({"pins": {"synthesizer": "codex/default"}}, str(registro))]
+    assert chamadas["orcamento"][0][0] == {"pins": {"synthesizer": "codex/default"}}
 
 
 def test_rota_construcao_flui_ate_executor_de_dependencias(tmp_path):

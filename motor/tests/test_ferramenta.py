@@ -1,6 +1,7 @@
 import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 try:
     from langgraph.checkpoint.memory import InMemorySaver
@@ -342,6 +343,9 @@ def test_cli_propaga_ferramentas_permitidas_da_config(tmp_path, monkeypatch):
     monkeypatch.setattr(sys, "argv", ["motor", "--modelos", str(cfg_path), "--spec", str(spec_path)])
     monkeypatch.setattr(cli, "LogEventos", LogFake)
     monkeypatch.setattr(cli, "construir_cliente", lambda *args, **kwargs: ClienteStub(lambda p, prompt: "ok"))
+    monkeypatch.setattr(cli, "compor_orcamento_openai", lambda *_args, **_kwargs: SimpleNamespace(
+        cliente=ClienteStub(lambda _p, _prompt: "ok"), repositorio=object(), fabrica=lambda *_: [],
+    ))
     monkeypatch.setattr(cli, "construir_grafo", construir_fake)
 
     assert cli.main() == 0

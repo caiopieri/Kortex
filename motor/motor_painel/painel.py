@@ -701,7 +701,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         spec_path.write_text(json.dumps(spec, ensure_ascii=False, indent=2), encoding="utf-8")
         run_log = despachos / f"run-{ts}.log"
 
-        argv = [sys.executable, "-m", "motor", "--spec", str(spec_path), "--caixa", "runs/caixa"]
+        argv = [
+            sys.executable, "-m", "motor", "--spec", str(spec_path),
+            "--caixa", "runs/caixa", "--run-id", f"painel-{ts}",
+        ]
         if opcoes.get("auto") is True:
             argv.append("--auto")
         if opcoes.get("escalar") is True:

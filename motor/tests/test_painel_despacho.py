@@ -134,6 +134,7 @@ def test_post_missao_valido_despacha(despachos, popen_espiao):
         sys.executable, "-m", "motor",
         "--spec", resp["spec"],
         "--caixa", "runs/caixa",
+        "--run-id", f"painel-{Path(resp['spec']).stem.removeprefix('spec-')}",
         "--auto", "--escalar",
     ]
     assert isinstance(argv, list)  # nunca string de shell
@@ -163,6 +164,7 @@ def test_post_missao_sem_opcoes_argv_base(despachos, popen_espiao):
         sys.executable, "-m", "motor",
         "--spec", resp["spec"],
         "--caixa", "runs/caixa",
+        "--run-id", f"painel-{Path(resp['spec']).stem.removeprefix('spec-')}",
     ]
 
 
