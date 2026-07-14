@@ -680,9 +680,15 @@ def _cliente_roteador(roteador):
 
 def test_revisao_plano_auto_mode_nao_interrompe(tmp_path):
     log = LogEventos(tmp_path / "log.jsonl")
-    grafo = construir_grafo(_cliente_roteador(faz_roteador()), log,
-                            checkpointer=InMemorySaver(), politica=PoliticaGates(auto_mode=True))
-    res = grafo.invoke({"spec": SPEC}, {"configurable": {"thread_id": "plano-auto"}})
+    cliente = _cliente_roteador(faz_roteador())
+    grafo = construir_grafo(
+        cliente, log, checkpointer=InMemorySaver(), politica=PoliticaGates(auto_mode=True),
+        **_orcamento_cliente(tmp_path, cliente),
+    )
+    res = grafo.invoke(
+        {"spec": SPEC, "run_id": "plano-auto", "thread_id": "plano-auto"},
+        {"configurable": {"thread_id": "plano-auto"}},
+    )
 
     assert "__interrupt__" not in res
     assert res["resposta_final"] == "SÍNTESE FINAL DA MISSÃO"
