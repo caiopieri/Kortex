@@ -445,6 +445,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         prompt: str,
         tentativa: int,
         requisitos: RequisitosTentativaCusteada | None = None,
+        ciclo: int = 0,
     ) -> RespostaTentativaCusteada | None:
         if repositorio_orcamento is None:
             raise ErroOrcamento("repositorio de orcamento ausente")
@@ -470,7 +471,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
             if requisitos is not None and provider_id == requisitos.evitar_provedor:
                 continue
             prompt_id = hashlib.sha256(prompt.encode()).hexdigest()[:16]
-            call_base = f"{run_id}:{thread_id}:{fase}:{no_id}:{tentativa}:{prompt_id}"
+            call_base = f"{run_id}:{thread_id}:{fase}:{no_id}:{ciclo}:{tentativa}:{prompt_id}"
             call_id = (
                 f"planner-{fase}-{tentativa}" if papel == "planner"
                 else f"{fase}-{hashlib.sha256(call_base.encode()).hexdigest()[:32]}"
@@ -732,6 +733,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                         ferramentas=sub.get("ferramentas"),
                         capacidades=capacidades_tupla,
                     ),
+                    int(payload.get("ciclo_reconciliacao", 0)),
                 )
                 ultima = resposta_executor.texto if resposta_executor is not None else None
             except Exception:
@@ -765,6 +767,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                             resposta_executor.provider_id if resposta_executor is not None else None
                         ),
                     ),
+                    int(payload.get("ciclo_reconciliacao", 0)),
                 )
                 resposta_verifier = (
                     resposta_verifier_orcada.texto
@@ -1261,6 +1264,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                         "workspace": workspace,
                         "run_id": state.get("run_id"),
                         "thread_id": state.get("thread_id"),
+                        "ciclo_reconciliacao": state.get("rodada_reconciliacao", 0) + 1,
                     })
                     resultado = retorno["resultados"][0]
                     log.evento("lacuna.preenchida", subagente=sid)
