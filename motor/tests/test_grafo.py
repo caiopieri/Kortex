@@ -2,6 +2,7 @@
 o gate do fundador (interrupt/resume) e a missão dirigida por spec serializada."""
 import json
 import sys
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -16,6 +17,7 @@ from motor.eventos import LogEventos
 from motor import __main__ as cli
 from motor.grafo import PROMPT_SUBAGENTE, _proximo_tier, construir_grafo
 from motor.modelos import ClienteRoteador, ClienteStub
+from motor.orcamento import CotacaoTentativa, RepositorioOrcamento, ResultadoTentativa
 from motor.politica import PoliticaGates
 
 SPEC = json.loads(
@@ -83,8 +85,26 @@ def faz_roteador(reprovar_beta_uma_vez=False, evaluator_aprova=True):
 
 def roda(tmp_path, roteador, entrada):
     log = LogEventos(tmp_path / "log.jsonl")
-    grafo = construir_grafo(ClienteStub(roteador), log, checkpointer=InMemorySaver(),
-                            politica=PoliticaGates(overrides={"plano": "prosseguir"}))
+    class Tentativa:
+        def cotar_tentativa(self):
+            return CotacaoTentativa(Decimal("0.01"), "BRL", "teste-v1")
+
+        def tentar_uma_vez(self):
+            return ResultadoTentativa(roteador("planner", prompt), Decimal("0"), "BRL", "teste-uso")
+
+    def fabrica(_papel, prompt_recebido, _tentativa):
+        nonlocal prompt
+        prompt = prompt_recebido
+        return [("stub", Tentativa())]
+
+    prompt = ""
+    grafo = construir_grafo(
+        ClienteStub(roteador), log, checkpointer=InMemorySaver(),
+        politica=PoliticaGates(overrides={"plano": "prosseguir"}),
+        repositorio_orcamento=RepositorioOrcamento(tmp_path / "orcamento"),
+        fabrica_tentativas_orcadas=fabrica,
+    )
+    entrada = {"run_id": "run-teste", "thread_id": "t1", **entrada}
     config = {"configurable": {"thread_id": "t1"}}
     return grafo, config, log, grafo.invoke(entrada, config)
 
@@ -794,9 +814,19 @@ def test_executor_chamado_loga_modelo_resolvido_com_roteador(tmp_path):
     )
     log = LogEventos(tmp_path / "log.jsonl")
     grafo = construir_grafo(cliente, log, checkpointer=InMemorySaver(),
-                            politica=PoliticaGates(overrides={"plano": "prosseguir"}))
+                            politica=PoliticaGates(overrides={"plano": "prosseguir"}),
+                            repositorio_orcamento=RepositorioOrcamento(tmp_path / "orcamento"),
+                            fabrica_tentativas_orcadas=lambda _p, prompt, _t: [(
+                                "juiz", type("Tentativa", (), {
+                                    "cotar_tentativa": lambda self: CotacaoTentativa(
+                                        Decimal("0.01"), "BRL", "teste-v1"),
+                                    "tentar_uma_vez": lambda self: ResultadoTentativa(
+                                        juiz("planner", prompt), Decimal("0"), "BRL", "teste-uso"),
+                                })(),
+                            )])
 
-    grafo.invoke({"missao_texto": "produza algo"}, {"configurable": {"thread_id": "modelo-log"}})
+    grafo.invoke({"missao_texto": "produza algo", "run_id": "modelo-log",
+                  "thread_id": "modelo-log"}, {"configurable": {"thread_id": "modelo-log"}})
 
     chamados = [e for e in eventos_de(tmp_path) if e["evento"] == "executor.chamado"]
     assert next(e for e in chamados if e["executor"] == "planner")["modelo"] == "juiz/sonnet"

@@ -7,7 +7,7 @@ Topologia (espelha a referência dynamic-workflow-harness, ver memória do proje
                                               (cobertura reprovada → interrupt() ao fundador)
 
 Regras de fronteira (anti-lock-in):
-- nós são funções puras que só falam com `cliente.chamar(papel, prompt)`;
+- planner usa tentativa custeada; demais papéis ainda usam a abstração legada;
 - estado serializável; a spec é dado, não código;
 - todo passo emite evento JSONL próprio (painel/auditoria), além do checkpointer.
 """
@@ -17,9 +17,11 @@ import hashlib
 import json
 import os
 import shlex
+import tempfile
 from datetime import datetime
+from decimal import Decimal
 from pathlib import Path
-from typing import Annotated, Any, Optional, TypedDict, cast
+from typing import Annotated, Any, Callable, Optional, TypedDict, cast
 from uuid import uuid4
 
 from langgraph.graph import END, START, StateGraph
@@ -27,7 +29,16 @@ from langgraph.types import Send, interrupt
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from .eventos import LogEventos
-from .modelos import ClienteModelo, extrai_json
+from .modelos import ClienteModelo, ClienteStub, extrai_json
+from .orcamento import (
+    ClienteTentativaCusteada,
+    CotacaoTentativa,
+    ErroOrcamento,
+    IdentidadeTentativaCusteada,
+    RepositorioOrcamento,
+    ResultadoTentativa,
+    executar_tentativa_custeada,
+)
 from .politica import PoliticaGates
 from .rag import carregar_dataset, recuperar
 from .runner import (
@@ -59,6 +70,7 @@ class EstadoMotor(TypedDict, total=False):
     missao_texto: str
     spec: dict[str, Any]
     run_id: str
+    thread_id: str
     resultados: Annotated[list[dict[str, Any]], mesclar_resultados]
     avaliacao: dict[str, Any]
     resposta_final: str
@@ -325,34 +337,6 @@ def _validar_contem(saida: str, config: dict[str, Any]) -> tuple[bool, str, dict
     )
 
 
-def _escolher_rota(cliente: ClienteModelo, missao: str,
-                   rotas: dict[str, dict[str, Any]], log: LogEventos) -> str | None:
-    catalogo = [
-        {"nome": nome, "quando": rota.get("quando", "")}
-        for nome, rota in rotas.items()
-    ]
-    try:
-        resposta = cliente.chamar("planner", PROMPT_SELETOR_ROTA.format(
-            missao=missao,
-            catalogo=json.dumps(catalogo, ensure_ascii=False),
-        ))
-    except Exception:
-        resposta = None
-    bruto = extrai_json(resposta or "")
-    nome = str(bruto.get("rota") or "").strip() if isinstance(bruto, dict) else ""
-    fallback = nome not in rotas
-    if fallback:
-        nome = "pesquisa-sintese" if "pesquisa-sintese" in rotas else ""
-    rota_ativa = rotas.get(nome) or ROTA_DEFAULT
-    log.evento(
-        "rota.escolhida",
-        rota=nome or "pesquisa-sintese",
-        padrao=rota_ativa["padrao"],
-        fallback=fallback,
-    )
-    return nome or None
-
-
 def registrar_artefato(workspace: str | Path, nome: str, tipo: str, conteudo: str) -> dict[str, str]:
     """Escreve conteúdo textual no workspace e devolve só a referência serializável."""
     raiz = Path(workspace)
@@ -379,7 +363,11 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                     max_rodadas_reconciliacao: int = 1,
                     perfil_execucao: str = "certificado",
                     ferramentas_permitidas: list[str] | None = None,
-                    command_runner: CommandRunner | None = None):
+                    command_runner: CommandRunner | None = None,
+                    repositorio_orcamento: RepositorioOrcamento | None = None,
+                    fabrica_tentativas_orcadas: Callable[
+                        [str, str, int], list[tuple[str, ClienteTentativaCusteada]]
+                    ] | None = None):
     """Compila o grafo. `cliente` e `log` são injetados — o grafo não conhece backends.
     `politica` decide quais gates pausam (manual) ou resolvem sozinhos (auto-mode);
     ausente = tudo manual (comportamento default).
@@ -389,6 +377,27 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
     workspace_base = Path(workspace_base)
     ferramentas = ferramentas or {}
     command_runner = command_runner if command_runner is not None else DenyCommandRunner()
+    if isinstance(cliente, ClienteStub) and repositorio_orcamento is None:
+        repositorio_orcamento = RepositorioOrcamento(Path(tempfile.mkdtemp(prefix="kortex-stub-")))
+
+        class _TentativaStub:
+            def __init__(self, papel: str, prompt: str) -> None:
+                self.papel, self.prompt = papel, prompt
+
+            def cotar_tentativa(self) -> CotacaoTentativa:
+                return CotacaoTentativa(Decimal("0.000001"), "BRL", "stub-v1")
+
+            def tentar_uma_vez(self) -> ResultadoTentativa:
+                return ResultadoTentativa(
+                    cliente.chamar(self.papel, self.prompt), Decimal("0"), "BRL", "stub-usage",
+                )
+
+        def _fabricar_stub(
+            papel: str, prompt: str, _tentativa: int,
+        ) -> list[tuple[str, ClienteTentativaCusteada]]:
+            return [("stub", _TentativaStub(papel, prompt))]
+
+        fabrica_tentativas_orcadas = _fabricar_stub
     perfil_execucao = "rascunho" if perfil_execucao == "rascunho" else "certificado"
     executaveis_permitidos: set[Path] = set()
     for executavel_bruto in ferramentas_permitidas or []:
@@ -404,6 +413,40 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
 
     def run_id_de(state: EstadoMotor) -> str:
         return state.get("run_id") or f"{datetime.now():%Y%m%d-%H%M%S}-{uuid4().hex[:6]}"
+
+    def chamar_planner_orcado(
+        state: EstadoMotor, run_id: str, prompt: str, tentativa: int,
+        fase: str = "spec",
+    ) -> str | None:
+        thread_id = state.get("thread_id") or (run_id if isinstance(cliente, ClienteStub) else None)
+        if repositorio_orcamento is None:
+            raise ErroOrcamento("repositorio de orcamento ausente")
+        if fabrica_tentativas_orcadas is None:
+            raise ErroOrcamento("fabrica de adaptadores custeados ausente")
+        if not thread_id:
+            raise ErroOrcamento("thread_id ausente")
+        sessao = repositorio_orcamento.sessao(run_id, thread_id, Decimal("2.0"))
+        cadeia = fabrica_tentativas_orcadas("planner", prompt, tentativa)
+        if not isinstance(cadeia, list) or not cadeia:
+            raise ErroOrcamento("adaptador custeado ausente")
+        for indice, item in enumerate(cadeia, start=1):
+            if not isinstance(item, tuple) or len(item) != 2 or not isinstance(item[0], str):
+                raise ErroOrcamento("adaptador custeado invalido")
+            route_id, adaptador = item
+            call_id = f"planner-{fase}-{tentativa}"
+            base = f"{run_id}:{thread_id}:{call_id}:{route_id}:{indice}"
+            identidade = IdentidadeTentativaCusteada(
+                reservation_id=f"planner-{hashlib.sha256(base.encode()).hexdigest()[:32]}",
+                call_id=call_id,
+                route_id=route_id,
+                attempt=indice,
+            )
+            resultado = executar_tentativa_custeada(
+                repositorio_orcamento, sessao, identidade, adaptador,
+            )
+            if resultado is not None and resultado.texto:
+                return resultado.texto
+        return None
 
     def workspace_de(state: EstadoMotor) -> Path:
         return workspace_base / state["run_id"] / "artefatos"
@@ -438,21 +481,44 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
             return {"spec": spec.model_dump(), "run_id": run_id}
         rota_ativa = rota
         if rota_ativa is None and rotas:
-            nome_rota = _escolher_rota(cliente, state["missao_texto"], rotas, log)
+            catalogo = [
+                {"nome": nome, "quando": item.get("quando", "")}
+                for nome, item in rotas.items()
+            ]
+            resposta_rota = chamar_planner_orcado(
+                state, run_id, PROMPT_SELETOR_ROTA.format(
+                    missao=state["missao_texto"],
+                    catalogo=json.dumps(catalogo, ensure_ascii=False),
+                ), 1, fase="rota",
+            )
+            bruto_rota = extrai_json(resposta_rota or "")
+            nome_rota = (
+                str(bruto_rota.get("rota") or "").strip()
+                if isinstance(bruto_rota, dict) else ""
+            )
+            fallback = nome_rota not in rotas
+            if fallback:
+                nome_rota = "pesquisa-sintese" if "pesquisa-sintese" in rotas else ""
+            escolhida = rotas.get(nome_rota) or ROTA_DEFAULT
+            log.evento("rota.escolhida", rota=nome_rota or "pesquisa-sintese",
+                       padrao=escolhida["padrao"], fallback=fallback)
             rota_ativa = rotas.get(nome_rota) if nome_rota is not None else ROTA_DEFAULT
             rota_ativa = rota_ativa or ROTA_DEFAULT
         erro = ""
         for tentativa in (1, 2, 3):
             log.evento("executor.chamado", executor="planner", tentativa=tentativa,
                        modelo=_descricao_modelo("planner"))
-            resp = cliente.chamar("planner", montar_prompt_planner(
+            prompt = montar_prompt_planner(
                 missao=state["missao_texto"],
                 schema=json.dumps(WorkflowSpec.model_json_schema(), ensure_ascii=False),
-                max_sub=10, erro=erro, rota=rota_ativa))
+                max_sub=10, erro=erro, rota=rota_ativa)
+            resp = chamar_planner_orcado(state, run_id, prompt, tentativa)
             bruto = extrai_json(resp or "")
             if bruto is not None:
                 try:
                     spec = WorkflowSpec.model_validate(bruto)
+                    if Decimal(str(spec.restricoes.teto_custo)) > Decimal("2.0"):
+                        raise ValueError("spec gerada nao pode elevar teto bootstrap")
                     log.evento("spec.criada", missao=spec.missao.id, subagentes=len(spec.subagentes))
                     return {"spec": spec.model_dump(), "run_id": run_id}
                 except Exception as ex:  # validação pydantic reprovada → reinjeta o erro
