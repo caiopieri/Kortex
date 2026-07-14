@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kortex — De ideia a produto. Com processo, não vibes.</title>
+<meta name="description" content="Kortex é um sistema agêntico open source que transforma uma ideia em produto: roteiros versionados, portões de evidência, verificação adversarial e custo auditável. Construído em público.">
+<meta property="og:title" content="Kortex — De ideia a produto. Com processo, não vibes.">
+<meta property="og:description" content="Sistema agêntico open source: roteiros como texto, portões de evidência e custo auditável. Build in public.">
+<meta property="og:type" content="website">
+<!-- favicon sem fundo: ink por padrão, bone quando o navegador está em dark mode -->
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Cstyle%3E g%7Bcolor:%23141518%7D @media(prefers-color-scheme:dark)%7Bg%7Bcolor:%23F2F1ED%7D%7D %3C/style%3E%3Cg fill='none' stroke='currentColor' stroke-width='16'%3E%3Cpath d='M75 13 20 52v76l42 30'/%3E%3Cpath d='m105 13 55 39v76l-42 30'/%3E%3C/g%3E%3Cg fill='currentColor'%3E%3Ccircle cx='53' cy='70' r='14'/%3E%3Ccircle cx='127' cy='70' r='12'/%3E%3Ccircle cx='90' cy='98' r='15'/%3E%3Ccircle cx='90' cy='145' r='14'/%3E%3C/g%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,100..900;1,62..125,100..900&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- Definições SVG da marca (geometria oficial do kortex-brand-system) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <g id="kx-symbol">
+      <g fill="none" stroke="currentColor" stroke-width="18" stroke-linejoin="miter" stroke-linecap="square">
+        <path d="M75 13 20 52v76l42 30"/>
+        <path d="m105 13 55 39v76l-42 30"/>
+      </g>
+      <g fill="none" stroke="currentColor" stroke-width="8" stroke-linecap="round"><path d="m53 70 37 27 37-27M90 97v43"/></g>
+      <g fill="currentColor"><circle cx="53" cy="70" r="14.5"/><circle cx="127" cy="70" r="12.5"/><circle cx="90" cy="98" r="15.5"/><circle cx="90" cy="145" r="14.5"/></g>
+    </g>
+    <g id="kx-wordmark" fill="currentColor">
+      <path d="M0 6h27v108H0zM27 58 90 6h42L68 59l70 55H94L27 63z"/>
+      <path fill-rule="evenodd" d="M198 6h116c24 0 39 14 39 36v36c0 22-15 36-39 36H198c-24 0-39-14-39-36V42c0-22 15-36 39-36Zm4 24c-10 0-15 5-15 14v32c0 9 5 14 15 14h108c10 0 15-5 15-14V44c0-9-5-14-15-14H202Z"/>
+      <path fill-rule="evenodd" d="M405 6h125c25 0 39 13 39 34v14c0 18-10 29-28 33l37 27h-43l-34-26h-68v26h-28V6Zm28 24v35h93c10 0 15-5 15-13v-9c0-8-5-13-15-13h-93Z"/>
+      <path d="M614 6h164v25h-68v83h-28V31h-68z"/>
+      <path d="M821 6h159v24H849v19h119v23H849v18h131v24H821z"/>
+      <path d="m1020 6 63 52-65 56h42l45-39 46 39h42l-66-56 62-52h-42l-42 35-43-35z"/>
+    </g>
+  </defs>
+</svg>
+
+<!-- ============ TOPBAR ============ -->
+<header class="topbar" id="topbar">
+  <a class="brand" href="#top" aria-label="Kortex — início">
+    <svg class="brand-symbol" viewBox="0 0 180 180"><use href="#kx-symbol"/></svg>
+    <svg class="brand-wordmark" viewBox="-8 0 1200 120"><use href="#kx-wordmark"/></svg>
+  </a>
+  <nav class="topnav" aria-label="Navegação principal">
+    <a href="#diferenciais">Como funciona</a>
+    <a href="#filosofia">Filosofia</a>
+    <a href="#prova">Prova</a>
+    <a href="#pecas">Peças</a>
+  </nav>
+  <div class="topbar-right">
+    <button class="theme-toggle" id="themeToggle" aria-label="Alternar tema claro/escuro">
+      <svg viewBox="0 0 24 24" class="icon-sun" aria-hidden="true"><circle cx="12" cy="12" r="4.5" fill="none" stroke="currentColor" stroke-width="1.8"/><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 2.5v2.4M12 19.1v2.4M2.5 12h2.4M19.1 12h2.4M5 5l1.7 1.7M17.3 17.3 19 19M19 5l-1.7 1.7M6.7 17.3 5 19"/></g></svg>
+      <svg viewBox="0 0 24 24" class="icon-moon" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4 8.5 8.5 0 1 0 20 14.5Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+    </button>
+    <a class="btn btn-ghost" href="https://github.com/caiopieri/Kortex" target="_blank" rel="noopener">
+      <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.42 7.42 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+      <span>Star</span>
+    </a>
+    <a class="btn btn-solid" href="#comecar"><span>Entrar na lista</span><em aria-hidden="true">→</em></a>
+  </div>
+</header>
+
+<main id="top">
+
+<!-- ============ HERO ============ -->
+<section class="hero" id="hero">
+  <canvas id="orb" class="hero-orb" aria-hidden="true"></canvas>
+  <div class="hero-fade" aria-hidden="true"></div>
+
+  <div class="hero-inner">
+    <p class="hero-eyebrow mono reveal"><i class="dot dot-live"></i>BUILD IN PUBLIC · MOTOR v0.5 · 333 TESTES VERDES</p>
+    <h1 class="hero-title reveal">De ideia a produto.<br><span class="hero-title-em">Com processo,<br>não vibes.</span></h1>
+    <p class="hero-sub reveal">Kortex é um sistema agêntico open source que transforma intenção em software verificado — roteiros versionados, portões de evidência e custo auditável, rodando na sua máquina.</p>
+    <div class="hero-ctas reveal">
+      <a class="btn btn-solid btn-lg" href="#comecar"><span>Entrar na lista</span><em aria-hidden="true">→</em></a>
+      <a class="btn btn-ghost btn-lg" href="https://github.com/caiopieri/Kortex" target="_blank" rel="noopener">
+        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.42 7.42 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+        <span>Star no GitHub</span>
+      </a>
+    </div>
+    <div class="hero-legend mono reveal">
+      <span class="selo selo-live"><i></i>já roda</span>
+      <span class="selo selo-wip"><i></i>em construção</span>
+      <span class="selo selo-vision"><i></i>visão</span>
+      <span class="legend-note">— nada aqui é apresentado como pronto sem estar.</span>
+    </div>
+  </div>
+
+  <div class="hero-hint mono" aria-hidden="true">o grafo reage ao seu cursor ↗</div>
+</section>
+
+<!-- ============ DIFERENCIAIS ============ -->
+<section class="section" id="diferenciais">
+  <header class="section-head">
+    <p class="kicker mono reveal">// como funciona</p>
+    <h2 class="reveal">O diferencial não é o agente.<br>É o processo em volta dele.</h2>
+    <p class="section-lede reveal">Qualquer um encadeia LLMs. O Kortex cerca cada agente de evidência: nada vira “pronto” sem prova que atravesse um portão.</p>
+  </header>
+
+  <!-- 3 destaques -->
+  <div class="feature-rows">
+    <article class="feature-row reveal">
+      <div class="feature-copy">
+        <span class="selo selo-live mono"><i></i>já roda</span>
+        <h3>Portões de evidência</h3>
+        <p>Nada cruza fronteira sem passar por um portão: teste, crítico, simulador ou aprovação humana. Se a evidência não sustenta, o portão reprova — e o motor escala para um executor mais capaz, sozinho.</p>
+      </div>
+      <div class="feature-visual" aria-hidden="true">
+        <div class="gate-demo" id="gateDemo">
+          <div class="gate-lane">
+            <span class="gate-node mono">executor</span>
+            <span class="gate-track"><i class="gate-pulse"></i></span>
+            <span class="gate-wall mono" id="gateWall">PORTÃO</span>
+            <span class="gate-track gate-track-out"><i class="gate-pulse-out"></i></span>
+            <span class="gate-node mono">merge</span>
+          </div>
+          <p class="gate-log mono" id="gateLog">portao.avaliando…</p>
+        </div>
+      </div>
+    </article>
+
+    <article class="feature-row feature-row-flip reveal">
+      <div class="feature-copy">
+        <span class="selo selo-live mono"><i></i>já roda</span>
+        <h3>Verificação adversarial</h3>
+        <p>Quem constrói não se auto-aprova. Um agente ataca o resultado do outro — revisor ≠ construtor — e por cima disso a máquina bloqueia o merge: lint, tipo, teste, SAST, secrets e build no gate de CI.</p>
+      </div>
+      <div class="feature-visual" aria-hidden="true">
+        <div class="duel-demo">
+          <div class="duel-node"><span class="mono">construtor</span></div>
+          <div class="duel-beam"><i></i><i></i><i></i></div>
+          <div class="duel-node duel-node-adv"><span class="mono">revisor</span></div>
+        </div>
+        <p class="duel-caption mono">revisor ≠ construtor · CI bloqueia, não o agente</p>
+      </div>
+    </article>
+
+    <article class="feature-row reveal">
+      <div class="feature-copy">
+        <span class="selo selo-live mono"><i></i>já roda</span>
+        <h3>Roteiro-como-texto</h3>
+        <p>Workflow é um documento versionado, não fiação fixa. Criar um processo novo = escrever texto. O motor lê o roteiro, posiciona agentes especialistas e executa — com paralelo, escalação e retomada.</p>
+      </div>
+      <div class="feature-visual" aria-hidden="true">
+        <pre class="roteiro-demo mono" id="roteiroDemo"><code></code><span class="caret">▌</span></pre>
+      </div>
+    </article>
+  </div>
+
+  <!-- bento -->
+  <div class="bento">
+    <article class="bento-card reveal"><span class="selo selo-live mono"><i></i>já roda</span><h4>O Motor</h4><p>Orquestrador que roda roteiros com agentes especialistas posicionados — paralelo, escalação, retomada.</p></article>
+    <article class="bento-card reveal"><span class="selo selo-live mono"><i></i>já roda</span><h4>Roteamento por custo</h4><p>Tenta o modelo mais barato que serve. Só escala quando o portão reprova.</p></article>
+    <article class="bento-card reveal"><span class="selo selo-live mono"><i></i>já roda</span><h4>Livro-razão de custo</h4><p>Cada execução tem custo auditável: tokens, tempo, R$ — por run e por modelo.</p></article>
+    <article class="bento-card reveal"><span class="selo selo-live mono"><i></i>já roda</span><h4>Log de eventos</h4><p>Event sourcing com 46 eventos tipados. Mapa vivo e auditoria são leituras do log — fonte única de verdade.</p></article>
+    <article class="bento-card reveal"><span class="selo selo-live mono"><i></i>já roda</span><h4>Durabilidade</h4><p>Processos longos sobrevivem a <code class="mono">kill -9</code> e retomam. Prova medida: 5/5 vs 1/5 sem o motor.</p></article>
+    <article class="bento-card reveal"><span class="selo selo-live mono"><i></i>já roda</span><h4>Registry + MCP</h4><p>Catálogo de capacidades exposto como MCP; agentes acham a ferramenta certa por RAG.</p></article>
+    <article class="bento-card reveal"><span class="selo selo-live mono"><i></i>já roda</span><h4>Provider-agnóstico</h4><p>Troca de modelo por config. Frota de LLMs com fallback — sem coleira de vendor.</p></article>
+    <article class="bento-card reveal"><span class="selo selo-mix mono"><i></i><i class="i2"></i>roda · em construção</span><h4>Curador / flywheel</h4><p>Mede qualidade + custo por modelo e evolui o sistema por dado, não por opinião. Anti-Goodhart.</p></article>
+    <article class="bento-card reveal"><span class="selo selo-live mono"><i></i>já roda</span><h4>Gate de CI de máquina</h4><p>Lint, tipo, teste, SAST, secrets, build. A máquina bloqueia o merge — não o agente que se auto-aprova.</p></article>
+  </div>
+
+  <!-- 4 leis -->
+  <div class="laws reveal" id="leis">
+    <p class="kicker mono">// as 4 leis do kernel</p>
+    <ol class="laws-list">
+      <li><span class="law-n mono">01</span>Nada roda sem roteiro.</li>
+      <li><span class="law-n mono">02</span>Toda ação emite evento.</li>
+      <li><span class="law-n mono">03</span>Nada cruza fronteira sem portão.</li>
+      <li><span class="law-n mono">04</span>A fábrica só se modifica por dentro — gated.</li>
+    </ol>
+  </div>
+</section>
+
+<!-- ============ FILOSOFIA ============ -->
+<section class="section section-alt" id="filosofia">
+  <header class="section-head">
+    <p class="kicker mono reveal">// filosofia</p>
+    <h2 class="reveal">Princípios que não dobram.</h2>
+  </header>
+  <ol class="principles">
+    <li class="reveal"><span class="mono principle-n">P1</span><div><h3>Determinístico &gt; opinião.</h3><p>O que é regra vira script; LLM só onde há julgamento.</p></div></li>
+    <li class="reveal"><span class="mono principle-n">P2</span><div><h3>Qualidade é evidência, não sensação.</h3><p>Se não tem teste que prova, é dívida — e a gente diz.</p></div></li>
+    <li class="reveal"><span class="mono principle-n">P3</span><div><h3>Comprar a commodity, construir a diferenciação.</h3><p>Envolve open source onde dá; constrói só o que é fosso.</p></div></li>
+    <li class="reveal"><span class="mono principle-n">P4</span><div><h3>Local-first. Soberania.</h3><p>A inteligência mora em casa; a nuvem é ferramenta, não coleira. Privacidade por padrão.</p></div></li>
+    <li class="reveal"><span class="mono principle-n">P5</span><div><h3>A fábrica se melhora sozinha — com trava.</h3><p>Auto-evolução só por dado verificado em portão. Anti-collapse.</p></div></li>
+  </ol>
+</section>
+
+<!-- ============ PROVA ============ -->
+<section class="section" id="prova">
+  <header class="section-head">
+    <p class="kicker mono reveal">// prova, não promessa</p>
+    <h2 class="reveal">Construído em público.<br>Números do repositório, não do marketing.</h2>
+  </header>
+
+  <div class="stats reveal">
+    <div class="stat"><strong class="stat-n mono" data-count="333">0</strong><span>testes verdes</span></div>
+    <div class="stat"><strong class="stat-n mono" data-count="46">0</strong><span>eventos tipados</span></div>
+    <div class="stat"><strong class="stat-n mono" data-count="5" data-suffix="/5">0</strong><span>retomadas pós <code class="mono">kill&nbsp;-9</code></span></div>
+    <div class="stat"><strong class="stat-n mono">v0.5</strong><span>motor · fase C</span></div>
+  </div>
+
+  <div class="prova-grid">
+    <div class="terminal reveal" id="terminal">
+      <div class="terminal-bar"><i></i><i></i><i></i><span class="mono">replay · run real do motor</span></div>
+      <div class="terminal-body mono" id="terminalBody" aria-live="off"></div>
+    </div>
+    <div class="prova-cards">
+      <article class="prova-card reveal"><span class="selo selo-mix mono"><i></i><i class="i2"></i>roda · em construção</span><h4>Auditoria dual-frontier</h4><p>O motor passa por dois auditores de fronteira independentes antes de “produção”. Os achados alimentam o Curador.</p></article>
+      <article class="prova-card reveal"><span class="selo selo-live mono"><i></i>já roda</span><h4>100% open source</h4><p>Código aberto do kernel ao painel. Confiança se audita, não se pede.</p></article>
+      <article class="prova-card reveal"><span class="selo selo-live mono"><i></i>já roda</span><h4>Diário de bordo</h4><p>Changelog semanal do que mudou — inclusive o que quebrou. Build in public de verdade.</p></article>
+    </div>
+  </div>
+
+  <blockquote class="meta-quote reveal">
+    <p>“O Kortex se constrói usando o Kortex. O painel foi feito pela fábrica; a auditoria alimenta o curador.”</p>
+    <cite class="mono">— meta-narrativa, verificável no log de eventos</cite>
+  </blockquote>
+</section>
+
+<!-- ============ PEÇAS ============ -->
+<section class="section section-alt" id="pecas">
+  <header class="section-head">
+    <p class="kicker mono reveal">// o ecossistema</p>
+    <h2 class="reveal">Peças que se encaixam.</h2>
+    <p class="section-lede reveal">Um kernel, várias faces. Cada peça fala a mesma língua: roteiros, eventos, portões.</p>
+  </header>
+  <div class="pieces">
+    <article class="piece reveal">
+      <div class="piece-glyph" aria-hidden="true"><svg viewBox="0 0 180 180"><use href="#kx-symbol"/></svg></div>
+      <span class="selo selo-live mono"><i></i>já roda</span>
+      <h3>O Motor</h3><p>O kernel da fábrica: roda roteiros, emite eventos, guarda as fronteiras. Tudo o mais é leitura dele.</p>
+    </article>
+    <article class="piece reveal">
+      <div class="piece-glyph piece-glyph-map" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+      <span class="selo selo-live mono"><i></i>já roda</span>
+      <h3>Painel — Mapa Vivo</h3><p>A fábrica pulsando em tempo real: grafo da run, board de missões, custos por modelo.</p>
+    </article>
+    <article class="piece reveal">
+      <div class="piece-glyph piece-glyph-flywheel" aria-hidden="true"><i></i></div>
+      <span class="selo selo-mix mono"><i></i><i class="i2"></i>roda · em construção</span>
+      <h3>Curador</h3><p>O flywheel: mede cada modelo por qualidade e custo, e evolui a fábrica por dado.</p>
+    </article>
+    <article class="piece reveal">
+      <div class="piece-glyph piece-glyph-jarvis mono" aria-hidden="true">J</div>
+      <span class="selo selo-wip mono"><i></i>em construção</span>
+      <h3>Jarvis</h3><p>O companheiro de comando: você fala a intenção, ele aciona a fábrica e te devolve evidência.</p>
+    </article>
+    <article class="piece reveal">
+      <div class="piece-glyph piece-glyph-monitor mono" aria-hidden="true">◉</div>
+      <span class="selo selo-vision mono"><i></i>visão</span>
+      <h3>Global Monitor</h3><p>Visão de frota: todas as fábricas, todas as runs, um só horizonte.</p>
+    </article>
+    <article class="piece reveal">
+      <div class="piece-glyph piece-glyph-adjutant mono" aria-hidden="true">⌘</div>
+      <span class="selo selo-vision mono"><i></i>visão</span>
+      <h3>Adjutant</h3><p>O oficial de ordens: a interface de comando da sua operação inteira.</p>
+    </article>
+  </div>
+</section>
+
+<!-- ============ GET STARTED ============ -->
+<section class="section cta-final" id="comecar">
+  <div class="cta-inner reveal">
+    <svg class="cta-symbol" viewBox="0 0 180 180" aria-hidden="true"><use href="#kx-symbol"/></svg>
+    <h2>Ajude a construir.</h2>
+    <p class="cta-lede">O Kortex está sendo construído em público. Entre cedo — acompanhe cada portão, cada reprova, cada avanço.</p>
+    <form class="waitlist" id="waitlist" novalidate>
+      <input class="mono" type="email" name="email" placeholder="seu@email.dev" required aria-label="Seu e-mail">
+      <button class="btn btn-solid btn-lg" type="submit"><span>Entrar na lista</span><em aria-hidden="true">→</em></button>
+    </form>
+    <p class="waitlist-msg mono" id="waitlistMsg" role="status"></p>
+    <div class="cta-alt mono">
+      <a href="https://github.com/caiopieri/Kortex" target="_blank" rel="noopener">⭐ star no GitHub</a>
+      <span>·</span>
+      <a href="https://github.com/caiopieri/Kortex" target="_blank" rel="noopener">discussions</a>
+      <span>·</span>
+      <a href="#comecar">newsletter do diário de bordo</a>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- ============ FOOTER ============ -->
+<footer class="footer">
+  <div class="footer-inner">
+    <a class="brand" href="#top" aria-label="Kortex — início">
+      <svg class="brand-symbol" viewBox="0 0 180 180"><use href="#kx-symbol"/></svg>
+      <svg class="brand-wordmark" viewBox="-8 0 1200 120"><use href="#kx-wordmark"/></svg>
+    </a>
+    <p class="footer-meta mono">construído com a própria fábrica · © 2026 Kortex</p>
+    <nav class="footer-nav mono" aria-label="Rodapé">
+      <a href="#diferenciais">como funciona</a>
+      <a href="#prova">prova</a>
+      <a href="https://github.com/caiopieri/Kortex" target="_blank" rel="noopener">github</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
