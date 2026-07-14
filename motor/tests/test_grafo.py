@@ -109,6 +109,28 @@ def roda(tmp_path, roteador, entrada):
     return grafo, config, log, grafo.invoke(entrada, config)
 
 
+def _orcamento_cliente(tmp_path, cliente, kwargs_de=None):
+    class Tentativa:
+        def __init__(self, papel, prompt, tentativa):
+            self.papel, self.prompt, self.tentativa = papel, prompt, tentativa
+
+        def cotar_tentativa(self):
+            return CotacaoTentativa(Decimal("0.01"), "BRL", "teste-v1")
+
+        def tentar_uma_vez(self):
+            kwargs = kwargs_de(self.papel, self.tentativa) if kwargs_de else {}
+            texto = cliente.chamar(self.papel, self.prompt, **kwargs)
+            return ResultadoTentativa(texto, Decimal("0"), "BRL", "teste-uso")
+
+    def fabrica(papel, prompt, tentativa):
+        return [("teste", Tentativa(papel, prompt, tentativa))]
+
+    return {
+        "repositorio_orcamento": RepositorioOrcamento(tmp_path / "orcamento"),
+        "fabrica_tentativas_orcadas": fabrica,
+    }
+
+
 def eventos_de(tmp_path):
     linhas = (tmp_path / "log.jsonl").read_text(encoding="utf-8").strip().splitlines()
     return [json.loads(linha) for linha in linhas]
@@ -682,10 +704,13 @@ def test_revisao_plano_resume_abortar_nao_roda_fanout(tmp_path):
 
 def test_revisao_plano_resume_dict_edita_tier_antes_do_fanout(tmp_path):
     log = LogEventos(tmp_path / "log.jsonl")
-    grafo = construir_grafo(_cliente_roteador(faz_roteador()), log,
-                            checkpointer=InMemorySaver())
+    cliente = _cliente_roteador(faz_roteador())
+    grafo = construir_grafo(
+        cliente, log, checkpointer=InMemorySaver(),
+        **_orcamento_cliente(tmp_path, cliente),
+    )
     config = {"configurable": {"thread_id": "plano-editar"}}
-    res = grafo.invoke({"spec": SPEC}, config)
+    res = grafo.invoke({"spec": SPEC, "run_id": "plano-editar", "thread_id": "plano-editar"}, config)
     assert res["__interrupt__"][0].value["portao"] == "plano"
 
     retomado = grafo.invoke(Command(resume={"pesquisa-alfa": "complexa"}), config)
@@ -726,10 +751,19 @@ def test_subagente_usa_catalogo_por_capacidade(tmp_path):
     capaz.provedor = "capaz"
     log = LogEventos(tmp_path / "log.jsonl")
     cliente = ClienteRoteador(padrao=padrao, catalogo=[(capaz, frozenset({"x"}), 1)], log=log)
-    grafo = construir_grafo(cliente, log, checkpointer=InMemorySaver(),
-                            politica=PoliticaGates(overrides={"plano": "prosseguir"}))
+    grafo = construir_grafo(
+        cliente, log, checkpointer=InMemorySaver(),
+        politica=PoliticaGates(overrides={"plano": "prosseguir"}),
+        **_orcamento_cliente(
+            tmp_path, cliente,
+            lambda papel, _tentativa: {"capacidades": ["x"]} if papel == "executor-capaz" else {},
+        ),
+    )
 
-    resultado = grafo.invoke({"spec": spec}, {"configurable": {"thread_id": "capacidade"}})
+    resultado = grafo.invoke(
+        {"spec": spec, "run_id": "capacidade", "thread_id": "capacidade"},
+        {"configurable": {"thread_id": "capacidade"}},
+    )
 
     assert resultado["resultados"][0]["saida"] == "RESULTADO capacidade"
     assert len(capaz.chamadas) == 1
@@ -813,17 +847,17 @@ def test_executor_chamado_loga_modelo_resolvido_com_roteador(tmp_path):
         catalogo=[(executor, frozenset({"pesquisa"}), 1)],
     )
     log = LogEventos(tmp_path / "log.jsonl")
-    grafo = construir_grafo(cliente, log, checkpointer=InMemorySaver(),
-                            politica=PoliticaGates(overrides={"plano": "prosseguir"}),
-                            repositorio_orcamento=RepositorioOrcamento(tmp_path / "orcamento"),
-                            fabrica_tentativas_orcadas=lambda _p, prompt, _t: [(
-                                "juiz", type("Tentativa", (), {
-                                    "cotar_tentativa": lambda self: CotacaoTentativa(
-                                        Decimal("0.01"), "BRL", "teste-v1"),
-                                    "tentar_uma_vez": lambda self: ResultadoTentativa(
-                                        juiz("planner", prompt), Decimal("0"), "BRL", "teste-uso"),
-                                })(),
-                            )])
+    grafo = construir_grafo(
+        cliente, log, checkpointer=InMemorySaver(),
+        politica=PoliticaGates(overrides={"plano": "prosseguir"}),
+        **_orcamento_cliente(
+            tmp_path, cliente,
+            lambda papel, _tentativa: (
+                {"tier": "simples", "capacidades": ["pesquisa"]}
+                if papel == spec["subagentes"][0]["papel"] else {}
+            ),
+        ),
+    )
 
     grafo.invoke({"missao_texto": "produza algo", "run_id": "modelo-log",
                   "thread_id": "modelo-log"}, {"configurable": {"thread_id": "modelo-log"}})
@@ -862,10 +896,19 @@ def test_executor_chamado_modelo_none_com_cliente_single_sem_identidade(tmp_path
 def test_retry_sem_flag_mantem_tier_declarado_em_todas_as_tentativas(tmp_path):
     cliente = ClienteTierFake(aprovar_na_tentativa=3)
     log = LogEventos(tmp_path / "log.jsonl")
-    grafo = construir_grafo(cliente, log, checkpointer=InMemorySaver(),
-                            politica=PoliticaGates(overrides={"plano": "prosseguir"}))
+    grafo = construir_grafo(
+        cliente, log, checkpointer=InMemorySaver(),
+        politica=PoliticaGates(overrides={"plano": "prosseguir"}),
+        **_orcamento_cliente(
+            tmp_path, cliente,
+            lambda papel, _tentativa: {"tier": "simples"} if papel == "pesquisador" else {},
+        ),
+    )
 
-    resultado = grafo.invoke({"spec": _spec_um_subagente()}, {"configurable": {"thread_id": "tier-inerte"}})
+    resultado = grafo.invoke(
+        {"spec": _spec_um_subagente(), "run_id": "tier-inerte", "thread_id": "tier-inerte"},
+        {"configurable": {"thread_id": "tier-inerte"}},
+    )
 
     assert resultado["resultados"][0]["aprovado"] is True
     assert [tier for papel, tier in cliente.chamadas if papel == "pesquisador"] == ["simples", "simples", "simples"]
@@ -875,11 +918,20 @@ def test_retry_sem_flag_mantem_tier_declarado_em_todas_as_tentativas(tmp_path):
 def test_retry_com_flag_escala_tier_ate_complexa(tmp_path):
     cliente = ClienteTierFake(aprovar_na_tentativa=3)
     log = LogEventos(tmp_path / "log.jsonl")
-    grafo = construir_grafo(cliente, log, checkpointer=InMemorySaver(),
-                            politica=PoliticaGates(overrides={"plano": "prosseguir"}),
-                            escalar_em_retry=True)
+    tiers = {1: "simples", 2: "media", 3: "complexa"}
+    grafo = construir_grafo(
+        cliente, log, checkpointer=InMemorySaver(),
+        politica=PoliticaGates(overrides={"plano": "prosseguir"}), escalar_em_retry=True,
+        **_orcamento_cliente(
+            tmp_path, cliente,
+            lambda papel, tentativa: {"tier": tiers[tentativa]} if papel == "pesquisador" else {},
+        ),
+    )
 
-    resultado = grafo.invoke({"spec": _spec_um_subagente()}, {"configurable": {"thread_id": "tier-escalado"}})
+    resultado = grafo.invoke(
+        {"spec": _spec_um_subagente(), "run_id": "tier-escalado", "thread_id": "tier-escalado"},
+        {"configurable": {"thread_id": "tier-escalado"}},
+    )
 
     assert resultado["resultados"][0]["aprovado"] is True
     assert [tier for papel, tier in cliente.chamadas if papel == "pesquisador"] == ["simples", "media", "complexa"]
@@ -890,11 +942,19 @@ def test_retry_com_flag_escala_tier_ate_complexa(tmp_path):
 def test_retry_com_flag_nao_escala_quando_aprova_na_primeira(tmp_path):
     cliente = ClienteTierFake(aprovar_na_tentativa=1)
     log = LogEventos(tmp_path / "log.jsonl")
-    grafo = construir_grafo(cliente, log, checkpointer=InMemorySaver(),
-                            politica=PoliticaGates(overrides={"plano": "prosseguir"}),
-                            escalar_em_retry=True)
+    grafo = construir_grafo(
+        cliente, log, checkpointer=InMemorySaver(),
+        politica=PoliticaGates(overrides={"plano": "prosseguir"}), escalar_em_retry=True,
+        **_orcamento_cliente(
+            tmp_path, cliente,
+            lambda papel, _tentativa: {"tier": "simples"} if papel == "pesquisador" else {},
+        ),
+    )
 
-    resultado = grafo.invoke({"spec": _spec_um_subagente()}, {"configurable": {"thread_id": "tier-aprovado"}})
+    resultado = grafo.invoke(
+        {"spec": _spec_um_subagente(), "run_id": "tier-aprovado", "thread_id": "tier-aprovado"},
+        {"configurable": {"thread_id": "tier-aprovado"}},
+    )
 
     assert resultado["resultados"][0]["tentativas"] == 1
     assert [tier for papel, tier in cliente.chamadas if papel == "pesquisador"] == ["simples"]

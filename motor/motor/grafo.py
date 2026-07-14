@@ -7,7 +7,7 @@ Topologia (espelha a referência dynamic-workflow-harness, ver memória do proje
                                               (cobertura reprovada → interrupt() ao fundador)
 
 Regras de fronteira (anti-lock-in):
-- planner usa tentativa custeada; demais papéis ainda usam a abstração legada;
+- planner, executor e verifier usam tentativas custeadas;
 - estado serializável; a spec é dado, não código;
 - todo passo emite evento JSONL próprio (painel/auditoria), além do checkpointer.
 """
@@ -377,9 +377,10 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
     workspace_base = Path(workspace_base)
     ferramentas = ferramentas or {}
     command_runner = command_runner if command_runner is not None else DenyCommandRunner()
-    if isinstance(cliente, ClienteStub) and repositorio_orcamento is None:
-        repositorio_orcamento = RepositorioOrcamento(Path(tempfile.mkdtemp(prefix="kortex-stub-")))
-
+    fabrica_stub = None
+    if isinstance(cliente, ClienteStub):
+        if repositorio_orcamento is None:
+            repositorio_orcamento = RepositorioOrcamento(Path(tempfile.mkdtemp(prefix="kortex-stub-")))
         class _TentativaStub:
             def __init__(self, papel: str, prompt: str) -> None:
                 self.papel, self.prompt = papel, prompt
@@ -397,7 +398,9 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         ) -> list[tuple[str, ClienteTentativaCusteada]]:
             return [("stub", _TentativaStub(papel, prompt))]
 
-        fabrica_tentativas_orcadas = _fabricar_stub
+        fabrica_stub = _fabricar_stub
+        if fabrica_tentativas_orcadas is None:
+            fabrica_tentativas_orcadas = _fabricar_stub
     perfil_execucao = "rascunho" if perfil_execucao == "rascunho" else "certificado"
     executaveis_permitidos: set[Path] = set()
     for executavel_bruto in ferramentas_permitidas or []:
@@ -419,24 +422,51 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         fase: str = "spec",
     ) -> str | None:
         thread_id = state.get("thread_id") or (run_id if isinstance(cliente, ClienteStub) else None)
+        return chamar_orcado(
+            run_id, thread_id, Decimal("2.0"), "planner", fase, "planner", prompt, tentativa,
+        )
+
+    def chamar_orcado(
+        run_id: object,
+        thread_id: object,
+        teto: object,
+        papel: str,
+        fase: str,
+        no_id: str,
+        prompt: str,
+        tentativa: int,
+    ) -> str | None:
         if repositorio_orcamento is None:
             raise ErroOrcamento("repositorio de orcamento ausente")
         if fabrica_tentativas_orcadas is None:
             raise ErroOrcamento("fabrica de adaptadores custeados ausente")
-        if not thread_id:
-            raise ErroOrcamento("thread_id ausente")
-        sessao = repositorio_orcamento.sessao(run_id, thread_id, Decimal("2.0"))
-        cadeia = fabrica_tentativas_orcadas("planner", prompt, tentativa)
+        if isinstance(run_id, str) and not isinstance(thread_id, str) and isinstance(cliente, ClienteStub):
+            thread_id = run_id
+        if not isinstance(run_id, str) or not isinstance(thread_id, str):
+            raise ErroOrcamento("identidade da execucao ausente")
+        try:
+            teto_decimal = Decimal(str(teto))
+        except Exception as erro:
+            raise ErroOrcamento("teto de orcamento invalido") from erro
+        sessao = repositorio_orcamento.sessao(run_id, thread_id, teto_decimal)
+        fabrica = fabrica_stub if fabrica_stub is not None and papel != "planner" else fabrica_tentativas_orcadas
+        cadeia = fabrica(papel, prompt, tentativa)
         if not isinstance(cadeia, list) or not cadeia:
             raise ErroOrcamento("adaptador custeado ausente")
         for indice, item in enumerate(cadeia, start=1):
             if not isinstance(item, tuple) or len(item) != 2 or not isinstance(item[0], str):
                 raise ErroOrcamento("adaptador custeado invalido")
             route_id, adaptador = item
-            call_id = f"planner-{fase}-{tentativa}"
+            prompt_id = hashlib.sha256(prompt.encode()).hexdigest()[:16]
+            call_base = f"{run_id}:{thread_id}:{fase}:{no_id}:{tentativa}:{prompt_id}"
+            call_id = (
+                f"planner-{fase}-{tentativa}" if papel == "planner"
+                else f"{fase}-{hashlib.sha256(call_base.encode()).hexdigest()[:32]}"
+            )
             base = f"{run_id}:{thread_id}:{call_id}:{route_id}:{indice}"
+            prefixo = "planner" if papel == "planner" else fase
             identidade = IdentidadeTentativaCusteada(
-                reservation_id=f"planner-{hashlib.sha256(base.encode()).hexdigest()[:32]}",
+                reservation_id=f"{prefixo}-{hashlib.sha256(base.encode()).hexdigest()[:32]}",
                 call_id=call_id,
                 route_id=route_id,
                 attempt=indice,
@@ -591,7 +621,10 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         spec = state["spec"]
         log.evento("paralelo.iniciado", subagentes=[s["id"] for s in spec["subagentes"]])
         workspace = workspace_de(state)
-        return [Send("subagente", {"sub": s, "spec": spec, "workspace": workspace}) for s in spec["subagentes"]]
+        return [Send("subagente", {
+            "sub": s, "spec": spec, "workspace": workspace,
+            "run_id": state.get("run_id"), "thread_id": state.get("thread_id"),
+        }) for s in spec["subagentes"]]
 
     def rota_pos_plano(state: EstadoMotor):
         if state.get("avaliacao", {}).get("abortada"):
@@ -625,12 +658,6 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                 "aprovado": False, "motivo": motivo,
             }]}
 
-        # Guard de independência: o verifier deve evitar o provedor DO executor desta
-        # tarefa (cross-model anti-auto-aprovação). Só quando o cliente sabe rotear.
-        prov_exec = (cliente.provedor_de(sub["papel"], sub.get("tier"), sub.get("ferramentas"),
-                                         capacidades=sub.get("capacidades_requeridas"))
-                     if hasattr(cliente, "provedor_de") else None)
-        kw_verifier = {"evitar": prov_exec} if prov_exec else {}
         tier_atual = sub.get("tier")
         rubrica_txt = "\n".join(f"- {c}" for c in sub["rubrica"])
         feedback, ultima = payload.get("feedback", ""), payload.get("rascunho_anterior")
@@ -681,12 +708,10 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                 feedback=bloco_feedback,
             )
             try:
-                ultima = cliente.chamar(
-                    sub["papel"],
-                    prompt_subagente,
-                    ferramentas=sub.get("ferramentas"),
-                    tier=tier_atual,
-                    capacidades=sub.get("capacidades_requeridas"),
+                ultima = chamar_orcado(
+                    payload.get("run_id"), payload.get("thread_id"),
+                    spec["restricoes"]["teto_custo"], sub["papel"], "executor",
+                    sub["id"], prompt_subagente, tentativa,
                 )
             except Exception:
                 feedback = "falha externa do executor"
@@ -703,15 +728,17 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                 continue
             log.evento("executor.respondeu", executor=sub["id"], tentativa=tentativa)
             try:
-                resposta_verifier = cliente.chamar(
-                    "verifier",
+                resposta_verifier = chamar_orcado(
+                    payload.get("run_id"), payload.get("thread_id"),
+                    spec["restricoes"]["teto_custo"], "verifier", "verifier",
+                    sub["id"],
                     PROMPT_VERIFIER.format(
                         id=sub["id"],
                         objetivo=sub["objetivo"],
                         rubrica="\n".join(f"- {c}" for c in sub["rubrica"]),
                         saida=ultima,
                     ),
-                    **kw_verifier,
+                    tentativa,
                 )
             except Exception:
                 feedback = "falha externa do verifier"
@@ -1043,7 +1070,10 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                     }
                     deps = {d: texto_dependencia(concluidos[d]) for d in dependencias}
                     retorno = subagente(
-                        {"sub": sub, "spec": spec, "deps": deps, "workspace": workspace}
+                        {
+                            "sub": sub, "spec": spec, "deps": deps, "workspace": workspace,
+                            "run_id": state.get("run_id"), "thread_id": state.get("thread_id"),
+                        }
                     )
                     resultado = retorno["resultados"][0]
                 concluidos[sid] = resultado
@@ -1128,7 +1158,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         log.evento("decisao.fundador", portao="cobertura", decisao=str(decisao))
         return decisao
 
-    def preencher_lacunas(spec: dict[str, Any], resultados: list[dict[str, Any]],
+    def preencher_lacunas(state: EstadoMotor, spec: dict[str, Any], resultados: list[dict[str, Any]],
                           workspace: Path,
                           veredito: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         por_id = {s["id"]: s for s in spec["subagentes"]}
@@ -1188,6 +1218,8 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                         "feedback": feedback,
                         "rascunho_anterior": por_id_resultado.get(sid, {}).get("saida"),
                         "workspace": workspace,
+                        "run_id": state.get("run_id"),
+                        "thread_id": state.get("thread_id"),
                     })
                     resultado = retorno["resultados"][0]
                     log.evento("lacuna.preenchida", subagente=sid)
@@ -1221,7 +1253,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                 base = {"resultados": acumulados} if acumulados else {}
                 return {**base, "avaliacao": finalizar_cobertura(veredito, decisao)}
 
-            resultados, novos = preencher_lacunas(spec, resultados, workspace_de(state), veredito)
+            resultados, novos = preencher_lacunas(state, spec, resultados, workspace_de(state), veredito)
             if not novos:
                 decisao = decidir_cobertura(veredito, permitir_preencher=False)
                 base = {"resultados": acumulados} if acumulados else {}

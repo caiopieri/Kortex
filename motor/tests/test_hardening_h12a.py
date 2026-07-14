@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from decimal import Decimal
 from typing import Any, cast
 
 import pytest
@@ -9,6 +10,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from motor.eventos import LogEventos
 from motor.grafo import construir_grafo
 from motor.modelos import ClienteModelo, ClienteRoteador, ClienteStub
+from motor.orcamento import CotacaoTentativa, RepositorioOrcamento, ResultadoTentativa
 from motor.politica import PoliticaGates
 
 
@@ -193,6 +195,19 @@ def test_h12a_grafo_executa_somente_rota_que_cobre_todas_capacidades(
             catalogo=catalogo,
             log=log,
         )
+
+        class Tentativa:
+            def __init__(self, papel: str, prompt: str) -> None:
+                self.papel, self.prompt = papel, prompt
+
+            def cotar_tentativa(self) -> CotacaoTentativa:
+                return CotacaoTentativa(Decimal("0.10"), "BRL", "teste-v1")
+
+            def tentar_uma_vez(self) -> ResultadoTentativa:
+                kwargs = {"capacidades": ["codigo", "pesquisa"]} if self.papel != "verifier" else {}
+                texto = roteador.chamar(self.papel, self.prompt, **kwargs)
+                return ResultadoTentativa(texto, Decimal("0.01"), "BRL", "teste-uso")
+
         grafo = construir_grafo(
             roteador,
             log,
@@ -200,10 +215,15 @@ def test_h12a_grafo_executa_somente_rota_que_cobre_todas_capacidades(
             politica=PoliticaGates(
                 overrides={"plano": "prosseguir", "cobertura": "prosseguir"}
             ),
+            repositorio_orcamento=RepositorioOrcamento(tmp_path / "orcamento"),
+            fabrica_tentativas_orcadas=lambda papel, prompt, _tentativa: [
+                ("teste", Tentativa(papel, prompt))
+            ],
         )
 
         resultado = grafo.invoke(
-            {"spec": _spec_h12a()}, {"configurable": {"thread_id": "h12a"}}
+            {"spec": _spec_h12a(), "run_id": "h12a", "thread_id": "h12a"},
+            {"configurable": {"thread_id": "h12a"}},
         )
 
         assert resultado["resultados"][0]["aprovado"] is rota_valida

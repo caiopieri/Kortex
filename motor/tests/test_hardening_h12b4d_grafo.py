@@ -1,0 +1,124 @@
+import json
+import sqlite3
+from decimal import Decimal
+from pathlib import Path
+
+from motor.eventos import LogEventos
+from motor.grafo import construir_grafo
+from motor.orcamento import CotacaoTentativa, RepositorioOrcamento, ResultadoTentativa
+from motor.politica import PoliticaGates
+
+
+BASE_SPEC = json.loads(
+    (Path(__file__).parent.parent / "exemplos" / "missao-pesquisa.json").read_text()
+)
+
+
+class _Tentativa:
+    def __init__(self, eventos, texto, maximo=Decimal("0.10"), falhar=False):
+        self.eventos, self.texto, self.maximo, self.falhar = eventos, texto, maximo, falhar
+
+    def cotar_tentativa(self):
+        return CotacaoTentativa(self.maximo, "BRL", "preco-v1")
+
+    def tentar_uma_vez(self):
+        self.eventos.append("efeito")
+        if self.falhar:
+            raise RuntimeError("resultado ambiguo")
+        return ResultadoTentativa(self.texto, Decimal("0.01"), "BRL", "usage-1")
+
+
+def _spec(*, quantidade=1, teto=2.0, tentativas=1):
+    spec = json.loads(json.dumps(BASE_SPEC))
+    spec["subagentes"] = spec["subagentes"][:quantidade]
+    spec["restricoes"]["teto_custo"] = teto
+    spec["restricoes"]["max_tentativas"] = tentativas
+    return spec
+
+
+def _invocar(tmp_path, spec, fabrica):
+    repo = RepositorioOrcamento(tmp_path / "runs")
+
+    class Legado:
+        def chamar(self, papel, _prompt, **_kwargs):
+            if papel == "evaluator":
+                return '{"aprovado": true, "lacunas": [], "nos_a_refazer": []}'
+            if papel == "synthesizer":
+                return "final"
+            raise AssertionError(f"chamada legada proibida: {papel}")
+
+    grafo = construir_grafo(
+        Legado(),
+        LogEventos(tmp_path / "eventos.jsonl"),
+        politica=PoliticaGates(overrides={"plano": "prosseguir", "cobertura": "prosseguir"}),
+        repositorio_orcamento=repo,
+        fabrica_tentativas_orcadas=fabrica,
+    )
+    resultado = grafo.invoke({
+        "spec": spec, "run_id": "run-1", "thread_id": "thread-1",
+    })
+    return repo, resultado
+
+
+def test_orcamento_insuficiente_impede_efeito_do_executor(tmp_path):
+    efeitos = []
+
+    def fabrica(_papel, _prompt, _tentativa):
+        return [("rota", _Tentativa(efeitos, "saida", Decimal("0.11")))]
+
+    _, resultado = _invocar(tmp_path, _spec(teto=0.10), fabrica)
+
+    assert efeitos == []
+    assert resultado["resultados"][0]["aprovado"] is False
+
+
+def test_fan_out_usa_identidades_unicas_por_no(tmp_path):
+    efeitos = []
+
+    def fabrica(papel, _prompt, _tentativa):
+        texto = '{"aprovado": true, "motivo": "ok"}' if papel == "verifier" else "saida"
+        return [("rota", _Tentativa(efeitos, texto))]
+
+    repo, _ = _invocar(tmp_path, _spec(quantidade=2), fabrica)
+    with sqlite3.connect(repo.caminho("run-1")) as con:
+        linhas = con.execute(
+            "SELECT reservation_id,call_id FROM budget_reservation WHERE route_id='rota'"
+        ).fetchall()
+
+    assert len(linhas) == 4
+    assert len({linha[0] for linha in linhas}) == 4
+    assert len({linha[1] for linha in linhas}) == 4
+
+
+def test_verifier_faz_reserva_separada_do_executor(tmp_path):
+    efeitos = []
+
+    def fabrica(papel, _prompt, _tentativa):
+        texto = '{"aprovado": true, "motivo": "ok"}' if papel == "verifier" else "saida"
+        return [("rota", _Tentativa(efeitos, texto))]
+
+    repo, resultado = _invocar(tmp_path, _spec(), fabrica)
+    with sqlite3.connect(repo.caminho("run-1")) as con:
+        fases = [linha[0].split("-", 1)[0] for linha in con.execute(
+            "SELECT call_id FROM budget_reservation ORDER BY rowid"
+        )]
+
+    assert fases == ["executor", "verifier"]
+    assert resultado["resultados"][0]["aprovado"] is True
+
+
+def test_erro_ambiguo_invalida_sessao_e_nao_chega_ao_verifier_ou_retry(tmp_path):
+    efeitos, papeis = [], []
+
+    def fabrica(papel, _prompt, _tentativa):
+        papeis.append(papel)
+        return [("rota", _Tentativa(efeitos, "saida", falhar=papel != "verifier"))]
+
+    repo, resultado = _invocar(tmp_path, _spec(tentativas=2), fabrica)
+    with sqlite3.connect(repo.caminho("run-1")) as con:
+        status = con.execute("SELECT status FROM budget_session").fetchone()[0]
+
+    assert efeitos == ["efeito"]
+    assert "verifier" not in papeis
+    assert status == "INVALIDATED"
+    assert resultado["resultados"][0]["aprovado"] is False

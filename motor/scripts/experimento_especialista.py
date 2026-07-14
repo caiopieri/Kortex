@@ -8,6 +8,7 @@ import json
 import sys
 import tempfile
 import time
+from decimal import Decimal
 from math import ceil
 from pathlib import Path
 from typing import Any, Callable, cast
@@ -25,6 +26,11 @@ from motor.curador import analisar  # noqa: E402
 from motor.eventos import LogEventos  # noqa: E402
 from motor.grafo import construir_grafo  # noqa: E402
 from motor.modelos import ClienteModelo  # noqa: E402
+from motor.orcamento import (  # noqa: E402
+    CotacaoTentativa,
+    RepositorioOrcamento,
+    ResultadoTentativa,
+)
 from motor.politica import PoliticaGates  # noqa: E402
 from motor.spec import WorkflowSpec  # noqa: E402
 from scripts.experimento_rag import ClienteMetricaDeterministica  # noqa: E402
@@ -93,10 +99,32 @@ def executar(spec: dict[str, Any], factory: Callable[[], Any], log_path: Path, w
     log, inicio = LogEventos(log_path), time.perf_counter()
     try:
         cliente = cast(ClienteModelo, ClienteMetricaDeterministica(ClienteUsoEstimado(factory(), log)))
-        grafo = construir_grafo(cliente, log, checkpointer=InMemorySaver(),
-                                politica=PoliticaGates(overrides={"plano": "prosseguir", "cobertura": "prosseguir"}),
-                                workspace_base=workspace)
-        resultado = grafo.invoke({"spec": spec}, {"configurable": {"thread_id": log_path.stem}})
+
+        class Tentativa:
+            def __init__(self, papel: str, prompt: str) -> None:
+                self.papel, self.prompt = papel, prompt
+
+            def cotar_tentativa(self) -> CotacaoTentativa:
+                return CotacaoTentativa(Decimal("0.10"), "BRL", "experimento-v1")
+
+            def tentar_uma_vez(self) -> ResultadoTentativa:
+                texto = cliente.chamar(self.papel, self.prompt)
+                return ResultadoTentativa(texto, Decimal("0.000001"), "BRL", "estimativa-v1")
+
+        grafo = construir_grafo(
+            cliente, log, checkpointer=InMemorySaver(),
+            politica=PoliticaGates(overrides={"plano": "prosseguir", "cobertura": "prosseguir"}),
+            workspace_base=workspace,
+            repositorio_orcamento=RepositorioOrcamento(workspace / "orcamento"),
+            fabrica_tentativas_orcadas=lambda papel, prompt, _tentativa: [
+                ("experimento", Tentativa(papel, prompt))
+            ],
+        )
+        identidade = log_path.stem
+        resultado = grafo.invoke(
+            {"spec": spec, "run_id": identidade, "thread_id": identidade},
+            {"configurable": {"thread_id": identidade}},
+        )
     finally:
         latencia = round(time.perf_counter() - inicio, 3)
         log.fechar()
