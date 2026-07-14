@@ -11,8 +11,10 @@ from .orcamento import CotacaoTentativa, ErroOrcamento, ResultadoTentativa
 
 
 MODELO = "gpt-5-2025-08-07"
-PRICING_VERSION = "openai-standard-2025-08-07"
-PRICING_SOURCE = "https://openai.com/api/pricing/"
+MAX_INPUT_TOKENS = 400_000
+MAX_OUTPUT_TOKENS = 128_000
+PRICING_VERSION = "openai-gpt5-standard-verified-2026-07-14"
+PRICING_SOURCE = "https://developers.openai.com/api/docs/models/gpt-5"
 _INPUT_USD = Decimal("1.25") / Decimal(1_000_000)
 _CACHED_USD = Decimal("0.125") / Decimal(1_000_000)
 _OUTPUT_USD = Decimal("10") / Decimal(1_000_000)
@@ -24,6 +26,13 @@ class SnapshotFX:
     versao: str
     capturado_em: int
     cotacao_venda: Decimal
+
+
+@dataclass(frozen=True)
+class SnapshotPricing:
+    versao: str
+    capturado_em: int
+    fonte: str
 
 
 RespostaHTTP = tuple[int, Mapping[str, str], bytes]
@@ -57,22 +66,35 @@ class ClienteOpenAICusteado:
 
     def __init__(
         self, *, api_key: str, prompt: str, max_input_tokens: int,
-        max_completion_tokens: int, fx: SnapshotFX, agora: int, fx_max_age_s: int,
+        max_completion_tokens: int, fx: SnapshotFX, pricing: SnapshotPricing,
+        agora: int, fx_max_age_s: int, pricing_max_age_s: int,
         margem: Decimal, timeout: int, transporte: TransporteHTTP = _http_real,
     ) -> None:
         if not isinstance(api_key, str) or not api_key or not isinstance(prompt, str) or not prompt:
             raise ErroOrcamento("entrada OpenAI invalida")
         self.max_input_tokens = _inteiro(max_input_tokens, "max_input_tokens")
         self.max_completion_tokens = _inteiro(max_completion_tokens, "max_completion_tokens")
-        if self.max_input_tokens == 0 or self.max_completion_tokens == 0:
+        if (self.max_input_tokens != MAX_INPUT_TOKENS
+                or self.max_completion_tokens == 0
+                or self.max_completion_tokens > MAX_OUTPUT_TOKENS):
             raise ErroOrcamento("limites de token invalidos")
-        if type(agora) is not int or type(fx_max_age_s) is not int or fx_max_age_s <= 0:
-            raise ErroOrcamento("janela FX invalida")
+        if len(prompt.encode("utf-8")) > self.max_input_tokens:
+            raise ErroOrcamento("prompt excede limite conservador")
+        if (type(agora) is not int or type(fx_max_age_s) is not int or fx_max_age_s <= 0
+                or type(pricing_max_age_s) is not int or pricing_max_age_s <= 0):
+            raise ErroOrcamento("janela de snapshot invalida")
         if type(fx) is not SnapshotFX or not fx.versao or type(fx.capturado_em) is not int:
             raise ErroOrcamento("snapshot FX invalido")
         if fx.capturado_em > agora or agora - fx.capturado_em > fx_max_age_s:
             raise ErroOrcamento("snapshot FX stale")
-        self.fx, self.margem = fx, _decimal_positivo(margem, "margem")
+        if (type(pricing) is not SnapshotPricing
+                or pricing.versao != PRICING_VERSION or pricing.fonte != PRICING_SOURCE
+                or type(pricing.capturado_em) is not int):
+            raise ErroOrcamento("snapshot pricing invalido")
+        if pricing.capturado_em > agora or agora - pricing.capturado_em > pricing_max_age_s:
+            raise ErroOrcamento("snapshot pricing stale")
+        self.fx, self.pricing = fx, pricing
+        self.margem = _decimal_positivo(margem, "margem")
         _decimal_positivo(fx.cotacao_venda, "cotacaoVenda")
         if self.margem < 1:
             raise ErroOrcamento("margem subestima custo")
@@ -89,7 +111,10 @@ class ClienteOpenAICusteado:
 
     def cotar_tentativa(self) -> CotacaoTentativa:
         maximo = self._brl(self.max_input_tokens, 0, self.max_completion_tokens, margem=True)
-        versao = f"{PRICING_VERSION}+fx:{self.fx.versao}+margin:{self.margem}"
+        versao = (
+            f"{self.pricing.versao}@{self.pricing.capturado_em}"
+            f"+fx:{self.fx.versao}+margin:{self.margem}"
+        )
         return CotacaoTentativa(maximo, "BRL", versao)
 
     def tentar_uma_vez(self) -> ResultadoTentativa:
@@ -120,6 +145,8 @@ class ClienteOpenAICusteado:
             cached = _inteiro(detalhes.get("cached_tokens", 0), "cached_tokens")
             if total != entrada + saida or cached > entrada:
                 raise ErroOrcamento("usage inconsistente")
+            if entrada > self.max_input_tokens or saida > self.max_completion_tokens:
+                raise ErroOrcamento("usage excede limites reservados")
             texto = cast(dict[str, object], cast(list[object], resposta["choices"])[0])["message"]
             conteudo = cast(dict[str, object], texto)["content"]
             request_id = next((v for k, v in headers.items() if k.lower() == "x-request-id"), None)

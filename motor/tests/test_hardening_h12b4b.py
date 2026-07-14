@@ -5,7 +5,10 @@ from typing import Any
 import pytest
 
 from motor.modelos import ClienteRoteador, ClienteStub
-from motor.openai_orcado import ClienteOpenAICusteado, MODELO, SnapshotFX
+from motor.openai_orcado import (
+    MAX_INPUT_TOKENS, PRICING_SOURCE, PRICING_VERSION, ClienteOpenAICusteado, MODELO,
+    SnapshotFX, SnapshotPricing,
+)
 from motor.orcamento import (
     CotacaoTentativa,
     ErroOrcamento,
@@ -23,10 +26,11 @@ def _identidade(nome: str, tentativa: int = 1) -> IdentidadeTentativaCusteada:
 
 def _openai(prompt: str, transporte):
     return ClienteOpenAICusteado(
-        api_key="segredo", prompt=prompt, max_input_tokens=100,
+        api_key="segredo", prompt=prompt, max_input_tokens=MAX_INPUT_TOKENS,
         max_completion_tokens=20,
         fx=SnapshotFX("fx-1", 100, Decimal("5")), agora=100,
-        fx_max_age_s=60, margem=Decimal("1.2"), timeout=10,
+        pricing=SnapshotPricing(PRICING_VERSION, 100, PRICING_SOURCE),
+        fx_max_age_s=60, pricing_max_age_s=60, margem=Decimal("1.2"), timeout=10,
         transporte=transporte,
     )
 
@@ -37,11 +41,11 @@ def _roteador() -> ClienteRoteador:
 
 def test_callsite_openai_reserva_antes_do_post_e_reconcilia_usage(tmp_path: Path) -> None:
     repo = RepositorioOrcamento(tmp_path)
-    sessao = repo.sessao("run-1", "thread-1", Decimal("1"))
+    sessao = repo.sessao("run-1", "thread-1", Decimal("10"))
     observado: list[Decimal] = []
 
     def transporte(_url, _corpo, _headers, _timeout):
-        observado.append(repo.sessao("run-1", "thread-1", Decimal("1")).reservado)
+        observado.append(repo.sessao("run-1", "thread-1", Decimal("10")).reservado)
         corpo = (
             '{"model":"%s","choices":[{"message":{"content":"ok"}}],'
             '"usage":{"prompt_tokens":10,"completion_tokens":2,"total_tokens":12}}'
@@ -55,7 +59,7 @@ def test_callsite_openai_reserva_antes_do_post_e_reconcilia_usage(tmp_path: Path
 
     assert resposta == "ok"
     assert observado and observado[0] > 0
-    final = repo.sessao("run-1", "thread-1", Decimal("1"))
+    final = repo.sessao("run-1", "thread-1", Decimal("10"))
     assert final.reservado == 0
     assert final.gasto > 0
 
@@ -124,7 +128,7 @@ def test_fallback_valido_reconcilia_cada_tentativa_com_identidade_propria(tmp_pa
 
 def test_erro_ambiguo_invalida_run_e_impede_fallback(tmp_path: Path) -> None:
     repo = RepositorioOrcamento(tmp_path)
-    sessao = repo.sessao("run-4", "thread-4", Decimal("1"))
+    sessao = repo.sessao("run-4", "thread-4", Decimal("10"))
     fallback = _FakeCusteado("nao-deve-rodar")
 
     def ambiguo(*_args):
@@ -135,7 +139,7 @@ def test_erro_ambiguo_invalida_run_e_impede_fallback(tmp_path: Path) -> None:
         (_identidade("fallback"), fallback),
     ]) is None
     assert fallback.chamadas == 0
-    assert repo.sessao("run-4", "thread-4", Decimal("1")).status == "INVALIDATED"
+    assert repo.sessao("run-4", "thread-4", Decimal("10")).status == "INVALIDATED"
 
 
 def test_config_invalida_falha_antes_de_qualquer_adaptador(tmp_path: Path) -> None:
