@@ -88,7 +88,10 @@ def test_duas_reconciliacoes_nao_reusam_identidade_executor_verifier(tmp_path):
                 if avaliacoes <= 2 else '{"aprovado": true, "lacunas": [], "nos_a_refazer": []}'
             )
         else:
-            texto = '{"aprovado": true, "motivo": "ok"}' if papel == "verifier" else "saida"
+            texto = (
+                '{"aprovado": true, "motivo": "ok"}' if papel == "verifier"
+                else "final" if papel == "synthesizer" else "saida"
+            )
         return [RotaTentativaCusteada(
             f"rota-{papel}", f"provedor-{papel}", Tentativa(papel, texto),
         )]

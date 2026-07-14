@@ -7,7 +7,7 @@ Topologia (espelha a referência dynamic-workflow-harness, ver memória do proje
                                   (preencher → reconciliar → avaliar; ou interrupt() ao fundador)
 
 Regras de fronteira (anti-lock-in):
-- planner, executor, verifier e evaluator usam tentativas custeadas;
+- planner, executor, verifier, evaluator e synthesizer usam tentativas custeadas;
 - estado serializável; a spec é dado, não código;
 - todo passo emite evento JSONL próprio (painel/auditoria), além do checkpointer.
 """
@@ -1350,13 +1350,32 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         log.evento("executor.chamado", executor="synthesizer",
                    modelo=_descricao_modelo("synthesizer"),
                    **_template_evento(spec))
-        resposta = cliente.chamar("synthesizer", PROMPT_SYNTHESIZER.format(
-            missao_objetivo=spec["missao"]["objetivo"],
-            instrucao=spec["sintese"]["instrucao"], formato=spec["sintese"]["formato"],
-            resultados=json.dumps(
-                [r for r in state["resultados"] if r["aprovado"]], ensure_ascii=False,
-            ),
-        )) or "(synthesizer não respondeu)"
+        try:
+            resposta_orcada = chamar_orcado(
+                state.get("run_id"), state.get("thread_id"), spec["restricoes"]["teto_custo"],
+                "synthesizer", "synthesizer", "synthesizer",
+                PROMPT_SYNTHESIZER.format(
+                    missao_objetivo=spec["missao"]["objetivo"],
+                    instrucao=spec["sintese"]["instrucao"], formato=spec["sintese"]["formato"],
+                    resultados=json.dumps(
+                        [r for r in state["resultados"] if r["aprovado"]], ensure_ascii=False,
+                    ),
+                ),
+                1,
+            )
+        except ErroOrcamento:
+            resposta_orcada = None
+        if resposta_orcada is None:
+            log.evento(
+                "executor.erro", executor="synthesizer",
+                motivo="orcamento indisponivel", tentativa=1,
+            )
+            log.evento("tarefa.abortada", motivo="synthesizer orcado indisponivel")
+            return {"avaliacao": {
+                **state.get("avaliacao", {}), "aprovado": False, "abortada": True,
+                "motivo": "synthesizer orcado indisponivel",
+            }}
+        resposta = resposta_orcada.texto
         log.evento("tarefa.concluida", missao=spec["missao"]["id"])
         return {"resposta_final": resposta}
 

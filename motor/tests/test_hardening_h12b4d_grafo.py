@@ -82,20 +82,25 @@ def test_orcamento_insuficiente_impede_efeito_do_executor(tmp_path):
     assert resultado["resultados"][0]["aprovado"] is False
 
 
-@pytest.mark.parametrize(("modo", "efeitos_esperados"), [("teto", 2), ("ambiguo", 3)])
-def test_evaluator_falha_fechado_sem_sintese(tmp_path, modo, efeitos_esperados):
+@pytest.mark.parametrize(
+    ("papel_alvo", "modo", "efeitos_esperados"),
+    [("evaluator", "teto", 2), ("evaluator", "ambiguo", 3),
+     ("synthesizer", "teto", 3), ("synthesizer", "ambiguo", 4)],
+)
+def test_fase_final_falha_fechado_sem_sintese(tmp_path, papel_alvo, modo, efeitos_esperados):
     efeitos = []
 
     def fabrica(papel, _prompt, _tentativa, _requisitos):
         textos = {
             "verifier": '{"aprovado": true, "motivo": "ok"}',
             "evaluator": '{"aprovado": true, "lacunas": [], "nos_a_refazer": []}',
+            "synthesizer": "final",
         }
         return [RotaTentativaCusteada(
             f"rota-{papel}", f"provedor-{papel}", _Tentativa(
                 efeitos, textos.get(papel, "saida"),
-                maximo=Decimal("3") if modo == "teto" and papel == "evaluator" else Decimal(".1"),
-                falhar=modo == "ambiguo" and papel == "evaluator",
+                maximo=Decimal("3") if modo == "teto" and papel == papel_alvo else Decimal(".1"),
+                falhar=modo == "ambiguo" and papel == papel_alvo,
             ),
         )]
 
@@ -125,9 +130,9 @@ def test_fan_out_usa_identidades_unicas_por_no(tmp_path):
             "SELECT reservation_id,call_id FROM budget_reservation"
         ).fetchall()
 
-    assert len(linhas) == 5
-    assert len({linha[0] for linha in linhas}) == 5
-    assert len({linha[1] for linha in linhas}) == 5
+    assert len(linhas) == 6
+    assert len({linha[0] for linha in linhas}) == 6
+    assert len({linha[1] for linha in linhas}) == 6
 
 
 def test_verifier_faz_reserva_separada_do_executor(tmp_path):
@@ -250,5 +255,5 @@ def test_fallback_informa_rota_efetiva_e_verifier_nao_autoavalia(tmp_path):
         "spec": spec, "run_id": "run-requisitos", "thread_id": "thread-requisitos",
     })
 
-    assert efeitos == ["executor-a", "executor-b", "verifier-c", "evaluator"]
+    assert efeitos == ["executor-a", "executor-b", "verifier-c", "evaluator", "synthesizer"]
     assert resultado["resultados"][0]["aprovado"] is True
