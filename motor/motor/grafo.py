@@ -2,12 +2,12 @@
 
 Topologia (espelha a referência dynamic-workflow-harness, ver memória do projeto):
 
-    START → planner → revisar_plano → [fan-out: subagente × N] → avaliar → sintetizar → END
+    START → planner → revisar_plano → [fan-out: subagente × N] → avaliar → decidir → sintetizar
                           (attempt → verifier → commit, retry ≤ max_tentativas)
-                                              (cobertura reprovada → interrupt() ao fundador)
+                                  (preencher → reconciliar → avaliar; ou interrupt() ao fundador)
 
 Regras de fronteira (anti-lock-in):
-- planner, executor e verifier usam tentativas custeadas;
+- planner, executor, verifier e evaluator usam tentativas custeadas;
 - estado serializável; a spec é dado, não código;
 - todo passo emite evento JSONL próprio (painel/auditoria), além do checkpointer.
 """
@@ -76,6 +76,9 @@ class EstadoMotor(TypedDict, total=False):
     resultados: Annotated[list[dict[str, Any]], mesclar_resultados]
     avaliacao: dict[str, Any]
     resposta_final: str
+    rodada_reconciliacao: int
+    preenchimento_vazio: bool
+    decisao_cobertura: str
 
 
 class _VereditoVerifier(BaseModel):
@@ -1131,7 +1134,10 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
             return [resolver_refs_artefato(item, concluidos) for item in valor]
         return valor
 
-    def avaliar_cobertura(spec: dict[str, Any], resultados: list[dict[str, Any]]) -> dict[str, Any]:
+    def avaliar_cobertura(
+        state: EstadoMotor, resultados: list[dict[str, Any]], ordinal: int,
+    ) -> dict[str, Any]:
+        spec = state["spec"]
         reprovados = [r["id"] for r in resultados if not r["aprovado"]]
         refazer_reprovados = [
             str(r.get("refazer") or r["id"])
@@ -1141,11 +1147,19 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         log.evento("executor.chamado", executor="global_evaluator",
                    modelo=_descricao_modelo("evaluator"),
                    **_template_evento(spec))
-        bruto_veredito = extrai_json(cliente.chamar("evaluator", PROMPT_EVALUATOR.format(
-            missao_objetivo=spec["missao"]["objetivo"],
-            criterios="\n".join(f"- {c}" for c in spec["missao"]["criterios_cobertura"]),
-            resultados=json.dumps(resultados, ensure_ascii=False),
-        )) or "")
+        resposta = chamar_orcado(
+            state.get("run_id"), state.get("thread_id"), spec["restricoes"]["teto_custo"],
+            "evaluator", "evaluator", "global_evaluator",
+            PROMPT_EVALUATOR.format(
+                missao_objetivo=spec["missao"]["objetivo"],
+                criterios="\n".join(f"- {c}" for c in spec["missao"]["criterios_cobertura"]),
+                resultados=json.dumps(resultados, ensure_ascii=False),
+            ),
+            ordinal,
+        )
+        if resposta is None:
+            raise ErroOrcamento("evaluator orcado indisponivel")
+        bruto_veredito = extrai_json(resposta.texto)
         try:
             tipado = _VereditoEvaluator.model_validate(bruto_veredito)
         except ValidationError:
@@ -1264,39 +1278,68 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         return {**veredito, "abortada": True}
 
     def avaliar(state: EstadoMotor) -> dict:
-        spec, resultados = state["spec"], state["resultados"]
-        log.evento("paralelo.concluido", commitados=len(resultados))
-        veredito = avaliar_cobertura(spec, resultados)
-        acumulados: list[dict[str, Any]] = []
-        rodada = 0
-
-        while veredito["aprovado"] is False:
-            log.evento("portao.reprovado", portao="cobertura", lacunas=veredito.get("lacunas", []))
-            permitir = rodada < max_rodadas_reconciliacao
-            if not permitir:
-                log.evento("reconciliacao.esgotada", rodadas=rodada)
-            decisao = decidir_cobertura(veredito, permitir_preencher=permitir)
-            if not (permitir and _decisao_texto(decisao) == "preencher"):
-                base = {"resultados": acumulados} if acumulados else {}
-                return {**base, "avaliacao": finalizar_cobertura(veredito, decisao)}
-
-            resultados, novos = preencher_lacunas(state, spec, resultados, workspace_de(state), veredito)
-            if not novos:
-                decisao = decidir_cobertura(veredito, permitir_preencher=False)
-                base = {"resultados": acumulados} if acumulados else {}
-                return {**base, "avaliacao": finalizar_cobertura(veredito, decisao)}
-
-            acumulados = mesclar_resultados(acumulados, novos)
-            rodada += 1
-            veredito = avaliar_cobertura(spec, resultados)
-
-        log.evento("portao.aprovado", portao="cobertura")
-        if acumulados:
-            return {"resultados": acumulados, "avaliacao": veredito}
-        return {"avaliacao": veredito}
+        resultados = state["resultados"]
+        rodada = state.get("rodada_reconciliacao", 0)
+        if rodada == 0:
+            log.evento("paralelo.concluido", commitados=len(resultados))
+        try:
+            veredito = avaliar_cobertura(state, resultados, rodada + 1)
+        except ErroOrcamento:
+            log.evento(
+                "executor.erro", executor="global_evaluator",
+                motivo="orcamento indisponivel", tentativa=rodada + 1,
+            )
+            log.evento("tarefa.abortada", motivo="evaluator orcado indisponivel")
+            return {"avaliacao": {
+                "aprovado": False, "abortada": True,
+                "lacunas": ["evaluator orcado indisponivel"], "nos_a_refazer": [],
+            }}
+        if veredito["aprovado"]:
+            log.evento("portao.aprovado", portao="cobertura")
+        return {"avaliacao": veredito, "preenchimento_vazio": False}
 
     def rota_pos_avaliacao(state: EstadoMotor):
+        if state["avaliacao"].get("abortada"):
+            return END
+        return "sintetizar" if state["avaliacao"].get("aprovado") else "decidir_cobertura"
+
+    def decidir_cobertura_node(state: EstadoMotor) -> dict[str, Any]:
+        veredito = state["avaliacao"]
+        rodada = state.get("rodada_reconciliacao", 0)
+        log.evento("portao.reprovado", portao="cobertura", lacunas=veredito.get("lacunas", []))
+        limite_esgotado = rodada >= max_rodadas_reconciliacao
+        permitir = not limite_esgotado and not state.get("preenchimento_vazio", False)
+        if limite_esgotado:
+            log.evento("reconciliacao.esgotada", rodadas=rodada)
+        decisao = decidir_cobertura(veredito, permitir_preencher=permitir)
+        texto = _decisao_texto(decisao) or "abortar"
+        if permitir and texto == "preencher":
+            return {"decisao_cobertura": texto}
+        return {
+            "decisao_cobertura": texto,
+            "avaliacao": finalizar_cobertura(veredito, decisao),
+        }
+
+    def rota_pos_decisao(state: EstadoMotor):
+        if state.get("decisao_cobertura") == "preencher":
+            return "preencher_lacunas"
         return END if state["avaliacao"].get("abortada") else "sintetizar"
+
+    def preencher_lacunas_node(state: EstadoMotor) -> dict[str, Any]:
+        _resultados, novos = preencher_lacunas(
+            state, state["spec"], state["resultados"], workspace_de(state), state["avaliacao"],
+        )
+        if not novos:
+            return {"preenchimento_vazio": True, "decisao_cobertura": ""}
+        return {
+            "resultados": novos,
+            "rodada_reconciliacao": state.get("rodada_reconciliacao", 0) + 1,
+            "preenchimento_vazio": False,
+            "decisao_cobertura": "",
+        }
+
+    def rota_pos_preenchimento(state: EstadoMotor):
+        return "decidir_cobertura" if state.get("preenchimento_vazio") else "avaliar"
 
     def sintetizar(state: EstadoMotor) -> dict:
         spec = state["spec"]
@@ -1306,7 +1349,9 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         resposta = cliente.chamar("synthesizer", PROMPT_SYNTHESIZER.format(
             missao_objetivo=spec["missao"]["objetivo"],
             instrucao=spec["sintese"]["instrucao"], formato=spec["sintese"]["formato"],
-            resultados=json.dumps([r for r in state["resultados"] if r["aprovado"]], ensure_ascii=False),
+            resultados=json.dumps(
+                [r for r in state["resultados"] if r["aprovado"]], ensure_ascii=False,
+            ),
         )) or "(synthesizer não respondeu)"
         log.evento("tarefa.concluida", missao=spec["missao"]["id"])
         return {"resposta_final": resposta}
@@ -1317,12 +1362,20 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
     g.add_node("subagente", subagente)  # type: ignore[arg-type]
     g.add_node("executar_grafo_dep", executar_grafo_dep)
     g.add_node("avaliar", avaliar)
+    g.add_node("decidir_cobertura", decidir_cobertura_node)
+    g.add_node("preencher_lacunas", preencher_lacunas_node)
     g.add_node("sintetizar", sintetizar)
     g.add_edge(START, "planner")
     g.add_edge("planner", "revisar_plano")
     g.add_conditional_edges("revisar_plano", rota_pos_plano, ["subagente", "executar_grafo_dep", END])
     g.add_edge("subagente", "avaliar")
     g.add_edge("executar_grafo_dep", "avaliar")
-    g.add_conditional_edges("avaliar", rota_pos_avaliacao, ["sintetizar", END])
+    g.add_conditional_edges("avaliar", rota_pos_avaliacao, ["decidir_cobertura", "sintetizar", END])
+    g.add_conditional_edges(
+        "decidir_cobertura", rota_pos_decisao, ["preencher_lacunas", "sintetizar", END],
+    )
+    g.add_conditional_edges(
+        "preencher_lacunas", rota_pos_preenchimento, ["decidir_cobertura", "avaliar"],
+    )
     g.add_edge("sintetizar", END)
     return g.compile(checkpointer=checkpointer)

@@ -3,6 +3,8 @@ import sqlite3
 from decimal import Decimal
 from pathlib import Path
 
+import pytest
+
 from motor.eventos import LogEventos
 from motor.grafo import construir_grafo
 from motor.orcamento import (
@@ -80,11 +82,39 @@ def test_orcamento_insuficiente_impede_efeito_do_executor(tmp_path):
     assert resultado["resultados"][0]["aprovado"] is False
 
 
+@pytest.mark.parametrize(("modo", "efeitos_esperados"), [("teto", 2), ("ambiguo", 3)])
+def test_evaluator_falha_fechado_sem_sintese(tmp_path, modo, efeitos_esperados):
+    efeitos = []
+
+    def fabrica(papel, _prompt, _tentativa, _requisitos):
+        textos = {
+            "verifier": '{"aprovado": true, "motivo": "ok"}',
+            "evaluator": '{"aprovado": true, "lacunas": [], "nos_a_refazer": []}',
+        }
+        return [RotaTentativaCusteada(
+            f"rota-{papel}", f"provedor-{papel}", _Tentativa(
+                efeitos, textos.get(papel, "saida"),
+                maximo=Decimal("3") if modo == "teto" and papel == "evaluator" else Decimal(".1"),
+                falhar=modo == "ambiguo" and papel == "evaluator",
+            ),
+        )]
+
+    _repo, resultado = _invocar(tmp_path, _spec(), fabrica)
+    assert len(efeitos) == efeitos_esperados
+    assert resultado["avaliacao"]["abortada"] is True
+    assert "resposta_final" not in resultado
+
+
 def test_fan_out_usa_identidades_unicas_por_no(tmp_path):
     efeitos = []
 
     def fabrica(papel, _prompt, _tentativa, _requisitos):
-        texto = '{"aprovado": true, "motivo": "ok"}' if papel == "verifier" else "saida"
+        textos = {
+            "verifier": '{"aprovado": true, "motivo": "ok"}',
+            "evaluator": '{"aprovado": true, "lacunas": [], "nos_a_refazer": []}',
+            "synthesizer": "final",
+        }
+        texto = textos.get(papel, "saida")
         return [RotaTentativaCusteada(
             f"rota-{papel}", f"provedor-{papel}", _Tentativa(efeitos, texto),
         )]
@@ -95,16 +125,21 @@ def test_fan_out_usa_identidades_unicas_por_no(tmp_path):
             "SELECT reservation_id,call_id FROM budget_reservation"
         ).fetchall()
 
-    assert len(linhas) == 4
-    assert len({linha[0] for linha in linhas}) == 4
-    assert len({linha[1] for linha in linhas}) == 4
+    assert len(linhas) == 5
+    assert len({linha[0] for linha in linhas}) == 5
+    assert len({linha[1] for linha in linhas}) == 5
 
 
 def test_verifier_faz_reserva_separada_do_executor(tmp_path):
     efeitos = []
 
     def fabrica(papel, _prompt, _tentativa, _requisitos):
-        texto = '{"aprovado": true, "motivo": "ok"}' if papel == "verifier" else "saida"
+        textos = {
+            "verifier": '{"aprovado": true, "motivo": "ok"}',
+            "evaluator": '{"aprovado": true, "lacunas": [], "nos_a_refazer": []}',
+            "synthesizer": "final",
+        }
+        texto = textos.get(papel, "saida")
         return [RotaTentativaCusteada(
             f"rota-{papel}", f"provedor-{papel}", _Tentativa(efeitos, texto),
         )]
@@ -112,7 +147,8 @@ def test_verifier_faz_reserva_separada_do_executor(tmp_path):
     repo, resultado = _invocar(tmp_path, _spec(), fabrica)
     with sqlite3.connect(repo.caminho("run-1")) as con:
         fases = [linha[0].split("-", 1)[0] for linha in con.execute(
-            "SELECT call_id FROM budget_reservation ORDER BY rowid"
+            "SELECT call_id FROM budget_reservation WHERE call_id LIKE 'executor-%' "
+            "OR call_id LIKE 'verifier-%' ORDER BY rowid"
         )]
 
     assert fases == ["executor", "verifier"]
@@ -135,8 +171,9 @@ def test_erro_ambiguo_invalida_sessao_e_nao_chega_ao_verifier_ou_retry(tmp_path)
 
     assert efeitos == ["efeito"]
     assert "verifier" not in papeis
+    assert resultado["avaliacao"]["abortada"] is True
+    assert "resposta_final" not in resultado
     assert status == "INVALIDATED"
-    assert resultado["resultados"][0]["aprovado"] is False
 
 
 def test_fallback_informa_rota_efetiva_e_verifier_nao_autoavalia(tmp_path):
@@ -183,18 +220,25 @@ def test_fallback_informa_rota_efetiva_e_verifier_nao_autoavalia(tmp_path):
                     "alias-b-executor", "provedor-b", Tentativa("executor-b", "saida"),
                 ),
             ]
-        assert papel == "verifier"
-        assert recebidos.evitar_provedor == "provedor-b"
-        return [
-            RotaTentativaCusteada(
-                "alias-b-verifier", "provedor-b",
-                Tentativa("verifier-b-proibido", '{"aprovado": true}'),
-            ),
-            RotaTentativaCusteada(
-                "alias-c", "provedor-c",
-                Tentativa("verifier-c", '{"aprovado": true, "motivo": "ok"}'),
-            ),
-        ]
+        if papel == "verifier":
+            assert recebidos.evitar_provedor == "provedor-b"
+            return [
+                RotaTentativaCusteada(
+                    "alias-b-verifier", "provedor-b",
+                    Tentativa("verifier-b-proibido", '{"aprovado": true}'),
+                ),
+                RotaTentativaCusteada(
+                    "alias-c", "provedor-c",
+                    Tentativa("verifier-c", '{"aprovado": true, "motivo": "ok"}'),
+                ),
+            ]
+        texto = (
+            '{"aprovado": true, "lacunas": [], "nos_a_refazer": []}'
+            if papel == "evaluator" else "final"
+        )
+        return [RotaTentativaCusteada(
+            f"alias-{papel}", f"provedor-{papel}", Tentativa(papel, texto),
+        )]
 
     grafo = construir_grafo(
         Legado(), LogEventos(tmp_path / "eventos-requisitos.jsonl"),
@@ -206,5 +250,5 @@ def test_fallback_informa_rota_efetiva_e_verifier_nao_autoavalia(tmp_path):
         "spec": spec, "run_id": "run-requisitos", "thread_id": "thread-requisitos",
     })
 
-    assert efeitos == ["executor-a", "executor-b", "verifier-c"]
+    assert efeitos == ["executor-a", "executor-b", "verifier-c", "evaluator"]
     assert resultado["resultados"][0]["aprovado"] is True
