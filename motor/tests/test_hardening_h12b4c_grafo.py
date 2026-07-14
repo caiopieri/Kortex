@@ -13,6 +13,7 @@ from motor.orcamento import (
     ErroOrcamento,
     RepositorioOrcamento,
     ResultadoTentativa,
+    RotaTentativaCusteada,
 )
 from motor.politica import PoliticaGates
 
@@ -62,9 +63,11 @@ def test_planner_reserva_antes_de_cada_retry_e_usa_identidades_distintas(tmp_pat
                 "SELECT status FROM budget_reservation ORDER BY rowid DESC LIMIT 1"
             ).fetchone()[0] == "RESERVED"
 
-    def fabrica(_papel, _prompt, tentativa):
+    def fabrica(_papel, _prompt, tentativa, _requisitos):
         texto = "sem json" if tentativa == 1 else json.dumps(SPEC)
-        return [("openai", _Tentativa(eventos, texto, ao_chamar=reserva_ja_existe))]
+        return [RotaTentativaCusteada(
+            "openai", "openai", _Tentativa(eventos, texto, ao_chamar=reserva_ja_existe),
+        )]
 
     grafo, legado = _grafo(tmp_path, repo, fabrica)
     resultado = grafo.invoke({
@@ -97,7 +100,10 @@ def test_planner_falha_fechado_sem_config_ou_identidade(tmp_path, ausente):
 
     legado = LegadoReal()
     repo = None if ausente == "repo" else RepositorioOrcamento(tmp_path / "runs")
-    fabrica = None if ausente == "fabrica" else lambda *_: [("openai", _Tentativa([], "{}"))]
+    fabrica = (
+        None if ausente == "fabrica" else
+        lambda *_: [RotaTentativaCusteada("openai", "openai", _Tentativa([], "{}"))]
+    )
     entrada = {"missao_texto": "pesquise", "run_id": "run-1", "thread_id": "thread-1"}
     if ausente == "thread":
         entrada.pop("thread_id")
@@ -113,8 +119,10 @@ def test_custo_desconhecido_invalida_sessao_e_impede_fallback(tmp_path):
 
     def fabrica(*_):
         return [
-            ("rota-a", _Tentativa(primeira, falhar=True)),
-            ("rota-b", _Tentativa(segunda, json.dumps(SPEC))),
+            RotaTentativaCusteada("rota-a", "provedor-a", _Tentativa(primeira, falhar=True)),
+            RotaTentativaCusteada(
+                "rota-b", "provedor-b", _Tentativa(segunda, json.dumps(SPEC)),
+            ),
         ]
 
     grafo, legado = _grafo(tmp_path, repo, fabrica)

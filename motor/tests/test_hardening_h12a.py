@@ -10,7 +10,12 @@ from langgraph.checkpoint.memory import InMemorySaver
 from motor.eventos import LogEventos
 from motor.grafo import construir_grafo
 from motor.modelos import ClienteModelo, ClienteRoteador, ClienteStub
-from motor.orcamento import CotacaoTentativa, RepositorioOrcamento, ResultadoTentativa
+from motor.orcamento import (
+    CotacaoTentativa,
+    RepositorioOrcamento,
+    ResultadoTentativa,
+    RotaTentativaCusteada,
+)
 from motor.politica import PoliticaGates
 
 
@@ -197,15 +202,23 @@ def test_h12a_grafo_executa_somente_rota_que_cobre_todas_capacidades(
         )
 
         class Tentativa:
-            def __init__(self, papel: str, prompt: str) -> None:
-                self.papel, self.prompt = papel, prompt
+            def __init__(self, papel: str, prompt: str, requisitos) -> None:
+                self.papel, self.prompt, self.requisitos = papel, prompt, requisitos
 
             def cotar_tentativa(self) -> CotacaoTentativa:
                 return CotacaoTentativa(Decimal("0.10"), "BRL", "teste-v1")
 
             def tentar_uma_vez(self) -> ResultadoTentativa:
-                kwargs = {"capacidades": ["codigo", "pesquisa"]} if self.papel != "verifier" else {}
-                texto = roteador.chamar(self.papel, self.prompt, **kwargs)
+                texto = roteador.chamar(
+                    self.papel, self.prompt,
+                    ferramentas=self.requisitos.ferramentas,
+                    tier=self.requisitos.tier,
+                    evitar=self.requisitos.evitar_provedor,
+                    capacidades=(
+                        list(self.requisitos.capacidades)
+                        if self.requisitos.capacidades is not None else None
+                    ),
+                )
                 return ResultadoTentativa(texto, Decimal("0.01"), "BRL", "teste-uso")
 
         grafo = construir_grafo(
@@ -216,8 +229,11 @@ def test_h12a_grafo_executa_somente_rota_que_cobre_todas_capacidades(
                 overrides={"plano": "prosseguir", "cobertura": "prosseguir"}
             ),
             repositorio_orcamento=RepositorioOrcamento(tmp_path / "orcamento"),
-            fabrica_tentativas_orcadas=lambda papel, prompt, _tentativa: [
-                ("teste", Tentativa(papel, prompt))
+            fabrica_tentativas_orcadas=lambda papel, prompt, _tentativa, requisitos: [
+                RotaTentativaCusteada(
+                    f"teste:{papel}", f"teste-provider:{papel}",
+                    Tentativa(papel, prompt, requisitos),
+                )
             ],
         )
 

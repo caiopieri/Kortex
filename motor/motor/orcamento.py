@@ -29,6 +29,23 @@ class ErroOrcamento(ValueError):
 
 
 @dataclass(frozen=True)
+class RequisitosTentativaCusteada:
+    """Sinais de roteamento que a fabrica deve preservar sem executar efeitos."""
+
+    tier: str | None = None
+    ferramentas: str | None = None
+    capacidades: tuple[str, ...] | None = None
+    evitar_provedor: str | None = None
+
+
+@dataclass(frozen=True)
+class RespostaTentativaCusteada:
+    texto: str
+    route_id: str
+    provider_id: str
+
+
+@dataclass(frozen=True)
 class CotacaoTentativa:
     maximo: Decimal
     moeda: Moeda
@@ -97,6 +114,19 @@ class EventoOrcamentoPendente:
 class ClienteTentativaCusteada(Protocol):
     def cotar_tentativa(self) -> CotacaoTentativa: ...
     def tentar_uma_vez(self) -> ResultadoTentativa: ...
+
+
+@dataclass(frozen=True)
+class RotaTentativaCusteada:
+    """Candidato da TCB: provider canônico e adaptador de uma tentativa, sem fallback interno."""
+
+    route_id: str
+    provider_id: str
+    adaptador: ClienteTentativaCusteada
+
+    def __post_init__(self) -> None:
+        if not _identificador(self.route_id) or not _identificador(self.provider_id):
+            raise ErroOrcamento("identidade de rota custeada invalida")
 
 
 class PublicadorEventoOrcamento(Protocol):

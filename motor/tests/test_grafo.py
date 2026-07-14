@@ -17,7 +17,13 @@ from motor.eventos import LogEventos
 from motor import __main__ as cli
 from motor.grafo import PROMPT_SUBAGENTE, _proximo_tier, construir_grafo
 from motor.modelos import ClienteRoteador, ClienteStub
-from motor.orcamento import CotacaoTentativa, RepositorioOrcamento, ResultadoTentativa
+from motor.orcamento import (
+    CotacaoTentativa,
+    RequisitosTentativaCusteada,
+    RepositorioOrcamento,
+    ResultadoTentativa,
+    RotaTentativaCusteada,
+)
 from motor.politica import PoliticaGates
 
 SPEC = json.loads(
@@ -92,10 +98,10 @@ def roda(tmp_path, roteador, entrada):
         def tentar_uma_vez(self):
             return ResultadoTentativa(roteador("planner", prompt), Decimal("0"), "BRL", "teste-uso")
 
-    def fabrica(_papel, prompt_recebido, _tentativa):
+    def fabrica(_papel, prompt_recebido, _tentativa, _requisitos):
         nonlocal prompt
         prompt = prompt_recebido
-        return [("stub", Tentativa())]
+        return [RotaTentativaCusteada("stub", "stub-provider", Tentativa())]
 
     prompt = ""
     grafo = construir_grafo(
@@ -109,21 +115,33 @@ def roda(tmp_path, roteador, entrada):
     return grafo, config, log, grafo.invoke(entrada, config)
 
 
-def _orcamento_cliente(tmp_path, cliente, kwargs_de=None):
+def _orcamento_cliente(tmp_path, cliente):
     class Tentativa:
-        def __init__(self, papel, prompt, tentativa):
-            self.papel, self.prompt, self.tentativa = papel, prompt, tentativa
+        def __init__(self, papel, prompt, requisitos):
+            self.papel, self.prompt, self.requisitos = papel, prompt, requisitos
 
         def cotar_tentativa(self):
             return CotacaoTentativa(Decimal("0.01"), "BRL", "teste-v1")
 
         def tentar_uma_vez(self):
-            kwargs = kwargs_de(self.papel, self.tentativa) if kwargs_de else {}
-            texto = cliente.chamar(self.papel, self.prompt, **kwargs)
+            texto = cliente.chamar(
+                self.papel, self.prompt,
+                ferramentas=self.requisitos.ferramentas,
+                tier=self.requisitos.tier,
+                evitar=self.requisitos.evitar_provedor,
+                capacidades=(
+                    list(self.requisitos.capacidades)
+                    if self.requisitos.capacidades is not None else None
+                ),
+            )
             return ResultadoTentativa(texto, Decimal("0"), "BRL", "teste-uso")
 
-    def fabrica(papel, prompt, tentativa):
-        return [("teste", Tentativa(papel, prompt, tentativa))]
+    def fabrica(papel, prompt, _tentativa, requisitos):
+        assert isinstance(requisitos, RequisitosTentativaCusteada)
+        return [RotaTentativaCusteada(
+            f"teste:{papel}", f"teste-provider:{papel}",
+            Tentativa(papel, prompt, requisitos),
+        )]
 
     return {
         "repositorio_orcamento": RepositorioOrcamento(tmp_path / "orcamento"),
@@ -754,10 +772,7 @@ def test_subagente_usa_catalogo_por_capacidade(tmp_path):
     grafo = construir_grafo(
         cliente, log, checkpointer=InMemorySaver(),
         politica=PoliticaGates(overrides={"plano": "prosseguir"}),
-        **_orcamento_cliente(
-            tmp_path, cliente,
-            lambda papel, _tentativa: {"capacidades": ["x"]} if papel == "executor-capaz" else {},
-        ),
+        **_orcamento_cliente(tmp_path, cliente),
     )
 
     resultado = grafo.invoke(
@@ -850,13 +865,7 @@ def test_executor_chamado_loga_modelo_resolvido_com_roteador(tmp_path):
     grafo = construir_grafo(
         cliente, log, checkpointer=InMemorySaver(),
         politica=PoliticaGates(overrides={"plano": "prosseguir"}),
-        **_orcamento_cliente(
-            tmp_path, cliente,
-            lambda papel, _tentativa: (
-                {"tier": "simples", "capacidades": ["pesquisa"]}
-                if papel == spec["subagentes"][0]["papel"] else {}
-            ),
-        ),
+        **_orcamento_cliente(tmp_path, cliente),
     )
 
     grafo.invoke({"missao_texto": "produza algo", "run_id": "modelo-log",
@@ -899,10 +908,7 @@ def test_retry_sem_flag_mantem_tier_declarado_em_todas_as_tentativas(tmp_path):
     grafo = construir_grafo(
         cliente, log, checkpointer=InMemorySaver(),
         politica=PoliticaGates(overrides={"plano": "prosseguir"}),
-        **_orcamento_cliente(
-            tmp_path, cliente,
-            lambda papel, _tentativa: {"tier": "simples"} if papel == "pesquisador" else {},
-        ),
+        **_orcamento_cliente(tmp_path, cliente),
     )
 
     resultado = grafo.invoke(
@@ -918,14 +924,10 @@ def test_retry_sem_flag_mantem_tier_declarado_em_todas_as_tentativas(tmp_path):
 def test_retry_com_flag_escala_tier_ate_complexa(tmp_path):
     cliente = ClienteTierFake(aprovar_na_tentativa=3)
     log = LogEventos(tmp_path / "log.jsonl")
-    tiers = {1: "simples", 2: "media", 3: "complexa"}
     grafo = construir_grafo(
         cliente, log, checkpointer=InMemorySaver(),
         politica=PoliticaGates(overrides={"plano": "prosseguir"}), escalar_em_retry=True,
-        **_orcamento_cliente(
-            tmp_path, cliente,
-            lambda papel, tentativa: {"tier": tiers[tentativa]} if papel == "pesquisador" else {},
-        ),
+        **_orcamento_cliente(tmp_path, cliente),
     )
 
     resultado = grafo.invoke(
@@ -945,10 +947,7 @@ def test_retry_com_flag_nao_escala_quando_aprova_na_primeira(tmp_path):
     grafo = construir_grafo(
         cliente, log, checkpointer=InMemorySaver(),
         politica=PoliticaGates(overrides={"plano": "prosseguir"}), escalar_em_retry=True,
-        **_orcamento_cliente(
-            tmp_path, cliente,
-            lambda papel, _tentativa: {"tier": "simples"} if papel == "pesquisador" else {},
-        ),
+        **_orcamento_cliente(tmp_path, cliente),
     )
 
     resultado = grafo.invoke(

@@ -5,7 +5,13 @@ from pathlib import Path
 
 from motor.eventos import LogEventos
 from motor.grafo import construir_grafo
-from motor.orcamento import CotacaoTentativa, RepositorioOrcamento, ResultadoTentativa
+from motor.orcamento import (
+    CotacaoTentativa,
+    RequisitosTentativaCusteada,
+    RepositorioOrcamento,
+    ResultadoTentativa,
+    RotaTentativaCusteada,
+)
 from motor.politica import PoliticaGates
 
 
@@ -63,8 +69,10 @@ def _invocar(tmp_path, spec, fabrica):
 def test_orcamento_insuficiente_impede_efeito_do_executor(tmp_path):
     efeitos = []
 
-    def fabrica(_papel, _prompt, _tentativa):
-        return [("rota", _Tentativa(efeitos, "saida", Decimal("0.11")))]
+    def fabrica(_papel, _prompt, _tentativa, _requisitos):
+        return [RotaTentativaCusteada(
+            "executor-a", "provedor-a", _Tentativa(efeitos, "saida", Decimal("0.11")),
+        )]
 
     _, resultado = _invocar(tmp_path, _spec(teto=0.10), fabrica)
 
@@ -75,14 +83,16 @@ def test_orcamento_insuficiente_impede_efeito_do_executor(tmp_path):
 def test_fan_out_usa_identidades_unicas_por_no(tmp_path):
     efeitos = []
 
-    def fabrica(papel, _prompt, _tentativa):
+    def fabrica(papel, _prompt, _tentativa, _requisitos):
         texto = '{"aprovado": true, "motivo": "ok"}' if papel == "verifier" else "saida"
-        return [("rota", _Tentativa(efeitos, texto))]
+        return [RotaTentativaCusteada(
+            f"rota-{papel}", f"provedor-{papel}", _Tentativa(efeitos, texto),
+        )]
 
     repo, _ = _invocar(tmp_path, _spec(quantidade=2), fabrica)
     with sqlite3.connect(repo.caminho("run-1")) as con:
         linhas = con.execute(
-            "SELECT reservation_id,call_id FROM budget_reservation WHERE route_id='rota'"
+            "SELECT reservation_id,call_id FROM budget_reservation"
         ).fetchall()
 
     assert len(linhas) == 4
@@ -93,9 +103,11 @@ def test_fan_out_usa_identidades_unicas_por_no(tmp_path):
 def test_verifier_faz_reserva_separada_do_executor(tmp_path):
     efeitos = []
 
-    def fabrica(papel, _prompt, _tentativa):
+    def fabrica(papel, _prompt, _tentativa, _requisitos):
         texto = '{"aprovado": true, "motivo": "ok"}' if papel == "verifier" else "saida"
-        return [("rota", _Tentativa(efeitos, texto))]
+        return [RotaTentativaCusteada(
+            f"rota-{papel}", f"provedor-{papel}", _Tentativa(efeitos, texto),
+        )]
 
     repo, resultado = _invocar(tmp_path, _spec(), fabrica)
     with sqlite3.connect(repo.caminho("run-1")) as con:
@@ -110,9 +122,12 @@ def test_verifier_faz_reserva_separada_do_executor(tmp_path):
 def test_erro_ambiguo_invalida_sessao_e_nao_chega_ao_verifier_ou_retry(tmp_path):
     efeitos, papeis = [], []
 
-    def fabrica(papel, _prompt, _tentativa):
+    def fabrica(papel, _prompt, _tentativa, _requisitos):
         papeis.append(papel)
-        return [("rota", _Tentativa(efeitos, "saida", falhar=papel != "verifier"))]
+        return [RotaTentativaCusteada(
+            f"rota-{papel}", f"provedor-{papel}",
+            _Tentativa(efeitos, "saida", falhar=papel != "verifier"),
+        )]
 
     repo, resultado = _invocar(tmp_path, _spec(tentativas=2), fabrica)
     with sqlite3.connect(repo.caminho("run-1")) as con:
@@ -122,3 +137,74 @@ def test_erro_ambiguo_invalida_sessao_e_nao_chega_ao_verifier_ou_retry(tmp_path)
     assert "verifier" not in papeis
     assert status == "INVALIDATED"
     assert resultado["resultados"][0]["aprovado"] is False
+
+
+def test_fallback_informa_rota_efetiva_e_verifier_nao_autoavalia(tmp_path):
+    efeitos = []
+    spec = _spec()
+    spec["subagentes"][0].update({
+        "tier": "media",
+        "ferramentas": "web",
+        "capacidades_requeridas": ["pesquisa", "redacao"],
+    })
+
+    class Legado:
+        roteamento_capacidades_runtime = True
+
+        def chamar(self, papel, _prompt, **_kwargs):
+            if papel == "evaluator":
+                return '{"aprovado": true, "lacunas": [], "nos_a_refazer": []}'
+            if papel == "synthesizer":
+                return "final"
+            raise AssertionError(f"chamada legada proibida: {papel}")
+
+    class Tentativa:
+        def __init__(self, marcador, texto):
+            self.marcador, self.texto = marcador, texto
+
+        def cotar_tentativa(self):
+            return CotacaoTentativa(Decimal("0.10"), "BRL", "preco-v1")
+
+        def tentar_uma_vez(self):
+            efeitos.append(self.marcador)
+            return ResultadoTentativa(self.texto, Decimal("0.01"), "BRL", self.marcador)
+
+    def fabrica(papel, _prompt, _tentativa, recebidos):
+        assert isinstance(recebidos, RequisitosTentativaCusteada)
+        if papel == "pesquisador":
+            assert recebidos == RequisitosTentativaCusteada(
+                tier="media", ferramentas="web", capacidades=("pesquisa", "redacao"),
+            )
+            return [
+                RotaTentativaCusteada(
+                    "alias-a", "provedor-a", Tentativa("executor-a", None),
+                ),
+                RotaTentativaCusteada(
+                    "alias-b-executor", "provedor-b", Tentativa("executor-b", "saida"),
+                ),
+            ]
+        assert papel == "verifier"
+        assert recebidos.evitar_provedor == "provedor-b"
+        return [
+            RotaTentativaCusteada(
+                "alias-b-verifier", "provedor-b",
+                Tentativa("verifier-b-proibido", '{"aprovado": true}'),
+            ),
+            RotaTentativaCusteada(
+                "alias-c", "provedor-c",
+                Tentativa("verifier-c", '{"aprovado": true, "motivo": "ok"}'),
+            ),
+        ]
+
+    grafo = construir_grafo(
+        Legado(), LogEventos(tmp_path / "eventos-requisitos.jsonl"),
+        politica=PoliticaGates(overrides={"plano": "prosseguir", "cobertura": "prosseguir"}),
+        repositorio_orcamento=RepositorioOrcamento(tmp_path / "runs-requisitos"),
+        fabrica_tentativas_orcadas=fabrica,
+    )
+    resultado = grafo.invoke({
+        "spec": spec, "run_id": "run-requisitos", "thread_id": "thread-requisitos",
+    })
+
+    assert efeitos == ["executor-a", "executor-b", "verifier-c"]
+    assert resultado["resultados"][0]["aprovado"] is True

@@ -28,8 +28,10 @@ from motor.grafo import construir_grafo  # noqa: E402
 from motor.modelos import ClienteModelo  # noqa: E402
 from motor.orcamento import (  # noqa: E402
     CotacaoTentativa,
+    RequisitosTentativaCusteada,
     RepositorioOrcamento,
     ResultadoTentativa,
+    RotaTentativaCusteada,
 )
 from motor.politica import PoliticaGates  # noqa: E402
 from motor.spec import WorkflowSpec  # noqa: E402
@@ -101,24 +103,42 @@ def executar(spec: dict[str, Any], factory: Callable[[], Any], log_path: Path, w
         cliente = cast(ClienteModelo, ClienteMetricaDeterministica(ClienteUsoEstimado(factory(), log)))
 
         class Tentativa:
-            def __init__(self, papel: str, prompt: str) -> None:
-                self.papel, self.prompt = papel, prompt
+            def __init__(self, papel: str, prompt: str, requisitos: RequisitosTentativaCusteada) -> None:
+                self.papel, self.prompt, self.requisitos = papel, prompt, requisitos
 
             def cotar_tentativa(self) -> CotacaoTentativa:
                 return CotacaoTentativa(Decimal("0.10"), "BRL", "experimento-v1")
 
             def tentar_uma_vez(self) -> ResultadoTentativa:
-                texto = cliente.chamar(self.papel, self.prompt)
+                texto = cliente.chamar(
+                    self.papel, self.prompt,
+                    ferramentas=self.requisitos.ferramentas,
+                    tier=self.requisitos.tier,
+                    evitar=self.requisitos.evitar_provedor,
+                    capacidades=(
+                        list(self.requisitos.capacidades)
+                        if self.requisitos.capacidades is not None else None
+                    ),
+                )
                 return ResultadoTentativa(texto, Decimal("0.000001"), "BRL", "estimativa-v1")
+
+        def fabricar_tentativas(
+            papel: str, prompt: str, _tentativa: int, requisitos: RequisitosTentativaCusteada,
+        ) -> list[RotaTentativaCusteada]:
+            provider_id = (
+                "deterministico" if papel in {"verifier", "evaluator", "synthesizer"}
+                else "experimento-estimado"
+            )
+            return [RotaTentativaCusteada(
+                f"{provider_id}:{papel}", provider_id, Tentativa(papel, prompt, requisitos),
+            )]
 
         grafo = construir_grafo(
             cliente, log, checkpointer=InMemorySaver(),
             politica=PoliticaGates(overrides={"plano": "prosseguir", "cobertura": "prosseguir"}),
             workspace_base=workspace,
             repositorio_orcamento=RepositorioOrcamento(workspace / "orcamento"),
-            fabrica_tentativas_orcadas=lambda papel, prompt, _tentativa: [
-                ("experimento", Tentativa(papel, prompt))
-            ],
+            fabrica_tentativas_orcadas=fabricar_tentativas,
         )
         identidade = log_path.stem
         resultado = grafo.invoke(

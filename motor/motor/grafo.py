@@ -31,11 +31,13 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 from .eventos import LogEventos
 from .modelos import ClienteModelo, ClienteStub, extrai_json
 from .orcamento import (
-    ClienteTentativaCusteada,
     CotacaoTentativa,
     ErroOrcamento,
     IdentidadeTentativaCusteada,
+    RequisitosTentativaCusteada,
     RepositorioOrcamento,
+    RespostaTentativaCusteada,
+    RotaTentativaCusteada,
     ResultadoTentativa,
     executar_tentativa_custeada,
 )
@@ -366,7 +368,8 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                     command_runner: CommandRunner | None = None,
                     repositorio_orcamento: RepositorioOrcamento | None = None,
                     fabrica_tentativas_orcadas: Callable[
-                        [str, str, int], list[tuple[str, ClienteTentativaCusteada]]
+                        [str, str, int, RequisitosTentativaCusteada],
+                        list[RotaTentativaCusteada],
                     ] | None = None):
     """Compila o grafo. `cliente` e `log` são injetados — o grafo não conhece backends.
     `politica` decide quais gates pausam (manual) ou resolvem sozinhos (auto-mode);
@@ -394,9 +397,11 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                 )
 
         def _fabricar_stub(
-            papel: str, prompt: str, _tentativa: int,
-        ) -> list[tuple[str, ClienteTentativaCusteada]]:
-            return [("stub", _TentativaStub(papel, prompt))]
+            papel: str, prompt: str, _tentativa: int, _requisitos: RequisitosTentativaCusteada,
+        ) -> list[RotaTentativaCusteada]:
+            return [RotaTentativaCusteada(
+                f"stub:{papel}", f"stub-provider:{papel}", _TentativaStub(papel, prompt),
+            )]
 
         fabrica_stub = _fabricar_stub
         if fabrica_tentativas_orcadas is None:
@@ -422,9 +427,10 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         fase: str = "spec",
     ) -> str | None:
         thread_id = state.get("thread_id") or (run_id if isinstance(cliente, ClienteStub) else None)
-        return chamar_orcado(
+        resposta = chamar_orcado(
             run_id, thread_id, Decimal("2.0"), "planner", fase, "planner", prompt, tentativa,
         )
+        return resposta.texto if resposta is not None else None
 
     def chamar_orcado(
         run_id: object,
@@ -435,7 +441,8 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         no_id: str,
         prompt: str,
         tentativa: int,
-    ) -> str | None:
+        requisitos: RequisitosTentativaCusteada | None = None,
+    ) -> RespostaTentativaCusteada | None:
         if repositorio_orcamento is None:
             raise ErroOrcamento("repositorio de orcamento ausente")
         if fabrica_tentativas_orcadas is None:
@@ -450,13 +457,15 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
             raise ErroOrcamento("teto de orcamento invalido") from erro
         sessao = repositorio_orcamento.sessao(run_id, thread_id, teto_decimal)
         fabrica = fabrica_stub if fabrica_stub is not None and papel != "planner" else fabrica_tentativas_orcadas
-        cadeia = fabrica(papel, prompt, tentativa)
+        cadeia = fabrica(papel, prompt, tentativa, requisitos or RequisitosTentativaCusteada())
         if not isinstance(cadeia, list) or not cadeia:
             raise ErroOrcamento("adaptador custeado ausente")
         for indice, item in enumerate(cadeia, start=1):
-            if not isinstance(item, tuple) or len(item) != 2 or not isinstance(item[0], str):
+            if not isinstance(item, RotaTentativaCusteada):
                 raise ErroOrcamento("adaptador custeado invalido")
-            route_id, adaptador = item
+            route_id, provider_id, adaptador = item.route_id, item.provider_id, item.adaptador
+            if requisitos is not None and provider_id == requisitos.evitar_provedor:
+                continue
             prompt_id = hashlib.sha256(prompt.encode()).hexdigest()[:16]
             call_base = f"{run_id}:{thread_id}:{fase}:{no_id}:{tentativa}:{prompt_id}"
             call_id = (
@@ -475,7 +484,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                 repositorio_orcamento, sessao, identidade, adaptador,
             )
             if resultado is not None and resultado.texto:
-                return resultado.texto
+                return RespostaTentativaCusteada(resultado.texto, route_id, provider_id)
         return None
 
     def workspace_de(state: EstadoMotor) -> Path:
@@ -659,6 +668,9 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
             }]}
 
         tier_atual = sub.get("tier")
+        capacidades_tupla = (
+            tuple(capacidades) if isinstance(capacidades, list) else None
+        )
         rubrica_txt = "\n".join(f"- {c}" for c in sub["rubrica"])
         feedback, ultima = payload.get("feedback", ""), payload.get("rascunho_anterior")
         contexto_rag = ""
@@ -708,11 +720,17 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                 feedback=bloco_feedback,
             )
             try:
-                ultima = chamar_orcado(
+                resposta_executor = chamar_orcado(
                     payload.get("run_id"), payload.get("thread_id"),
                     spec["restricoes"]["teto_custo"], sub["papel"], "executor",
                     sub["id"], prompt_subagente, tentativa,
+                    RequisitosTentativaCusteada(
+                        tier=tier_atual,
+                        ferramentas=sub.get("ferramentas"),
+                        capacidades=capacidades_tupla,
+                    ),
                 )
+                ultima = resposta_executor.texto if resposta_executor is not None else None
             except Exception:
                 feedback = "falha externa do executor"
                 log.evento(
@@ -728,7 +746,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                 continue
             log.evento("executor.respondeu", executor=sub["id"], tentativa=tentativa)
             try:
-                resposta_verifier = chamar_orcado(
+                resposta_verifier_orcada = chamar_orcado(
                     payload.get("run_id"), payload.get("thread_id"),
                     spec["restricoes"]["teto_custo"], "verifier", "verifier",
                     sub["id"],
@@ -739,6 +757,15 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                         saida=ultima,
                     ),
                     tentativa,
+                    RequisitosTentativaCusteada(
+                        evitar_provedor=(
+                            resposta_executor.provider_id if resposta_executor is not None else None
+                        ),
+                    ),
+                )
+                resposta_verifier = (
+                    resposta_verifier_orcada.texto
+                    if resposta_verifier_orcada is not None else None
                 )
             except Exception:
                 feedback = "falha externa do verifier"

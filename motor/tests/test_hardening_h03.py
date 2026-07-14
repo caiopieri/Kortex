@@ -9,7 +9,12 @@ from typing import Any, cast
 import pytest
 
 from motor.grafo import construir_grafo
-from motor.orcamento import CotacaoTentativa, RepositorioOrcamento, ResultadoTentativa
+from motor.orcamento import (
+    CotacaoTentativa,
+    RepositorioOrcamento,
+    ResultadoTentativa,
+    RotaTentativaCusteada,
+)
 from tests.audit_corpus import casos, executar_caso, materializar_corpus
 
 CASOS = casos("H03")
@@ -98,8 +103,10 @@ def _invocar(
         workspace_base=tmp_path,
         max_rodadas_reconciliacao=1,
         repositorio_orcamento=RepositorioOrcamento(tmp_path / "orcamento"),
-        fabrica_tentativas_orcadas=lambda papel, prompt, _tentativa: [
-            ("teste", Tentativa(papel, prompt))
+        fabrica_tentativas_orcadas=lambda papel, prompt, _tentativa, _requisitos: [
+            RotaTentativaCusteada(
+                f"teste:{papel}", f"teste-provider:{papel}", Tentativa(papel, prompt),
+            )
         ],
     )
     return cast(dict[str, Any], grafo.invoke({
