@@ -197,6 +197,11 @@ def _validar_identidade(valor: object) -> IdentidadeTentativaCusteada:
     return valor
 
 
+def validar_identidade_tentativa(valor: object) -> IdentidadeTentativaCusteada:
+    """Valida uma identidade sem produzir transicao no ledger."""
+    return _validar_identidade(valor)
+
+
 class RepositorioOrcamento:
     def __init__(self, raiz: Path) -> None:
         self._raiz = raiz.resolve()

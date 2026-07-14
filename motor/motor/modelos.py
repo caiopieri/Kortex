@@ -18,6 +18,16 @@ import time
 import urllib.request
 from typing import Any, Callable, Optional, Protocol, cast
 
+from .orcamento import (
+    ClienteTentativaCusteada,
+    ErroOrcamento,
+    IdentidadeTentativaCusteada,
+    RepositorioOrcamento,
+    SessaoOrcamento,
+    executar_tentativa_custeada,
+    validar_identidade_tentativa,
+)
+
 # Limita chamadas simultâneas ao claude CLI para evitar burst throttle (rc=1).
 # O fan-out do LangGraph pode disparar N subagentes em paralelo; sem este semáforo
 # 6+ processos concorrentes retornam rc=1 imediatamente.
@@ -484,6 +494,47 @@ class ClienteRoteador:
                 return resposta
             self._auto_esgotar(alt, papel, motivo="sem resposta")
         return resposta
+
+    def chamar_custeado(
+        self,
+        repositorio: RepositorioOrcamento,
+        sessao: SessaoOrcamento,
+        tentativas: list[tuple[IdentidadeTentativaCusteada, ClienteTentativaCusteada]],
+    ) -> Optional[str]:
+        """Executa uma cadeia explicitamente orcada, sem usar clientes legados."""
+        if not isinstance(repositorio, RepositorioOrcamento) or not tentativas:
+            raise ErroOrcamento("rota custeada invalida")
+        reservas_vistas: set[str] = set()
+        tentativas_vistas: set[tuple[str, str, int]] = set()
+        for item in tentativas:
+            if not isinstance(item, tuple) or len(item) != 2:
+                raise ErroOrcamento("rota custeada invalida")
+            identidade, adaptador = item
+            validar_identidade_tentativa(identidade)
+            chave = (identidade.call_id, identidade.route_id, identidade.attempt)
+            if (identidade.reservation_id in reservas_vistas
+                    or chave in tentativas_vistas):
+                raise ErroOrcamento("tentativa custeada duplicada")
+            reservas_vistas.add(identidade.reservation_id)
+            tentativas_vistas.add(chave)
+            try:
+                cotar = object.__getattribute__(adaptador, "cotar_tentativa")
+                tentar = object.__getattribute__(adaptador, "tentar_uma_vez")
+            except Exception as erro:
+                raise ErroOrcamento("adaptador custeado invalido") from erro
+            if not callable(cotar) or not callable(tentar):
+                raise ErroOrcamento("adaptador custeado invalido")
+
+        for indice, (identidade, adaptador) in enumerate(tentativas):
+            resultado = executar_tentativa_custeada(
+                repositorio, sessao, identidade, adaptador,
+            )
+            if resultado is not None and resultado.texto:
+                return resultado.texto
+            if indice + 1 < len(tentativas):
+                self._evento("modelo.fallback", papel="rota_custeada",
+                             para=tentativas[indice + 1][0].route_id)
+        return None
 
 
 class ClienteClaudeCLI:
