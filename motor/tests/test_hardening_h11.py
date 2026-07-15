@@ -17,18 +17,12 @@ from typing_extensions import TypedDict
 
 from motor.caixa import CaixaFundador, LedgerCaixa, rodar_com_caixa
 from motor.modelos import ClienteStub
-from motor.servico import GerenciadorJobs
 from tests.audit_corpus import casos, executar_caso, materializar_corpus
-from tests.helpers_grafo import construir_grafo_teste
+from tests.helpers_grafo import GerenciadorJobsTeste as GerenciadorJobs
 from tests.test_grafo import SPEC, faz_roteador
 
 
 CASOS_H11 = casos("H11")
-
-
-@pytest.fixture(autouse=True)
-def _grafo_servico_offline(monkeypatch):
-    monkeypatch.setattr(servico_modulo, "construir_grafo", construir_grafo_teste)
 
 
 @pytest.fixture(scope="module")
@@ -123,8 +117,6 @@ def _preparar_crash(tmp_path: Path) -> tuple[Path, Path, str]:
 
 
 def _crash_servico(db_path: str, workspace: str) -> None:
-    servico_modulo.construir_grafo = construir_grafo_teste
-
     def fault(ponto: str) -> None:
         if ponto == "apos_claim":
             os._exit(72)
@@ -351,6 +343,13 @@ def test_servico_reconcilia_automaticamente_apos_restart_de_processo(
         assert time.time() < fim
         time.sleep(0.01)
     assert status["estado"] == "concluido"
+    ledger_orcamento = workspace / ".orcamento-teste" / "restart-h11" / "orcamento.sqlite3"
+    assert ledger_orcamento.is_file()
+    with sqlite3.connect(f"file:{ledger_orcamento}?mode=ro", uri=True) as con:
+        assert con.execute(
+            "SELECT run_id,thread_id,teto,status FROM budget_session"
+        ).fetchall() == [("restart-h11", "restart-h11", "2", "ACTIVE")]
+        assert con.execute("SELECT COUNT(*) FROM budget_outbox").fetchone()[0] > 0
     jobs.fechar()
 
 

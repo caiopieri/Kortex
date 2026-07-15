@@ -3,4 +3,4 @@ include tests/runner_fake.py
 include tools/validar_manifest_reprodutores.py
 include specs/001-hardening-producao/invariant-matrix.jsonl
 include specs/001-hardening-producao/reproducer-manifest.jsonl
-include specs/001-hardening-producao/reproducer-corpus-00bbc07deca063f5.tar
+include specs/001-hardening-producao/reproducer-corpus-1655f6059e06c318.tar

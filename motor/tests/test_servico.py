@@ -1,19 +1,14 @@
 import time
 import json
+import sqlite3
 from pathlib import Path
 
 import pytest
 
-import motor.servico as servico_modulo
 from motor.modelos import ClienteStub
-from motor.servico import GerenciadorJobs
-from tests.helpers_grafo import construir_grafo_teste
+from motor.servico import GerenciadorJobs as GerenciadorJobsProducao
+from tests.helpers_grafo import GerenciadorJobsTeste as GerenciadorJobs, dependencias_stub
 from tests.test_grafo import SPEC, faz_roteador
-
-
-@pytest.fixture(autouse=True)
-def _grafo_servico_offline(monkeypatch):
-    monkeypatch.setattr(servico_modulo, "construir_grafo", construir_grafo_teste)
 
 
 def aguardar_estado(gerenciador: GerenciadorJobs, job_id: str, estado: str, timeout_s: float = 3):
@@ -40,6 +35,53 @@ def test_iniciar_retorna_imediato_e_chega_a_gate_pendente(tmp_path):
     status = aguardar_estado(gerenciador, "t1", "gate_pendente")
     assert status["gate"]["portao"] == "plano"
     assert {"pergunta", "opcoes"} <= set(status["gate"])
+
+
+def test_servico_certificado_injeta_orcamento_e_identidade_estavel(tmp_path):
+    cliente = ClienteStub(faz_roteador())
+    deps = dependencias_stub(cliente, tmp_path / "orcamento")
+    gerenciador = GerenciadorJobs(
+        db_path=tmp_path / "motor-orcado.db",
+        workspace_base=tmp_path / "runs-orcadas",
+        cliente=cliente,
+        **deps,
+    )
+    try:
+        gerenciador.iniciar(spec=SPEC, thread_id="servico-orcado")
+        aguardar_estado(gerenciador, "servico-orcado", "gate_pendente")
+        gerenciador.responder_gate("servico-orcado", "prosseguir")
+        assert aguardar_estado(gerenciador, "servico-orcado", "concluido")["estado"] == "concluido"
+        ledger = tmp_path / "orcamento" / "servico-orcado" / "orcamento.sqlite3"
+        assert ledger.is_file()
+        with sqlite3.connect(f"file:{ledger}?mode=ro", uri=True) as con:
+            assert con.execute(
+                "SELECT run_id,thread_id,teto,status FROM budget_session"
+            ).fetchall() == [("servico-orcado", "servico-orcado", "2", "ACTIVE")]
+            assert con.execute("SELECT COUNT(*) FROM budget_outbox").fetchone()[0] > 0
+    finally:
+        gerenciador.fechar()
+
+
+def test_servico_rejeita_identidade_incompativel_com_ledger(tmp_path):
+    gerenciador = GerenciadorJobs(
+        db_path=tmp_path / "motor-id.db", cliente=ClienteStub(faz_roteador()),
+    )
+    try:
+        with pytest.raises(ValueError, match="job_id inválido"):
+            gerenciador.iniciar(spec=SPEC, thread_id="parte..parte")
+    finally:
+        gerenciador.fechar()
+
+
+def test_servico_rejeita_cliente_sem_deps_antes_de_efeito(tmp_path):
+    efeitos: list[str] = []
+    cliente = ClienteStub(lambda papel, _prompt: efeitos.append(papel) or "INDEVIDO")
+    with pytest.raises(ValueError, match="cliente injetado exige"):
+        GerenciadorJobsProducao(
+            db_path=tmp_path / "nao-criar.db", cliente=cliente,
+        )
+    assert efeitos == []
+    assert not (tmp_path / "nao-criar.db").exists()
 
 
 def test_responder_gate_retoma_e_conclui(tmp_path):

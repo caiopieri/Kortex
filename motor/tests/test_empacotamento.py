@@ -8,7 +8,7 @@ ARTEFATOS_SDIST = {
     "tools/validar_manifest_reprodutores.py",
     "specs/001-hardening-producao/invariant-matrix.jsonl",
     "specs/001-hardening-producao/reproducer-manifest.jsonl",
-    "specs/001-hardening-producao/reproducer-corpus-00bbc07deca063f5.tar",
+    "specs/001-hardening-producao/reproducer-corpus-1655f6059e06c318.tar",
 }
 
 

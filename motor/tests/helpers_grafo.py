@@ -15,19 +15,11 @@ from motor.orcamento import (
     ResultadoTentativa,
     RotaTentativaCusteada,
 )
+from motor.servico import GerenciadorJobs
 
 
-def construir_grafo_teste(cliente: Any, log: Any, **kwargs: Any):
-    """Compila Stub offline com custo fake somente quando não há deps explícitas."""
-    repo = kwargs.get("repositorio_orcamento")
-    fabrica = kwargs.get("fabrica_tentativas_orcadas")
-    if (repo is None) != (fabrica is None):
-        raise ValueError("repo e fabrica de teste devem ser fornecidos juntos")
-    if repo is not None or not isinstance(cliente, ClienteStub):
-        return construir_grafo(cliente, log, **kwargs)
-    kwargs["repositorio_orcamento"] = RepositorioOrcamento(
-        Path(tempfile.mkdtemp(prefix="kortex-stub-"))
-    )
+def dependencias_stub(cliente: ClienteStub, raiz: Path | None = None) -> dict[str, Any]:
+    repo = RepositorioOrcamento(raiz or Path(tempfile.mkdtemp(prefix="kortex-stub-")))
 
     class TentativaStub:
         def __init__(self, papel: str, prompt: str) -> None:
@@ -49,5 +41,27 @@ def construir_grafo_teste(cliente: Any, log: Any, **kwargs: Any):
             f"stub:{papel}", f"stub-provider:{papel}", TentativaStub(papel, prompt),
         )]
 
-    kwargs["fabrica_tentativas_orcadas"] = fabricar
+    return {"repositorio_orcamento": repo, "fabrica_tentativas_orcadas": fabricar}
+
+
+def construir_grafo_teste(cliente: Any, log: Any, **kwargs: Any):
+    """Compila Stub offline com custo fake somente quando não há deps explícitas."""
+    repo = kwargs.get("repositorio_orcamento")
+    fabrica = kwargs.get("fabrica_tentativas_orcadas")
+    if (repo is None) != (fabrica is None):
+        raise ValueError("repo e fabrica de teste devem ser fornecidos juntos")
+    if repo is not None or not isinstance(cliente, ClienteStub):
+        return construir_grafo(cliente, log, **kwargs)
+    kwargs.update(dependencias_stub(cliente))
     return construir_grafo(cliente, log, **kwargs)
+
+
+class GerenciadorJobsTeste(GerenciadorJobs):
+    """Serviço offline que fornece deps fake explicitamente fora do pacote produtivo."""
+
+    def __init__(self, **kwargs: Any) -> None:
+        cliente = kwargs.get("cliente")
+        if isinstance(cliente, ClienteStub) and "repositorio_orcamento" not in kwargs:
+            workspace = Path(kwargs.get("workspace_base", tempfile.mkdtemp(prefix="kortex-jobs-")))
+            kwargs.update(dependencias_stub(cliente, workspace / ".orcamento-teste"))
+        super().__init__(**kwargs)

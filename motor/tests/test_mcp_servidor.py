@@ -1,5 +1,6 @@
 import asyncio
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -14,14 +15,8 @@ from motor.mcp_servidor import (
     criar_app,
 )
 from motor.modelos import ClienteStub
-from motor.servico import GerenciadorJobs
-from tests.helpers_grafo import construir_grafo_teste
+from tests.helpers_grafo import GerenciadorJobsTeste as GerenciadorJobs, dependencias_stub
 from tests.test_grafo import faz_roteador
-
-
-@pytest.fixture(autouse=True)
-def _grafo_servico_offline(monkeypatch):
-    monkeypatch.setattr(servico_modulo, "construir_grafo", construir_grafo_teste)
 
 
 def test_gerenciador_de_env_carrega_modelos(tmp_path, monkeypatch):
@@ -31,10 +26,27 @@ def test_gerenciador_de_env_carrega_modelos(tmp_path, monkeypatch):
     monkeypatch.setenv("MOTOR_MODELOS", str(modelos))
     monkeypatch.setenv("MOTOR_DB", str(tmp_path / "motor.db"))
     monkeypatch.setenv("MOTOR_WORKSPACE", str(tmp_path / "runs"))
+    cliente = ClienteStub(faz_roteador())
+    deps = dependencias_stub(cliente, tmp_path / "orcamento")
+    observado = {}
+
+    def compor(cfg, workspace):
+        observado.update(cfg=cfg, workspace=workspace)
+        return SimpleNamespace(
+            cliente=cliente,
+            repositorio=deps["repositorio_orcamento"],
+            fabrica=deps["fabrica_tentativas_orcadas"],
+        )
+
+    monkeypatch.setattr(servico_modulo, "compor_orcamento_openai", compor)
 
     gerenciador = _gerenciador_de_env()
 
-    assert gerenciador.cfg_modelos == config
+    try:
+        assert gerenciador.cfg_modelos == config
+        assert observado == {"cfg": config, "workspace": tmp_path / "runs"}
+    finally:
+        gerenciador.fechar()
 
 
 def test_gerenciador_de_env_rejeita_modelos_e_registro(monkeypatch):

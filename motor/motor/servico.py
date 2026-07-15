@@ -19,12 +19,13 @@ from typing import Any, cast
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.types import Command
 
-from .__main__ import construir_cliente
 from .caixa import LedgerCaixa
+from .composicao_orcamento import compor_orcamento_openai
 from .eventos import LogEventos
 from .eventos_schema import SCHEMA_VERSAO
 from .grafo import construir_grafo
 from .modelos import ClienteModelo
+from .orcamento import RepositorioOrcamento, RequisitosTentativaCusteada, RotaTentativaCusteada
 from .politica import PoliticaGates
 from .registro import ferramentas_de_registro, ferramentas_permitidas_de_registro, rotas_de_registro
 
@@ -36,6 +37,7 @@ def _validar_job_id(job_id: str) -> None:
     if (
         not isinstance(job_id, str)
         or job_id in {".", ".."}
+        or ".." in job_id
         or not PADRAO_JOB_ID.fullmatch(job_id)
     ):
         raise ValueError("job_id inválido")
@@ -82,6 +84,11 @@ class GerenciadorJobs:
                  politica: PoliticaGates | None = None,
                  log: LogEventos | None = None,
                  cliente: ClienteModelo | None = None,
+                 repositorio_orcamento: RepositorioOrcamento | None = None,
+                 fabrica_tentativas_orcadas: Callable[
+                     [str, str, int, RequisitosTentativaCusteada],
+                     list[RotaTentativaCusteada],
+                 ] | None = None,
                  ferramentas: dict[str, dict[str, Any]] | None = None,
                  fault: Callable[[str], None] | None = None,
                  outbox_poll_s: float = 0.5,
@@ -90,11 +97,24 @@ class GerenciadorJobs:
         self._outbox_lease_s = _segundos_positivos("outbox_lease_s", outbox_lease_s)
         self.db_path = Path(db_path)
         self.workspace_base = Path(workspace_base)
+        if (repositorio_orcamento is None) != (fabrica_tentativas_orcadas is None):
+            raise ValueError("repo e fabrica orcados devem ser fornecidos juntos")
+        if cliente is None:
+            if repositorio_orcamento is not None:
+                raise ValueError("deps orcadas explicitas exigem cliente")
+            deps = compor_orcamento_openai(cfg_modelos or {}, self.workspace_base)
+            cliente = deps.cliente
+            repositorio_orcamento = deps.repositorio
+            fabrica_tentativas_orcadas = deps.fabrica
+        elif repositorio_orcamento is None:
+            raise ValueError("cliente injetado exige repo e fabrica orcados")
         self.cfg_modelos = cfg_modelos
         self.dir_registro = str(dir_registro) if dir_registro is not None else None
         self.politica = politica or PoliticaGates()
         self.log = log
         self._cliente = cliente
+        self._repositorio_orcamento = repositorio_orcamento
+        self._fabrica_tentativas_orcadas = fabrica_tentativas_orcadas
         self._fault = fault
         self.ferramentas = (ferramentas if ferramentas is not None else
                             ferramentas_de_registro(self.dir_registro) if self.dir_registro else {})
@@ -146,6 +166,7 @@ class GerenciadorJobs:
             {"missao_texto": missao_texto} if missao_texto is not None else {"spec": spec}
         )
         entrada["run_id"] = thread_id
+        entrada["thread_id"] = thread_id
         with self._lock:
             self._exigir_aberto()
             self._jobs[thread_id] = {"estado": "em_execucao"}
@@ -315,6 +336,8 @@ class GerenciadorJobs:
                 ferramentas=self.ferramentas,
                 ferramentas_permitidas=self.ferramentas_permitidas,
                 rotas=self.rotas,
+                repositorio_orcamento=self._repositorio_orcamento,
+                fabrica_tentativas_orcadas=self._fabrica_tentativas_orcadas,
             )
             snapshot = grafo.get_state(self._config(job_id))
             return self._gates(getattr(snapshot, "interrupts", ()))
@@ -356,9 +379,7 @@ class GerenciadorJobs:
         }
 
     def _obter_cliente(self) -> ClienteModelo:
-        if self._cliente is not None:
-            return self._cliente
-        return construir_cliente(self.cfg_modelos, self.dir_registro, log=self.log)
+        return self._cliente
 
     def _iniciar_thread(self, job_id: str, cliente: ClienteModelo, entrada: Any,
                         claim: dict[str, Any] | None = None) -> None:
@@ -396,6 +417,8 @@ class GerenciadorJobs:
                 ferramentas=self.ferramentas,
                 ferramentas_permitidas=self.ferramentas_permitidas,
                 rotas=self.rotas,
+                repositorio_orcamento=self._repositorio_orcamento,
+                fabrica_tentativas_orcadas=self._fabrica_tentativas_orcadas,
             )
             if claim is None:
                 resultado = grafo.invoke(entrada, self._config(job_id))
@@ -515,6 +538,8 @@ class GerenciadorJobs:
             ferramentas=self.ferramentas,
             ferramentas_permitidas=self.ferramentas_permitidas,
             rotas=self.rotas,
+            repositorio_orcamento=self._repositorio_orcamento,
+            fabrica_tentativas_orcadas=self._fabrica_tentativas_orcadas,
         )
         try:
             snapshot = grafo.get_state(self._config(job_id))

@@ -18,7 +18,7 @@ The H00-H13 program and the H12b extension through H12b3 provide causal tests fo
   with divergent deliveries rejected before ACK.
 
 The public test corpus is content-addressed by `reproducer-manifest.jsonl` and
-`reproducer-corpus-00bbc07deca063f5.tar`. `tests/test_hardening_*.py` contains the maintained
+`reproducer-corpus-1655f6059e06c318.tar`. `tests/test_hardening_*.py` contains the maintained
 causal tests. Loose audit copies and session reports are not part of the repository contract.
 
 ## Current gates
