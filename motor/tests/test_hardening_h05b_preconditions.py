@@ -5,7 +5,7 @@ from typing import Any, cast
 
 import pytest
 
-from motor.grafo import construir_grafo
+from tests.helpers_grafo import construir_grafo_teste as construir_grafo
 from motor.runner import CommandRequest, CommandResult
 
 

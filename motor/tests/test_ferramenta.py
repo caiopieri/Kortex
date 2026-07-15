@@ -10,7 +10,7 @@ except ImportError:
 
 from motor import __main__ as cli
 from motor.eventos import LogEventos
-from motor.grafo import construir_grafo
+from tests.helpers_grafo import construir_grafo_teste as construir_grafo
 from motor.modelos import ClienteStub
 from motor.politica import PoliticaGates
 from motor.registro import ferramentas_de_registro, ferramentas_permitidas_de_registro

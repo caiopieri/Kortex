@@ -16,7 +16,8 @@ except ImportError:
 
 from motor.eventos import LogEventos
 from motor import __main__ as cli
-from motor.grafo import PROMPT_SUBAGENTE, _proximo_tier, construir_grafo
+from motor.grafo import PROMPT_SUBAGENTE, _proximo_tier
+from tests.helpers_grafo import construir_grafo_teste as construir_grafo
 from motor.modelos import ClienteRoteador, ClienteStub
 from motor.orcamento import (
     CotacaoTentativa,
@@ -93,16 +94,23 @@ def faz_roteador(reprovar_beta_uma_vez=False, evaluator_aprova=True):
 def roda(tmp_path, roteador, entrada):
     log = LogEventos(tmp_path / "log.jsonl")
     class Tentativa:
+        def __init__(self, papel_recebido, prompt_recebido):
+            self.papel, self.prompt = papel_recebido, prompt_recebido
+
         def cotar_tentativa(self):
             return CotacaoTentativa(Decimal("0.01"), "BRL", "teste-v1")
 
         def tentar_uma_vez(self):
-            return ResultadoTentativa(roteador("planner", prompt), Decimal("0"), "BRL", "teste-uso")
+            return ResultadoTentativa(
+                roteador(self.papel, self.prompt), Decimal("0"), "BRL", "teste-uso"
+            )
 
     def fabrica(_papel, prompt_recebido, _tentativa, _requisitos):
         nonlocal prompt
         prompt = prompt_recebido
-        return [RotaTentativaCusteada("stub", "stub-provider", Tentativa())]
+        return [RotaTentativaCusteada(
+            f"stub:{_papel}", f"stub-provider:{_papel}", Tentativa(_papel, prompt_recebido),
+        )]
 
     prompt = ""
     grafo = construir_grafo(

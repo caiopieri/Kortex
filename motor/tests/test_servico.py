@@ -2,9 +2,18 @@ import time
 import json
 from pathlib import Path
 
+import pytest
+
+import motor.servico as servico_modulo
 from motor.modelos import ClienteStub
 from motor.servico import GerenciadorJobs
+from tests.helpers_grafo import construir_grafo_teste
 from tests.test_grafo import SPEC, faz_roteador
+
+
+@pytest.fixture(autouse=True)
+def _grafo_servico_offline(monkeypatch):
+    monkeypatch.setattr(servico_modulo, "construir_grafo", construir_grafo_teste)
 
 
 def aguardar_estado(gerenciador: GerenciadorJobs, job_id: str, estado: str, timeout_s: float = 3):

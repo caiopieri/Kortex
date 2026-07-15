@@ -13,7 +13,8 @@ except ImportError:
 
 from motor import __main__ as cli
 from motor.eventos import LogEventos
-from motor.grafo import construir_grafo, montar_prompt_planner
+from motor.grafo import montar_prompt_planner
+from tests.helpers_grafo import construir_grafo_teste as construir_grafo
 from motor.modelos import ClienteStub
 from motor.politica import PoliticaGates
 from motor.registro import rotas_de_registro

@@ -3,6 +3,7 @@ import json
 
 import pytest
 
+import motor.servico as servico_modulo
 from motor.mcp_servidor import (
     DESCRICAO_DESPACHAR,
     DESCRICAO_EVENTOS,
@@ -14,7 +15,13 @@ from motor.mcp_servidor import (
 )
 from motor.modelos import ClienteStub
 from motor.servico import GerenciadorJobs
+from tests.helpers_grafo import construir_grafo_teste
 from tests.test_grafo import faz_roteador
+
+
+@pytest.fixture(autouse=True)
+def _grafo_servico_offline(monkeypatch):
+    monkeypatch.setattr(servico_modulo, "construir_grafo", construir_grafo_teste)
 
 
 def test_gerenciador_de_env_carrega_modelos(tmp_path, monkeypatch):

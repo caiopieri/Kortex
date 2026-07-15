@@ -12,6 +12,7 @@ from motor.grafo import construir_grafo
 from motor.modelos import ClienteModelo, ClienteRoteador, ClienteStub
 from motor.orcamento import (
     CotacaoTentativa,
+    ErroOrcamento,
     RepositorioOrcamento,
     ResultadoTentativa,
     RotaTentativaCusteada,
@@ -276,8 +277,27 @@ def test_h12a_grafo_bloqueia_cliente_direto_sem_enforcement(tmp_path) -> None:
         resultado = grafo.invoke(
             {"spec": _spec_h12a()}, {"configurable": {"thread_id": "h12a-direto"}}
         )
-
         assert resultado["resultados"][0]["aprovado"] is False
         assert not any(papel == "executor" for papel, _ in cliente.chamadas)
+    finally:
+        log.fechar()
+
+
+def test_construtor_certificado_nao_autoautoriza_cliente_stub(tmp_path) -> None:
+    efeitos: list[str] = []
+    cliente = ClienteStub(lambda papel, _prompt: efeitos.append(papel) or "INDEVIDO")
+    log = LogEventos(tmp_path / "eventos-stub.jsonl")
+    try:
+        grafo = construir_grafo(cliente, log, checkpointer=InMemorySaver())
+        with pytest.raises(ErroOrcamento, match="repositorio de orcamento ausente"):
+            grafo.invoke(
+                {
+                    "missao_texto": "não execute",
+                    "run_id": "stub-bloqueado",
+                    "thread_id": "stub-bloqueado",
+                },
+                {"configurable": {"thread_id": "stub-bloqueado"}},
+            )
+        assert efeitos == []
     finally:
         log.fechar()

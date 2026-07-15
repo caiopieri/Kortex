@@ -17,7 +17,6 @@ import hashlib
 import json
 import os
 import shlex
-import tempfile
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
@@ -31,14 +30,12 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 from .eventos import LogEventos
 from .modelos import ClienteModelo, ClienteStub, extrai_json
 from .orcamento import (
-    CotacaoTentativa,
     ErroOrcamento,
     IdentidadeTentativaCusteada,
     RequisitosTentativaCusteada,
     RepositorioOrcamento,
     RespostaTentativaCusteada,
     RotaTentativaCusteada,
-    ResultadoTentativa,
     executar_tentativa_custeada,
 )
 from .politica import PoliticaGates
@@ -383,32 +380,6 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
     workspace_base = Path(workspace_base)
     ferramentas = ferramentas or {}
     command_runner = command_runner if command_runner is not None else DenyCommandRunner()
-    fabrica_stub = None
-    if isinstance(cliente, ClienteStub):
-        if repositorio_orcamento is None:
-            repositorio_orcamento = RepositorioOrcamento(Path(tempfile.mkdtemp(prefix="kortex-stub-")))
-        class _TentativaStub:
-            def __init__(self, papel: str, prompt: str) -> None:
-                self.papel, self.prompt = papel, prompt
-
-            def cotar_tentativa(self) -> CotacaoTentativa:
-                return CotacaoTentativa(Decimal("0.000001"), "BRL", "stub-v1")
-
-            def tentar_uma_vez(self) -> ResultadoTentativa:
-                return ResultadoTentativa(
-                    cliente.chamar(self.papel, self.prompt), Decimal("0"), "BRL", "stub-usage",
-                )
-
-        def _fabricar_stub(
-            papel: str, prompt: str, _tentativa: int, _requisitos: RequisitosTentativaCusteada,
-        ) -> list[RotaTentativaCusteada]:
-            return [RotaTentativaCusteada(
-                f"stub:{papel}", f"stub-provider:{papel}", _TentativaStub(papel, prompt),
-            )]
-
-        fabrica_stub = _fabricar_stub
-        if fabrica_tentativas_orcadas is None:
-            fabrica_tentativas_orcadas = _fabricar_stub
     perfil_execucao = "rascunho" if perfil_execucao == "rascunho" else "certificado"
     executaveis_permitidos: set[Path] = set()
     for executavel_bruto in ferramentas_permitidas or []:
@@ -460,8 +431,9 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         except Exception as erro:
             raise ErroOrcamento("teto de orcamento invalido") from erro
         sessao = repositorio_orcamento.sessao(run_id, thread_id, teto_decimal)
-        fabrica = fabrica_stub if fabrica_stub is not None and papel != "planner" else fabrica_tentativas_orcadas
-        cadeia = fabrica(papel, prompt, tentativa, requisitos or RequisitosTentativaCusteada())
+        cadeia = fabrica_tentativas_orcadas(
+            papel, prompt, tentativa, requisitos or RequisitosTentativaCusteada()
+        )
         if not isinstance(cadeia, list) or not cadeia:
             raise ErroOrcamento("adaptador custeado ausente")
         for indice, item in enumerate(cadeia, start=1):

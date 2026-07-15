@@ -1,0 +1,53 @@
+"""Infraestrutura offline de testes; nunca importar em código de produção."""
+from __future__ import annotations
+
+import tempfile
+from decimal import Decimal
+from pathlib import Path
+from typing import Any
+
+from motor.grafo import construir_grafo
+from motor.modelos import ClienteStub
+from motor.orcamento import (
+    CotacaoTentativa,
+    RepositorioOrcamento,
+    RequisitosTentativaCusteada,
+    ResultadoTentativa,
+    RotaTentativaCusteada,
+)
+
+
+def construir_grafo_teste(cliente: Any, log: Any, **kwargs: Any):
+    """Compila Stub offline com custo fake somente quando não há deps explícitas."""
+    repo = kwargs.get("repositorio_orcamento")
+    fabrica = kwargs.get("fabrica_tentativas_orcadas")
+    if (repo is None) != (fabrica is None):
+        raise ValueError("repo e fabrica de teste devem ser fornecidos juntos")
+    if repo is not None or not isinstance(cliente, ClienteStub):
+        return construir_grafo(cliente, log, **kwargs)
+    kwargs["repositorio_orcamento"] = RepositorioOrcamento(
+        Path(tempfile.mkdtemp(prefix="kortex-stub-"))
+    )
+
+    class TentativaStub:
+        def __init__(self, papel: str, prompt: str) -> None:
+            self.papel, self.prompt = papel, prompt
+
+        def cotar_tentativa(self) -> CotacaoTentativa:
+            return CotacaoTentativa(Decimal("0.000001"), "BRL", "stub-offline-v1")
+
+        def tentar_uma_vez(self) -> ResultadoTentativa:
+            return ResultadoTentativa(
+                cliente.chamar(self.papel, self.prompt),
+                Decimal("0"), "BRL", "stub-offline-usage",
+            )
+
+    def fabricar(
+        papel: str, prompt: str, _tentativa: int, _requisitos: RequisitosTentativaCusteada,
+    ) -> list[RotaTentativaCusteada]:
+        return [RotaTentativaCusteada(
+            f"stub:{papel}", f"stub-provider:{papel}", TentativaStub(papel, prompt),
+        )]
+
+    kwargs["fabrica_tentativas_orcadas"] = fabricar
+    return construir_grafo(cliente, log, **kwargs)
