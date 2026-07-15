@@ -1,4 +1,5 @@
 import multiprocessing
+import json
 import os
 import sqlite3
 import threading
@@ -350,6 +351,15 @@ def test_servico_reconcilia_automaticamente_apos_restart_de_processo(
             "SELECT run_id,thread_id,teto,status FROM budget_session"
         ).fetchall() == [("restart-h11", "restart-h11", "2", "ACTIVE")]
         assert con.execute("SELECT COUNT(*) FROM budget_outbox").fetchone()[0] > 0
+        assert con.execute(
+            "SELECT DISTINCT estado FROM budget_outbox_claim"
+        ).fetchall() == [("ACKED",)]
+    eventos = [
+        json.loads(linha)
+        for linha in (workspace / "restart-h11" / "log.jsonl")
+        .read_text(encoding="utf-8").splitlines()
+    ]
+    assert any(evento["evento"] == "custo.reconciliado" for evento in eventos)
     jobs.fechar()
 
 

@@ -5,7 +5,9 @@ from pathlib import Path
 
 import pytest
 
+import motor.servico as servico_modulo
 from motor.modelos import ClienteStub
+from motor.eventos import LogEventos
 from motor.servico import GerenciadorJobs as GerenciadorJobsProducao
 from tests.helpers_grafo import GerenciadorJobsTeste as GerenciadorJobs, dependencias_stub
 from tests.test_grafo import SPEC, faz_roteador
@@ -58,6 +60,17 @@ def test_servico_certificado_injeta_orcamento_e_identidade_estavel(tmp_path):
                 "SELECT run_id,thread_id,teto,status FROM budget_session"
             ).fetchall() == [("servico-orcado", "servico-orcado", "2", "ACTIVE")]
             assert con.execute("SELECT COUNT(*) FROM budget_outbox").fetchone()[0] > 0
+            assert con.execute(
+                "SELECT DISTINCT estado FROM budget_outbox_claim"
+            ).fetchall() == [("ACKED",)]
+        eventos = [
+            json.loads(linha)
+            for linha in (tmp_path / "runs-orcadas" / "servico-orcado" / "log.jsonl")
+            .read_text(encoding="utf-8").splitlines()
+        ]
+        assert {evento["evento"] for evento in eventos} >= {
+            "custo.reservado", "custo.reconciliado",
+        }
     finally:
         gerenciador.fechar()
 
@@ -82,6 +95,61 @@ def test_servico_rejeita_cliente_sem_deps_antes_de_efeito(tmp_path):
         )
     assert efeitos == []
     assert not (tmp_path / "nao-criar.db").exists()
+
+
+def test_falha_do_sink_monetario_recupera_so_apos_lease(tmp_path, monkeypatch):
+    class LogFalho(LogEventos):
+        def publicar_orcamento(self, *_args):
+            raise RuntimeError("sink indisponivel")
+
+    cliente = ClienteStub(faz_roteador())
+    deps = dependencias_stub(cliente, tmp_path / "orcamento-falho")
+    log = LogFalho(tmp_path / "log-falho.jsonl")
+    gerenciador = GerenciadorJobs(
+        db_path=tmp_path / "motor-falho.db",
+        workspace_base=tmp_path / "runs-falhos",
+        cliente=cliente,
+        log=log,
+        **deps,
+    )
+    try:
+        gerenciador.iniciar(spec=SPEC, thread_id="sink-falho")
+        aguardar_estado(gerenciador, "sink-falho", "gate_pendente")
+        gerenciador.responder_gate("sink-falho", "prosseguir")
+        status = aguardar_estado(gerenciador, "sink-falho", "erro")
+        assert status["erro"]["mensagem"] == "sink indisponivel"
+        ledger = tmp_path / "orcamento-falho" / "sink-falho" / "orcamento.sqlite3"
+        with sqlite3.connect(f"file:{ledger}?mode=ro", uri=True) as con:
+            estados = {linha[0] for linha in con.execute(
+                "SELECT estado FROM budget_outbox_claim"
+            )}
+        assert "ACKED" not in estados and estados <= {"PENDING", "CLAIMED"}
+    finally:
+        gerenciador.fechar()
+        log.fechar()
+
+    reiniciado = GerenciadorJobs(
+        db_path=tmp_path / "motor-falho.db",
+        workspace_base=tmp_path / "runs-falhos",
+        cliente=cliente,
+        **deps,
+    )
+    try:
+        assert reiniciado.status("sink-falho") == {"estado": "em_execucao"}
+        monkeypatch.setattr(servico_modulo.time, "time", lambda: 2**31)
+        assert reiniciado.status("sink-falho")["estado"] == "concluido"
+        with sqlite3.connect(f"file:{ledger}?mode=ro", uri=True) as con:
+            assert con.execute(
+                "SELECT DISTINCT estado FROM budget_outbox_claim"
+            ).fetchall() == [("ACKED",)]
+        eventos = [
+            json.loads(linha)
+            for linha in (tmp_path / "runs-falhos" / "sink-falho" / "log.jsonl")
+            .read_text(encoding="utf-8").splitlines()
+        ]
+        assert any(evento["evento"] == "custo.reconciliado" for evento in eventos)
+    finally:
+        reiniciado.fechar()
 
 
 def test_responder_gate_retoma_e_conclui(tmp_path):

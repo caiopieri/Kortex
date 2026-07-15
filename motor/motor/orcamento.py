@@ -268,6 +268,16 @@ class RepositorioOrcamento:
         # Ainda ha TOCTOU entre lstat e sqlite.connect; a raiz precisa ser privada ao processo.
         return arquivo
 
+    def possui_ledger(self, run_id: str) -> bool:
+        """Consulta existência sem criar diretório, arquivo ou schema."""
+        run_id = _id(run_id, "run_id")
+        arquivo = self._raiz / run_id / "orcamento.sqlite3"
+        try:
+            arquivo.lstat()
+        except FileNotFoundError:
+            return False
+        return self.caminho(run_id) == arquivo
+
     def sessao(self, run_id: str, thread_id: str, teto: Decimal) -> SessaoOrcamento:
         run_id, thread_id = _id(run_id, "run_id"), _id(thread_id, "thread_id")
         teto = _decimal(teto, positivo=True)

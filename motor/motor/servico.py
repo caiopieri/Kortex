@@ -25,7 +25,10 @@ from .eventos import LogEventos
 from .eventos_schema import SCHEMA_VERSAO
 from .grafo import construir_grafo
 from .modelos import ClienteModelo
-from .orcamento import RepositorioOrcamento, RequisitosTentativaCusteada, RotaTentativaCusteada
+from .orcamento import (
+    RepositorioOrcamento, RequisitosTentativaCusteada, RotaTentativaCusteada,
+    publicar_um_pendente,
+)
 from .politica import PoliticaGates
 from .registro import ferramentas_de_registro, ferramentas_permitidas_de_registro, rotas_de_registro
 
@@ -129,6 +132,7 @@ class GerenciadorJobs:
         self._fechado = False
         self._conn_fechada = False
         self._owner_reconciliador = f"reconciliador-{uuid.uuid4().hex}"
+        self._owner_orcamento = f"servico-orcamento-{uuid.uuid4().hex}"
         self._erro_reconciliador: Exception | None = None
 
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -407,6 +411,7 @@ class GerenciadorJobs:
     def _executar(self, job_id: str, cliente: ClienteModelo, entrada: Any,
                   claim: dict[str, Any] | None = None) -> None:
         log = self._log_do_job(job_id)
+        registro: dict[str, Any]
         try:
             grafo = construir_grafo(
                 cliente,
@@ -435,17 +440,44 @@ class GerenciadorJobs:
                     )
                 finally:
                     ledger.fechar()
-            with self._lock:
-                self._jobs[job_id] = self._registro_de_resultado(resultado)
+            registro = self._registro_de_resultado(resultado)
         except Exception as ex:  # erro tratável: o gerenciador não cai
-            with self._lock:
-                self._jobs[job_id] = {
-                    "estado": "erro",
-                    "erro": {"tipo": type(ex).__name__, "mensagem": str(ex)},
-                }
-        finally:
+            registro = {
+                "estado": "erro",
+                "erro": {"tipo": type(ex).__name__, "mensagem": str(ex)},
+            }
+        try:
+            if not self._drenar_orcamento(job_id, log):
+                raise RuntimeError("relay monetario pendente")
+        except Exception as ex:
+            registro = {
+                "estado": "erro",
+                "erro": {"tipo": type(ex).__name__, "mensagem": str(ex)},
+            }
+        try:
             if log is not self.log:
                 log.fechar()
+        except Exception as ex:
+            registro = {
+                "estado": "erro",
+                "erro": {"tipo": type(ex).__name__, "mensagem": str(ex)},
+            }
+        with self._lock:
+            self._jobs[job_id] = registro
+
+    def _drenar_orcamento(self, job_id: str, log: LogEventos) -> bool:
+        if self._repositorio_orcamento is None:
+            return True
+        while publicar_um_pendente(
+            self._repositorio_orcamento,
+            job_id,
+            self._owner_orcamento,
+            int(time.time()),
+            max(1, math.ceil(self._outbox_lease_s)),
+            log.publicar_orcamento,
+        ):
+            pass
+        return self._repositorio_orcamento.listar_pendentes(job_id) == []
 
     def _recuperar_outbox(self, job_id: str) -> bool:
         with self._lock:
@@ -528,6 +560,17 @@ class GerenciadorJobs:
             raise RuntimeError("GerenciadorJobs fechado")
 
     def _status_duravel(self, job_id: str) -> dict:
+        if (
+            self._repositorio_orcamento is not None
+            and self._repositorio_orcamento.possui_ledger(job_id)
+        ):
+            log_relay = self.log or LogEventos(self._caminho_log(job_id), truncar=False)
+            try:
+                if not self._drenar_orcamento(job_id, log_relay):
+                    return {"estado": "em_execucao"}
+            finally:
+                if log_relay is not self.log:
+                    log_relay.fechar()
         log = self._log_do_job(job_id, truncar=False)
         grafo = construir_grafo(
             self._obter_cliente(),
