@@ -2,8 +2,6 @@ import asyncio
 import json
 from types import SimpleNamespace
 
-import pytest
-
 import motor.servico as servico_modulo
 from motor.mcp_servidor import (
     DESCRICAO_DESPACHAR,
@@ -49,12 +47,32 @@ def test_gerenciador_de_env_carrega_modelos(tmp_path, monkeypatch):
         gerenciador.fechar()
 
 
-def test_gerenciador_de_env_rejeita_modelos_e_registro(monkeypatch):
-    monkeypatch.setenv("MOTOR_MODELOS", "modelos.json")
-    monkeypatch.setenv("MOTOR_REGISTRO", "registro")
+def test_gerenciador_de_env_aceita_modelos_e_registro_ortogonais(tmp_path, monkeypatch):
+    modelos = tmp_path / "modelos.json"
+    modelos.write_text("{}", encoding="utf-8")
+    registro = tmp_path / "registro"
+    registro.mkdir()
+    cliente = ClienteStub(faz_roteador())
+    deps = dependencias_stub(cliente, tmp_path / "orcamento-ortogonal")
+    monkeypatch.setenv("MOTOR_MODELOS", str(modelos))
+    monkeypatch.setenv("MOTOR_REGISTRO", str(registro))
+    monkeypatch.setenv("MOTOR_DB", str(tmp_path / "motor-ortogonal.db"))
+    monkeypatch.setattr(
+        servico_modulo,
+        "compor_orcamento_openai",
+        lambda *_: SimpleNamespace(
+            cliente=cliente,
+            repositorio=deps["repositorio_orcamento"],
+            fabrica=deps["fabrica_tentativas_orcadas"],
+        ),
+    )
 
-    with pytest.raises(ValueError, match="MOTOR_MODELOS OU MOTOR_REGISTRO"):
-        _gerenciador_de_env()
+    gerenciador = _gerenciador_de_env()
+    try:
+        assert gerenciador.cfg_modelos == {}
+        assert gerenciador.dir_registro == str(registro)
+    finally:
+        gerenciador.fechar()
 
 
 async def chamar(app, nome: str, args: dict) -> dict:

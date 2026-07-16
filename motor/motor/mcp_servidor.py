@@ -42,8 +42,6 @@ DESCRICAO_EVENTOS = """Stream incremental read-only dos eventos JSONL de uma mis
 def _gerenciador_de_env() -> GerenciadorJobs:
     modelos = os.environ.get("MOTOR_MODELOS")
     registro = os.environ.get("MOTOR_REGISTRO")
-    if modelos and registro:
-        raise ValueError("use MOTOR_MODELOS OU MOTOR_REGISTRO, não os dois")
     cfg_modelos = json.loads(Path(modelos).read_text(encoding="utf-8")) if modelos else None
     return GerenciadorJobs(
         db_path=os.environ.get("MOTOR_DB", "motor.db"),
