@@ -25,13 +25,14 @@ from motor.__main__ import construir_cliente  # noqa: E402
 from motor.curador import analisar  # noqa: E402
 from motor.eventos import LogEventos  # noqa: E402
 from motor.grafo import construir_grafo  # noqa: E402
-from motor.modelos import ClienteModelo  # noqa: E402
+from motor.modelos import ClienteModelo, ClienteStub  # noqa: E402
 from motor.orcamento import (  # noqa: E402
     CotacaoTentativa,
     RequisitosTentativaCusteada,
     RepositorioOrcamento,
     ResultadoTentativa,
     RotaTentativaCusteada,
+    ErroOrcamento,
 )
 from motor.politica import PoliticaGates  # noqa: E402
 from motor.spec import WorkflowSpec  # noqa: E402
@@ -100,7 +101,15 @@ def _validadores(resultado: dict[str, Any]) -> list[dict[str, Any]]:
 def executar(spec: dict[str, Any], factory: Callable[[], Any], log_path: Path, workspace: Path) -> dict[str, Any]:
     log, inicio = LogEventos(log_path), time.perf_counter()
     try:
-        cliente = cast(ClienteModelo, ClienteMetricaDeterministica(ClienteUsoEstimado(factory(), log)))
+        base = factory()
+        if type(base) is not ClienteStub:
+            raise ErroOrcamento(
+                "experimento com cliente real exige factory custeada certificada"
+            )
+        cliente = cast(
+            ClienteModelo,
+            ClienteMetricaDeterministica(ClienteUsoEstimado(base, log)),
+        )
 
         class Tentativa:
             def __init__(self, papel: str, prompt: str, requisitos: RequisitosTentativaCusteada) -> None:

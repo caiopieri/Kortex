@@ -1,9 +1,12 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from motor.modelos import ClienteStub
+from motor.orcamento import ErroOrcamento
 from motor.spec import WorkflowSpec
-from scripts.experimento_especialista import formatar_relatorio, preparar_spec, rodar_ab
+from scripts.experimento_especialista import executar, formatar_relatorio, preparar_spec, rodar_ab
 
 
 def _spec_minima() -> dict:
@@ -67,3 +70,20 @@ def test_rodar_ab_agrega_metricas(tmp_path):
     relatorio = formatar_relatorio(resultado)
     assert "| barato_rag | 2/2 (100%) |" in relatorio
     assert "| topo_sem_rag | 0/2 (0%) |" in relatorio
+
+
+def test_experimento_bloqueia_cliente_real_antes_de_chamar(tmp_path):
+    class Real:
+        def __init__(self):
+            self.chamadas = 0
+
+        def chamar(self, *_args, **_kwargs):
+            self.chamadas += 1
+            return "INDEVIDO"
+
+    real = Real()
+    with pytest.raises(ErroOrcamento, match="factory custeada certificada"):
+        executar(
+            _spec_minima(), lambda: real, tmp_path / "log.jsonl", tmp_path / "workspace",
+        )
+    assert real.chamadas == 0
