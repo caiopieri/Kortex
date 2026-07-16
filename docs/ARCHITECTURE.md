@@ -19,7 +19,8 @@ with a fixed graph instead of generating new control flow for every mission.
 2. Executors are selected by declared tier and capabilities.
 3. Outputs cross validators or gates before synthesis.
 4. Failed validation identifies the source node and triggers bounded reconciliation.
-5. Relevant transitions are appended to the schema-validated event ledger.
+5. Relevant transitions are appended directly or relayed from a durable outbox to the
+   schema-validated event ledger before a normal CLI/service completion.
 6. The panel, curator and MCP service derive read models from persisted state.
 
 ## Trust boundaries

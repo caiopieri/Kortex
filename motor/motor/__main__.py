@@ -1,24 +1,18 @@
 """CLI mínima do motor v0.5.
 
-  python -m motor "sua missão aqui"            # planner cria a WorkflowSpec
-  python -m motor --spec exemplos/missao.json  # missão dirigida por spec pronta
+  python -m motor --modelos cfg-orcada.json "sua missão aqui"
+  python -m motor --modelos cfg-orcada.json --spec exemplos/missao.json
   python -m motor ... --caixa "<dir>"          # gate via nota no vault + resume durável
-  python -m motor ... --modelos exemplos/modelos-nvidia.json  # papéis baratos → DeepSeek/Kimi
-                                               # (exige env var da chave, ex. NVIDIA_API_KEY)
-  python -m motor ... --modelos cfg.json --esgotado claude     # claude indisponível →
-                                               # reroteia pro fallback (Corte B). Repetível.
   python -m motor ... --auto                   # auto-mode: gates resolvem sozinhos (Corte C)
   python -m motor ... --auto --gate cobertura=manual  # tudo auto, MENOS o gate de cobertura
   python -m motor ... --escalar                # verifier reprovou → retry sobe um tier
-  python -m motor ... --modelos cfg.json --pin synthesizer=oc/openai/gpt-5.5  # fixa modelo
-                                               # numa chave (papel|tier|"*"), precedência máxima.
-                                               # Pins globais (todos os projetos): ~/.motor/pins.json
   python -m motor ... --registro "4. Registry/Modelos"  # catálogo via entidades .md
   python -m motor ... --registro Registry --rota construcao  # estratégia explícita do planner
   python -m motor ... --workspace runs  # base dos artefatos por execução
 
-Requer `claude` CLI no PATH. Gate do fundador: sem `--caixa`, a
-decisão é via input() e o checkpointer é em memória (volátil). Com `--caixa
+A execução de modelo exige composição `orcamento_openai` válida; configurações
+legadas falham antes do efeito. Gate do fundador: sem `--caixa`, a decisão é via
+input() e o checkpointer é em memória (volátil). Com `--caixa
 <dir>`, a decisão vai para uma nota na Caixa do fundador (T3) e o estado do
 grafo é persistido em `motor.db` na raiz do repo — religar o processo retoma do
 gate pendente.

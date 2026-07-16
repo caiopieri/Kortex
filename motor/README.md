@@ -7,11 +7,19 @@ avaliador global de cobertura e gate do fundador (`interrupt()`).
 ```bash
 python -m pip install -e ".[dev]"
 python -m pytest -q                            # suíte sem rede (ClienteStub)
-python -m motor --spec exemplos/missao-pesquisa.json   # requer `claude` CLI
-python -m motor "pesquise oportunidades de aumento de receita"
+python -m motor --modelos /caminho/modelos-orcados.json --spec exemplos/missao-pesquisa.json  # fail-closed
+python -m motor --modelos /caminho/modelos-orcados.json "pesquise oportunidades"             # fail-closed
 ```
 
-LangGraph Studio local, sem Docker:
+Esses comandos exercitam a composição, mas a rota única e o teto padrão ainda não completam uma
+missão real. O arquivo deve declarar `orcamento_openai`, apontar a credencial por variável de ambiente
+e carregar snapshot FX fresco. Os antigos `exemplos/modelos-*.json` não são configuração de produção.
+
+O entrypoint do LangGraph Studio está temporariamente **indisponível**: `make_graph()` falha fechado
+porque o Studio não fornece hoje identidade de run, ledger de orçamento e sink monetário duráveis.
+Não há promessa de startup nem execução funcional até a composição custeada ser integrada.
+
+Dependências opcionais do Studio:
 
 ```bash
 pip install -e ".[dev,studio]"

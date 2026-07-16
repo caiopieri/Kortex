@@ -4,7 +4,7 @@ Status: **not production certified**
 
 ## Verified scope
 
-The H00-H13 program and the H12b extension through H12b3 provide causal tests for:
+The H00-H13 program and the H12b extension through H12b4f provide causal tests for:
 
 - strict spec, verdict, capability and reconciliation behavior;
 - command identity, `argv` integrity and default-deny composition;
@@ -16,6 +16,10 @@ The H00-H13 program and the H12b extension through H12b3 provide causal tests fo
   ACK only after successful publication;
 - durable consumer deduplication in the real JSONL event ledger across reopen/redelivery,
   with divergent deliveries rejected before ACK.
+- conservative pre-call reservation at planner, executor, verifier, evaluator, reconciliation
+  and synthesizer callsites, with distinct retry/failover identities and `UNKNOWN_COST` fail-closed;
+- sealed, fresh pricing/FX composition for the costed OpenAI adapter and fail-closed production
+  entrypoints when durable budget dependencies are absent.
 
 The public test corpus is content-addressed by `reproducer-manifest.jsonl` and
 `reproducer-corpus-1655f6059e06c318.tar`. `tests/test_hardening_*.py` contains the maintained
@@ -35,6 +39,12 @@ For the H12b3 integration over base `df1a3f4`, the focused H12b0-H12b3 chain com
 `104 passed` and the full suite with `730 passed`. Ruff, mypy, Bandit high/high, compileall,
 Gitleaks and diff checks passed. Packaging was unchanged, so no build claim is added.
 
+For the H12b4 chain through `7176ac2`, independent callsite review was GREEN. Follow-up H13
+corrections `7f804fc` and `fda5b47` bounded MCP input, exposed gate identity and relayed the CLI
+monetary outbox before success. The full suite completed with `790 passed`; Ruff, mypy, Bandit
+high/high, compileall, Gitleaks and diff checks passed. These gates establish fail-closed integration,
+not real-provider operability or production certification. Packaging must be rerun by the H13 audit.
+
 Counts are evidence for that revision only. A release must rerun every gate from a clean
 checkout.
 
@@ -43,9 +53,11 @@ checkout.
 1. **Sandbox backend (H05b):** command execution remains unavailable in production until a
    concrete backend satisfies `sandbox-conformance.md`. String validation and a working
    directory are not sandboxing.
-2. **Budget integration:** the relay now reaches the real event ledger with durable
-   consumer-side deduplication, but graph callsite/run-identity integration and real provider
-   pricing adapters remain incomplete.
+2. **Budget operation:** callsite/run-identity integration and a costed OpenAI adapter are present,
+   but one OpenAI route cannot satisfy executor-verifier provider independence and conservative
+   pricing exceeds the current R$ 2 bootstrap before transport. Studio and real experiments remain
+   unavailable until durable costed composition is supplied. Relay recovery requires polling in the
+   service or explicit reuse of the same CLI `run_id`.
 3. **Curator authority:** the protocol fails closed without an authoritative certification
    repository supplied by the deployment.
 

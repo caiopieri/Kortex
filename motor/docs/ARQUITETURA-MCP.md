@@ -18,30 +18,35 @@ decisão de permissão ou argumento estrutural de comando sem validação determ
 
 ### `metafabrica.despachar_missao`
 
-Recebe objetivo e restrições validadas, inicia uma execução durável e retorna imediatamente
+Recebe objetivo, contexto e restrições de transporte com tamanho limitado, inicia uma execução
+assíncrona e retorna imediatamente
 `{job_id, estado}`.
 
 ### `metafabrica.status_missao`
 
 Retorna `em_execucao`, `gate_pendente`, `concluido` ou `erro`. Gates carregam payload cru e
-`decision_id`; resultados carregam referências de artefatos, nunca blobs arbitrários.
+`decision_id`; artefatos são referências, mas `resposta_final` ainda é texto integral do modelo.
 
 ### `metafabrica.responder_gate`
 
-Transporta uma decisão externa para `Command(resume=...)`. Reenvio idêntico é idempotente;
+Transporta uma decisão externa e o `decision_id` opcional para `Command(resume=...)`. O ID é
+obrigatório quando há múltiplos gates. Reenvio idêntico é idempotente;
 ID ou conteúdo divergente falha fechado. Gates sensíveis não são auto-resolvidos.
 
 ### Projeções read-only
 
-`resumo_missao` e `eventos_missao` derivam projeções limitadas do estado e do ledger. Elas
+`resumo_missao` e `eventos` derivam projeções limitadas do estado e do ledger. Elas
 não alteram a execução nem substituem o evento autoritativo.
 
-## Execução durável
+## Persistência e recovery
 
 - `thread_id` fornecido pelo chamador é a chave de correlação; ausência gera UUID.
-- O checkpointer permite retomar o grafo, mas não substitui o ledger de eventos.
-- Outbox com claim, lease e ack fecha perda após crash.
+- O job nasce em memória; checkpoints e outboxes tornam o estado recuperável somente após a primeira
+  persistência. O checkpointer permite retomar o grafo, mas não substitui o ledger de eventos.
+- Outbox com claim, lease e ack preserva redelivery pendente após crash.
 - Entrega entre stores é at-least-once; consumidores deduplicam por `decision_id`/`event_id`.
+- Cada job usa a mesma identidade durável no grafo e no ledger de orçamento; eventos monetários são
+  anexados ao JSONL antes do ACK. Após crash, redelivery depende de lease e polling de status.
 - O chamador deve fechar explicitamente o `GerenciadorJobs`.
 
 ## Segurança
@@ -64,3 +69,8 @@ O estado de produção está em `../specs/001-hardening-producao/verification.md
 - Checkpoint e ledger podem divergir após crash; reconciliação precisa ser idempotente.
 - Descrições MCP vagas podem rotear tarefas erradas mesmo com implementação segura.
 - Default-deny contém a ausência de sandbox, mas não prova C2/C3.
+- Uma rota de modelo única ou um teto insuficiente mantém o MCP seguro, porém indisponível para a
+  missão; fail-closed não é certificação operacional.
+- `resposta_final` é dado hostil e ainda não tem cap explícito; o host não deve renderizá-la como
+  conteúdo ativo nem tratá-la como instrução.
+- Crash entre a resposta de `despachar_missao` e o primeiro checkpoint/outbox pode perder a submissão.

@@ -51,37 +51,46 @@ harness-mecanico/      semente da vertical mecânica
 4. [motor/docs/EVOLUCAO.md](motor/docs/EVOLUCAO.md) e [motor/docs/ARQUITETURA-MCP.md](motor/docs/ARQUITETURA-MCP.md) — o norte e a fronteira do motor.
 5. [motor/specs/](motor/specs/) — contratos públicos e evidências reproduzíveis.
 
-## Rodar o motor (rápido)
+## Verificar o motor e exercitar a composição
 
 ```bash
 cd motor
 python -m pip install -e ".[dev]"
 pytest -q                                       # suíte sem rede; mesmo alvo funcional do CI
-python -m motor "pesquise oportunidades de aumento de receita"   # requer um provedor de modelo
+python -m motor --modelos /caminho/modelos-orcados.json "pesquise oportunidades de aumento de receita"  # fail-closed
 ```
+
+O último comando demonstra a composição e pode bloquear antes da rede: a configuração precisa conter
+`orcamento_openai`, credencial por variável de ambiente e snapshot FX fresco; além disso, a rota única
+e o teto padrão ainda não completam uma missão real. Configurações legadas não autorizam efeitos.
 
 ## Estado
 
 O motor v0.5 está em **hardening T2; ainda não está certificado para produção**. O programa H00–H13
-fechou a maior parte das falhas encontradas pela auditoria defensiva, e a extensão H12b já avançou até
-H12b2c1. O estado comprovado hoje é:
+fechou a maior parte das falhas encontradas pela auditoria defensiva, e a extensão H12b chegou à
+integração fail-closed dos callsites de modelo. O estado comprovado hoje é:
 
 - kernel/spec/grafo, reconciliação bounded e validação de capabilities hardened;
 - executor de comando com identidade e `argv` validados, mas **default-deny em produção**;
-- schema de eventos v2, ledger append-only/recovery, projeção read-only e superfície MCP hardened;
+- schema de eventos v2, ledger append-only/recovery, projeção read-only e superfície MCP tipada com
+  input limitado, identidade de gate e orçamento fail-closed;
 - curador com sombra read-only, certificação anti-Goodhart e promoção apenas como intenção humana
   (ADR-003), nunca aplicação automática;
-- Caixa do Fundador e livro-razão de orçamento com transações, replay, reserva exclusiva, outbox e
-  protocolo de `claim/lease/ack` até H12b2c1.
+- Caixa do Fundador e livro-razão de orçamento com transações, replay, reserva exclusiva e relay
+  `claim/lease/ack` para o ledger JSONL, preservando `event_id` e deduplicação após reabertura;
+- planner, executor, verifier, evaluator, reconciliação e synthesizer reservam antes do efeito e
+  bloqueiam custo desconhecido; a composição OpenAI exige pricing/FX versionados e frescos.
 
-Duas fronteiras impedem declarar o gate global fechado:
+As fronteiras abaixo impedem declarar o gate global fechado:
 
 1. **H05b bloqueado externamente:** falta um backend real de sandbox, com imagem por digest e policy
    versionada, para provar isolamento de filesystem/rede/ambiente, limite de output e TERM/KILL da
    árvore de processos. Sem isso, C2/C3 permanecem indisponíveis.
-2. **H12b2c2 é o próximo landing:** o relay/publicador ainda precisa transportar `event_id` ao
-   consumidor. H12b2c1 não publica; portanto a janela entre publicação e `ack` ainda exige a semântica
-   at-least-once/deduplicação que será fechada nessa fatia.
+2. **Composição real ainda não é operacional:** uma única rota OpenAI não satisfaz a independência
+   entre executor e verifier, e o preço conservador de contexto excede o bootstrap atual de R$ 2 antes
+   da rede. Studio e experimentos reais falham fechados até receberem composição custeada durável.
+3. **Autoridade do curador é externa:** sem `RepositorioCertificacoes` autoritativo, promoção continua
+   indisponível; o motor produz no máximo uma intenção sujeita a gate humano.
 
 O estado verificável e os bloqueios estão em
 [verification.md](motor/specs/001-hardening-producao/verification.md). O sequenciamento operacional

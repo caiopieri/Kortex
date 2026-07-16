@@ -12,19 +12,23 @@ expressed as Now, Next and Later.
   promotion intent only.
 - Human decisions and monetary reservations have durable SQLite state, crash recovery and
   idempotency controls.
+- Every reachable graph model effect reserves a conservative amount before transport; unknown
+  cost, stale pricing/FX or missing durable dependencies fail closed.
+- Budget events are relayed to the JSONL ledger with stable `event_id`, ACK-after-append and
+  deduplication across reopen/redelivery in the CLI and `GerenciadorJobs` paths.
 - Command execution is default-deny because no production sandbox backend is certified.
 - The complete status is maintained in
   `../motor/specs/001-hardening-producao/verification.md`.
 
 ## Now
 
-1. Complete the budget relay after H12b2c1, preserving `event_id` through publication and
-   consumer deduplication.
-2. Integrate budget reservations into every model callsite, retry and fallback.
-3. Provide real pricing/usage adapters without accepting model-reported cost as authority.
-4. Implement and certify a sandbox backend against
+1. Provide at least two independently identified costed provider routes and a budget/configuration
+   that can satisfy conservative pre-call reservations in a real run.
+2. Restore Studio and real experiment entrypoints only after they receive durable run identity,
+   budget ledger, monetary sink and certified costed factories.
+3. Implement and certify a sandbox backend against
    `../motor/specs/001-hardening-producao/sandbox-conformance.md`.
-5. Keep the panel operationally honest and event-sourced according to
+4. Keep the panel operationally honest and event-sourced according to
    `../motor/specs/002-painel-operacional/spec.md`.
 
 ## Next
@@ -38,7 +42,7 @@ expressed as Now, Next and Later.
 
 ## Later
 
-- Provider adapters with reconciled billing and versioned exchange rates.
+- Provider adapters with authoritative post-run billing reconciliation.
 - A single end-to-end specialist training experiment with a reliable held-out grader.
 - Additional domain harnesses after the software workflow is production-certified.
 - Federated knowledge sources with provenance, confidence and license metadata.
@@ -57,5 +61,7 @@ expressed as Now, Next and Later.
 - A slow or flaky gate becomes ceremonial and gets bypassed.
 - Self-generated output used as training truth can create silent model collapse.
 - A UI can imply authority or progress that the motor never persisted.
-- At-least-once delivery without durable deduplication can repeat external effects.
-- Cost measured after a call cannot enforce a pre-call budget ceiling.
+- A polling-only relay can leave monetary events pending until status is requested after a crash.
+- CLI recovery of an abandoned monetary outbox requires explicitly reusing the same `run_id`.
+- Conservative full-context reservation can make a safe route operationally unusable.
+- Full model text returned by MCP has no explicit response-size cap yet.
