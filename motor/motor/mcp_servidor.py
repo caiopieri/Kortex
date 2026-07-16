@@ -38,6 +38,29 @@ DESCRICAO_RESUMO = """Resumo compacto de uma missão para acompanhamento convers
 DESCRICAO_EVENTOS = """Stream incremental read-only dos eventos JSONL de uma missão. Use `desde=0`
   na primeira chamada e depois `desde=proximo_offset` para polling sem repetir eventos."""
 
+MAX_OBJETIVO = 8_192
+MAX_CONTEXTO = 32_768
+MAX_RESTRICOES_JSON = 8_192
+MAX_DECISAO = 4_096
+
+
+def _texto_limitado(valor: object, nome: str, maximo: int, *, vazio: bool = False) -> str:
+    if not isinstance(valor, str) or len(valor) > maximo or (not vazio and not valor.strip()):
+        raise ValueError(f"{nome} inválido")
+    return valor
+
+
+def _restricoes_limitadas(valor: dict[str, Any] | None) -> str | None:
+    if valor is None:
+        return None
+    try:
+        serializado = json.dumps(valor, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
+    except (TypeError, ValueError, RecursionError) as erro:
+        raise ValueError("restrições inválidas") from erro
+    if len(serializado) > MAX_RESTRICOES_JSON:
+        raise ValueError("restrições inválidas")
+    return serializado
+
 
 def _gerenciador_de_env() -> GerenciadorJobs:
     modelos = os.environ.get("MOTOR_MODELOS")
@@ -60,11 +83,14 @@ def criar_app(gerenciador: GerenciadorJobs | None = None) -> FastMCP:
                          restricoes: dict[str, Any] | None = None,
                          thread_id: str | None = None) -> dict:
         try:
-            partes = [objetivo]
-            if contexto:
-                partes.append(f"\n\nContexto:\n{contexto}")
-            if restricoes:
-                partes.append("\n\nRestrições:\n" + json.dumps(restricoes, ensure_ascii=False))
+            partes = [_texto_limitado(objetivo, "objetivo", MAX_OBJETIVO)]
+            if contexto is not None:
+                partes.append(
+                    f"\n\nContexto:\n{_texto_limitado(contexto, 'contexto', MAX_CONTEXTO)}"
+                )
+            restricoes_json = _restricoes_limitadas(restricoes)
+            if restricoes_json is not None:
+                partes.append("\n\nRestrições:\n" + restricoes_json)
             return jobs.iniciar(missao_texto="".join(partes), thread_id=thread_id or uuid4().hex)
         except Exception as ex:
             return {"estado": "erro", "erro": {"tipo": type(ex).__name__, "mensagem": str(ex)}}
@@ -77,9 +103,10 @@ def criar_app(gerenciador: GerenciadorJobs | None = None) -> FastMCP:
             return {"estado": "erro", "erro": {"tipo": type(ex).__name__, "mensagem": str(ex)}}
 
     @app.tool(name="metafabrica.responder_gate", description=DESCRICAO_RESPONDER_GATE)
-    def responder_gate(job_id: str, decisao: str) -> dict:
+    def responder_gate(job_id: str, decisao: str, decision_id: str | None = None) -> dict:
         try:
-            return jobs.responder_gate(job_id, decisao)
+            decisao = _texto_limitado(decisao, "decisão", MAX_DECISAO)
+            return jobs.responder_gate(job_id, decisao, decision_id)
         except Exception as ex:
             return {"estado": "erro", "erro": {"tipo": type(ex).__name__, "mensagem": str(ex)}}
 

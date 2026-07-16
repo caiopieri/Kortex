@@ -9,6 +9,10 @@ from motor.mcp_servidor import (
     DESCRICAO_RESPONDER_GATE,
     DESCRICAO_RESUMO,
     DESCRICAO_STATUS,
+    MAX_CONTEXTO,
+    MAX_DECISAO,
+    MAX_OBJETIVO,
+    MAX_RESTRICOES_JSON,
     _gerenciador_de_env,
     criar_app,
 )
@@ -227,6 +231,57 @@ def test_mcp_despachar_sem_thread_id_gera_id(tmp_path):
         assert isinstance(inicio["job_id"], str)
         assert inicio["job_id"]
         assert inicio["job_id"] != "jarvis-abc"
+
+    asyncio.run(cenario())
+
+
+def test_mcp_limita_input_externo_antes_do_servico():
+    class Espiao:
+        chamadas = 0
+
+        def iniciar(self, **_kwargs):
+            self.chamadas += 1
+
+    async def cenario():
+        espiao = Espiao()
+        app = criar_app(espiao)
+        casos = [
+            {"objetivo": "x" * (MAX_OBJETIVO + 1)},
+            {"objetivo": "ok", "contexto": "x" * (MAX_CONTEXTO + 1)},
+            {"objetivo": "ok", "restricoes": {"x": "y" * MAX_RESTRICOES_JSON}},
+            {"objetivo": "ok", "restricoes": {"x": float("nan")}},
+        ]
+        for argumentos in casos:
+            resposta = await chamar(app, "metafabrica.despachar_missao", argumentos)
+            assert resposta["estado"] == "erro"
+            assert resposta["erro"]["tipo"] == "ValueError"
+        assert espiao.chamadas == 0
+
+    asyncio.run(cenario())
+
+
+def test_mcp_encaminha_decision_id_e_limita_decisao():
+    class Espiao:
+        observado = None
+
+        def responder_gate(self, job_id, decisao, decision_id=None):
+            self.observado = (job_id, decisao, decision_id)
+            return {"estado": "em_execucao"}
+
+    async def cenario():
+        espiao = Espiao()
+        app = criar_app(espiao)
+        resposta = await chamar(app, "metafabrica.responder_gate", {
+            "job_id": "job", "decisao": "sim", "decision_id": "gate-2",
+        })
+        assert resposta == {"estado": "em_execucao"}
+        assert espiao.observado == ("job", "sim", "gate-2")
+
+        resposta = await chamar(app, "metafabrica.responder_gate", {
+            "job_id": "job", "decisao": "x" * (MAX_DECISAO + 1),
+        })
+        assert resposta["estado"] == "erro"
+        assert espiao.observado == ("job", "sim", "gate-2")
 
     asyncio.run(cenario())
 
