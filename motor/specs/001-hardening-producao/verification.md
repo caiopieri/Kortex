@@ -43,7 +43,14 @@ For the H12b4 chain through `7176ac2`, independent callsite review was GREEN. Fo
 corrections `7f804fc` and `fda5b47` bounded MCP input, exposed gate identity and relayed the CLI
 monetary outbox before success. The full suite completed with `790 passed`; Ruff, mypy, Bandit
 high/high, compileall, Gitleaks and diff checks passed. These gates establish fail-closed integration,
-not real-provider operability or production certification. Packaging must be rerun by the H13 audit.
+not real-provider operability or production certification.
+
+The H13 integration audit closed at `e2f9daa`. The clean source checkout at `4d612f3` and the rebuilt
+sdist incorporating `e2f9daa` each completed with `790 passed`; Ruff, mypy, Bandit high/high,
+compileall, Gitleaks and diff checks passed. The wheel installed in a temporary environment, imported the motor,
+MCP, service and panel modules, contained both runtime HTML fallbacks, and excluded tests, test
+helpers, scripts and examples. The sdist retained the examples, scripts, corpus and test helpers
+required to reproduce its suite.
 
 Counts are evidence for that revision only. A release must rerun every gate from a clean
 checkout.
