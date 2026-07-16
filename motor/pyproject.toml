@@ -29,6 +29,9 @@ studio = [
 [tool.setuptools.packages.find]
 include = ["motor*"]
 
+[tool.setuptools.package-data]
+motor_painel = ["*.html"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
