@@ -37,8 +37,8 @@ como dívida em vez de virar confiança verbal.
 | # | Invariante | Enforço | Teste que prova |
 |---|---|---|---|
 | C1 | Só identidade absoluta resolvida e presente na allowlist pode atravessar a fronteira do runner; allowlist ausente ou ambígua falha fechado. | `motor/motor/grafo.py::construir_grafo.executar_comando_seguro`; `motor/motor/registro.py::ferramentas_permitidas_de_registro` | `motor/tests/test_hardening_h04.py`; controles em `motor/tests/test_validadores_deterministicos.py` e `test_ferramenta.py` |
-| C2 | Comando, se habilitado, deve executar com filesystem, ambiente e rede confinados ao sandbox; `cwd` sozinho não satisfaz isolamento. | `motor/motor/runner.py::CommandRunner` como fronteira de composição; default `DenyCommandRunner` | ⚠️ CAPACIDADE INDISPONÍVEL — nenhum backend H05b foi certificado; ver `motor/specs/001-hardening-producao/sandbox-conformance.md` |
-| C3 | Backend de comando deve limitar timeout, output e árvore de processos com TERM/KILL determinísticos. | contrato em `motor/motor/runner.py`; validação pré-fronteira em `motor/motor/grafo.py` | ⚠️ CAPACIDADE INDISPONÍVEL — limites de entrada são testados, mas nenhum backend H05b real prova execução; ver `motor/specs/001-hardening-producao/sandbox-conformance.md` |
+| C2 | Comando, se habilitado, deve executar com filesystem, ambiente e rede confinados ao sandbox; `cwd` sozinho não satisfaz isolamento. | `motor/motor/runner.py::DockerSandboxRunner`; default `DenyCommandRunner` | ⚠️ ADAPTER NÃO CERTIFICADO — policy/argv/preflight têm testes locais, mas falta daemon Docker Linux, imagem por digest e job H05b real. |
+| C3 | Backend de comando deve limitar timeout, output e árvore de processos com TERM/KILL determinísticos. | `motor/motor/runner.py::DockerSandboxRunner` | ⚠️ NÃO SUSTENTADO — timeout/kill são implementados, mas output ainda não é limitado por streaming e nenhum deployment prova cleanup da árvore; ver `sandbox-conformance.md`. |
 | C4 | Placeholder produz elemento de `argv`, nunca shell ou nova estrutura de comando; metacaracteres, whitespace e caminhos hostis não alteram a identidade executável. | `motor/motor/grafo.py::construir_grafo.executar_comando_seguro`; `CommandRequest.argv` | `motor/tests/test_hardening_h04.py`; wrapper H01/H04/H05a |
 
 ## Eventos e projeções
@@ -66,7 +66,7 @@ como dívida em vez de virar confiança verbal.
 
 ## Dívidas conhecidas
 
-1. **H05b — sandbox real:** C2/C3 continuam indisponíveis até existir adapter, policy, imagem por digest e job de conformidade do deployment. Default-deny é seguro, mas não oferece a capacidade.
+1. **H05b — sandbox real:** existe `DockerSandboxRunner` com policy fail-closed e preflight, mas C2/C3 continuam indisponíveis até existir daemon Linux, imagem/policy por digest, output streaming/cleanup causal e job de conformidade do deployment. Default-deny é seguro, mas não oferece a capacidade.
 2. **Operação do orçamento:** uma única rota OpenAI não prova independência executor-verifier, e a reserva conservadora atual excede o bootstrap de R$ 2. Studio e experimentos reais permanecem fail-closed; recovery do relay exige polling no serviço ou o mesmo `run_id` na CLI.
 3. **Backend autoritativo do curador:** U3/K4 falham fechado sem `RepositorioCertificacoes` real. O protocolo e os testes não fornecem autoridade de produção.
 4. **Operação H11:** expor saúde do reconciliador e garantir lifecycle explícito; efeitos externos continuam responsáveis por idempotência durável por `decision_id`.

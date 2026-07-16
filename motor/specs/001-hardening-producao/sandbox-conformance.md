@@ -1,6 +1,9 @@
 # Command Sandbox Conformance
 
-Status: **required; no production backend certified**
+Status: **adapter present; no production backend certified**
+
+The repository adapter is `motor.runner.DockerSandboxRunner`. Its local tests prove only
+fail-closed preflight and policy construction; they do not satisfy this conformance suite.
 
 A command backend may be enabled only for the exact adapter, engine, policy and image digest
 that pass this conformance suite. Unit-test fakes cannot satisfy it.
@@ -14,6 +17,8 @@ that pass this conformance suite. Unit-test fakes cannot satisfy it.
 - No implicit image pull during certification.
 
 The preflight records engine, operating system, adapter, policy and effective image digest.
+The current macOS workspace has no reachable Docker daemon or pre-provisioned digest, so no
+deployment evidence may be inferred from the adapter tests.
 
 ## Required isolation
 

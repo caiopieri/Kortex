@@ -6,7 +6,7 @@ from typing import Any, cast
 import pytest
 
 from tests.helpers_grafo import construir_grafo_teste as construir_grafo
-from motor.runner import CommandRequest, CommandResult
+from motor.runner import CommandRequest, CommandResult, DockerSandboxRunner
 
 
 class _Nulo:
@@ -74,3 +74,27 @@ def test_limites_de_timeout_sao_delegados_ao_runner(tmp_path: Path, timeout: int
 
     assert resultado["aprovado"] is True
     assert runner.requests[0].timeout_s == timeout
+
+
+def test_docker_runner_rejeita_digest_e_allowlist_invalidos() -> None:
+    with pytest.raises(ValueError, match="digest"):
+        DockerSandboxRunner("latest", ("/bin/echo",))
+    with pytest.raises(ValueError, match="allowlist"):
+        DockerSandboxRunner("sha256:" + "a" * 64, ("echo",))
+
+
+def test_docker_runner_preflight_falha_fechado_sem_daemon(tmp_path: Path, monkeypatch) -> None:
+    runner = DockerSandboxRunner("sha256:" + "a" * 64, ("/bin/echo",))
+    monkeypatch.setattr(runner, "_preflight", lambda: "preflight Docker indisponivel")
+    resultado = runner.run(CommandRequest(("/bin/echo", "ok"), tmp_path, 1))
+    assert resultado.erro == "sandbox_indisponivel"
+
+
+def test_docker_runner_constroi_policy_selada(tmp_path: Path) -> None:
+    runner = DockerSandboxRunner("sha256:" + "b" * 64, ("/bin/echo",))
+    comando = runner._argv(CommandRequest(("/bin/echo", "ok"), tmp_path, 3))
+    assert "--pull" in comando and comando[comando.index("--pull") + 1] == "never"
+    assert "none" in comando and "--read-only" in comando
+    assert "--cap-drop" in comando and "ALL" in comando
+    assert "--security-opt" in comando and "no-new-privileges" in comando
+    assert "--env" not in comando and "sh" not in comando

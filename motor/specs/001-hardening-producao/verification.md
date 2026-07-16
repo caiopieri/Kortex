@@ -52,6 +52,11 @@ MCP, service and panel modules, contained both runtime HTML fallbacks, and exclu
 helpers, scripts and examples. The sdist retained the examples, scripts, corpus and test helpers
 required to reproduce its suite.
 
+H05b follow-up is intentionally not certified: `DockerSandboxRunner` and 14 causal preflight/policy
+tests now exist in the source tree, but the Docker daemon is unreachable on this macOS host and no
+Linux runner, preloaded image digest or conformance job is available. C2/C3 remain blocked; the
+adapter's post-capture truncation is not claimed as streaming output control.
+
 Counts are evidence for that revision only. A release must rerun every gate from a clean
 checkout.
 
