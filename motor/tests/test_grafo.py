@@ -366,6 +366,7 @@ def test_cli_rascunho_propaga_perfil_para_grafo(tmp_path, monkeypatch):
     monkeypatch.setattr(cli, "compor_orcamento_openai", lambda *_args, **_kwargs: SimpleNamespace(
         cliente=ClienteStub(faz_roteador()), repositorio=object(), fabrica=lambda *_: [],
     ))
+    monkeypatch.setattr(cli, "_drenar_orcamento_cli", lambda *_args: True)
     monkeypatch.setattr(cli, "construir_grafo", construir_fake)
 
     assert cli.main() == 0
@@ -989,6 +990,7 @@ def test_cli_escalar_liga_flag_e_default_mantem_inerte(monkeypatch, capsys):
     monkeypatch.setattr(cli, "compor_orcamento_openai", lambda *_args, **_kwargs: SimpleNamespace(
         cliente=ClienteStub(faz_roteador()), repositorio=object(), fabrica=lambda *_: [],
     ))
+    monkeypatch.setattr(cli, "_drenar_orcamento_cli", lambda *_args: True)
 
     def construir_fake(*args, **kwargs):
         flags.append(kwargs["escalar_em_retry"])

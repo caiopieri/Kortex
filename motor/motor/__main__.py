@@ -29,6 +29,7 @@ import json
 import re
 import sqlite3
 import sys
+import time
 from pathlib import Path
 from uuid import uuid4
 
@@ -46,7 +47,7 @@ from .composicao_orcamento import compor_orcamento_openai
 from .eventos import LogEventos
 from .grafo import construir_grafo
 from .modelos import ClienteClaudeCLI, ClienteModelo, ProvedorIndisponivel, cliente_de_config
-from .orcamento import ErroOrcamento
+from .orcamento import ErroOrcamento, RepositorioOrcamento, publicar_um_pendente
 from .registro import (
     cliente_de_registro,
     ferramentas_de_registro,
@@ -70,6 +71,22 @@ def _lista_str(valor) -> list[str]:
     if isinstance(valor, list):
         return [str(item) for item in valor if str(item).strip()]
     return [str(valor)]
+
+
+def _drenar_orcamento_cli(
+    repositorio: RepositorioOrcamento,
+    run_id: str,
+    log: LogEventos,
+    *,
+    agora: int | None = None,
+) -> bool:
+    instante = int(time.time()) if agora is None else agora
+    owner = f"cli-{uuid4().hex}"
+    while publicar_um_pendente(
+        repositorio, run_id, owner, instante, 30, log.publicar_orcamento,
+    ):
+        pass
+    return repositorio.listar_pendentes(run_id) == []
 
 
 def construir_cliente(cfg_modelos: dict | None, dir_registro: str | None,
@@ -246,6 +263,8 @@ def main() -> int:
         try:
             deps_orcamento = compor_orcamento_openai(cfg_modelos or {}, workspace_base)
             cliente = deps_orcamento.cliente
+            if not _drenar_orcamento_cli(deps_orcamento.repositorio, run_id, log):
+                raise ErroOrcamento("relay monetario pendente")
         except ErroOrcamento as ex:
             print(f"erro: orçamento indisponível: {ex}")
             return 1
@@ -296,6 +315,12 @@ def main() -> int:
                 decisao = input("decisão> ").strip()
                 resultado = grafo.invoke(Command(resume=decisao), config)
 
+        try:
+            if not _drenar_orcamento_cli(deps_orcamento.repositorio, run_id, log):
+                raise ErroOrcamento("relay monetario pendente")
+        except Exception as ex:
+            print(f"erro: relay monetário indisponível: {ex}")
+            return 1
         print("\n=== RESPOSTA FINAL ===\n")
         print(resultado.get("resposta_final", "(missão abortada)"))
         return 0

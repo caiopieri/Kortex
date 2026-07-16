@@ -4,16 +4,18 @@ from decimal import Decimal
 
 import pytest
 
-from motor.__main__ import main
+from motor.__main__ import _drenar_orcamento_cli, main
 from motor.composicao_orcamento import (
     PRICING_CAPTURADO_EM, PRICING_MAX_AGE_S, ClienteSomenteOrcado,
     compor_orcamento_openai,
 )
 from motor.modelos import ClienteOpenAICompat
+from motor.eventos import LogEventos
 from motor.openai_orcado import PRICING_VERSION
 from motor.orcamento import (
     ErroOrcamento, IdentidadeTentativaCusteada, RequisitosTentativaCusteada,
-    executar_tentativa_custeada,
+    ReservaOrcamento, RepositorioOrcamento, executar_tentativa_custeada,
+    publicar_um_pendente,
 )
 
 
@@ -119,6 +121,7 @@ def test_cli_injeta_identidade_repositorio_e_fabrica(tmp_path, monkeypatch):
     cfg = tmp_path / "modelos.json"
     cfg.write_text(json.dumps(_cfg()), encoding="utf-8")
     observado = {}
+    drains = []
 
     class Grafo:
         def invoke(self, entrada, config):
@@ -130,6 +133,10 @@ def test_cli_injeta_identidade_repositorio_e_fabrica(tmp_path, monkeypatch):
         return Grafo()
 
     monkeypatch.setattr("motor.__main__.construir_grafo", construir)
+    monkeypatch.setattr(
+        "motor.__main__._drenar_orcamento_cli",
+        lambda _repo, run_id, _log: drains.append(run_id) or True,
+    )
     monkeypatch.setattr(sys, "argv", [
         "motor", "missao", "--modelos", str(cfg), "--workspace", str(tmp_path),
         "--run-id", "run-config-1",
@@ -141,6 +148,28 @@ def test_cli_injeta_identidade_repositorio_e_fabrica(tmp_path, monkeypatch):
     assert observado["config"]["configurable"]["thread_id"] == "run-config-1"
     assert observado["kwargs"]["repositorio_orcamento"] is not None
     assert callable(observado["kwargs"]["fabrica_tentativas_orcadas"])
+    assert drains == ["run-config-1", "run-config-1"]
+
+
+def test_cli_redelivera_outbox_apos_lease_sem_ack(tmp_path):
+    repo = RepositorioOrcamento(tmp_path / "orcamento")
+    sessao = repo.sessao("run", "run", Decimal("10"))
+    reserva = ReservaOrcamento("reserva", "call", "rota", 1, Decimal("1"), "v1")
+    assert repo.reservar_exclusiva(sessao, reserva).status == "NOVA"
+
+    def falhar(*_args):
+        raise RuntimeError("sink indisponível")
+
+    with pytest.raises(RuntimeError, match="sink indisponível"):
+        publicar_um_pendente(repo, "run", "cli-antiga", 10, 5, falhar)
+
+    log = LogEventos(tmp_path / "eventos.jsonl")
+    try:
+        assert not _drenar_orcamento_cli(repo, "run", log, agora=14)
+        assert _drenar_orcamento_cli(repo, "run", log, agora=15)
+    finally:
+        log.fechar()
+    assert repo.listar_pendentes("run") == []
 
 
 @pytest.mark.parametrize("argv", [
@@ -173,6 +202,7 @@ def test_cli_caixa_injeta_mesma_identidade_e_dependencias(tmp_path, monkeypatch)
     monkeypatch.setattr("motor.__main__.sqlite3.connect", lambda *_args, **_kwargs: Conn())
     monkeypatch.setattr("motor.__main__.SqliteSaver", Saver)
     monkeypatch.setattr("motor.__main__.CaixaFundador", lambda *_args: object())
+    monkeypatch.setattr("motor.__main__._drenar_orcamento_cli", lambda *_args: True)
     monkeypatch.setattr("motor.__main__.construir_grafo", lambda cliente, _log, **kwargs: (
         observado.update(cliente=cliente, kwargs=kwargs) or object()
     ))

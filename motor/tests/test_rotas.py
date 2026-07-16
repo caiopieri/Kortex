@@ -114,6 +114,7 @@ def _preparar_cli(monkeypatch, tmp_path):
         return _GrafoCliFake()
 
     monkeypatch.setattr(cli, "compor_orcamento_openai", compor_orcamento_fake)
+    monkeypatch.setattr(cli, "_drenar_orcamento_cli", lambda *_args: True)
     monkeypatch.setattr(cli, "construir_grafo", construir_grafo_fake)
     return home, chamadas
 

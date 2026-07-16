@@ -346,6 +346,7 @@ def test_cli_propaga_ferramentas_permitidas_da_config(tmp_path, monkeypatch):
     monkeypatch.setattr(cli, "compor_orcamento_openai", lambda *_args, **_kwargs: SimpleNamespace(
         cliente=ClienteStub(lambda _p, _prompt: "ok"), repositorio=object(), fabrica=lambda *_: [],
     ))
+    monkeypatch.setattr(cli, "_drenar_orcamento_cli", lambda *_args: True)
     monkeypatch.setattr(cli, "construir_grafo", construir_fake)
 
     assert cli.main() == 0
