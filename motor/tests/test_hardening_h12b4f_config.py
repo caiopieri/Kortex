@@ -7,7 +7,7 @@ import pytest
 from motor.__main__ import _drenar_orcamento_cli, main
 from motor.composicao_orcamento import (
     PRICING_CAPTURADO_EM, PRICING_MAX_AGE_S, ClienteSomenteOrcado,
-    compor_orcamento_openai,
+    RotaOrcadaCertificada, compor_orcamento_openai, validar_independencia_orcada,
 )
 from motor.modelos import ClienteOpenAICompat
 from motor.eventos import LogEventos
@@ -30,6 +30,56 @@ def _cfg(capturado_em=PRICING_CAPTURADO_EM):
         "margem": "1.20",
         "timeout": 30,
     }}
+
+
+def _rota(route_id: str, provider_id: str, *papeis: str) -> RotaOrcadaCertificada:
+    return RotaOrcadaCertificada(route_id, provider_id, frozenset(papeis))
+
+
+def test_preflight_aceita_executor_e_verifier_em_providers_distintos():
+    validar_independencia_orcada((
+        _rota("rota-executor", "provider-a", "executor"),
+        _rota("rota-verifier", "provider-b", "verifier"),
+    ))
+
+
+@pytest.mark.parametrize("rotas", [
+    (),
+    [],
+    (_rota("rota", "provider-a", "executor", "verifier"),),
+    (
+        _rota("rota-a", "provider-a", "executor"),
+        _rota("rota-b", "provider-a", "verifier"),
+    ),
+    (_rota("rota-a", "provider-a", "executor"),),
+    (_rota("rota-b", "provider-b", "verifier"),),
+])
+def test_preflight_rejeita_catalogo_sem_independencia(rotas):
+    with pytest.raises(ErroOrcamento):
+        validar_independencia_orcada(rotas)
+
+
+@pytest.mark.parametrize("rotas", [
+    (object(),),
+    (_rota("", "provider-a", "executor"),),
+    (_rota("ROTA", "provider-a", "executor"),),
+    (_rota("rota/alias", "provider-a", "executor"),),
+    (_rota("a" * 129, "provider-a", "executor"),),
+    (_rota("rota", "", "executor"),),
+    (_rota("rota", "Provider", "executor"),),
+    (_rota("rota", "provider:alias", "executor"),),
+    (_rota("rota", "a" * 65, "executor"),),
+    (RotaOrcadaCertificada("rota", "provider-a", set(["executor"])),),
+    (_rota("rota", "provider-a"),),
+    (_rota("rota", "provider-a", "planner"),),
+    (
+        _rota("duplicada", "provider-a", "executor"),
+        _rota("duplicada", "provider-b", "verifier"),
+    ),
+])
+def test_preflight_rejeita_topologia_hostil(rotas):
+    with pytest.raises(ErroOrcamento):
+        validar_independencia_orcada(rotas)
 
 
 def test_config_constroi_somente_adapter_orcado_com_pricing_selado(tmp_path, monkeypatch):

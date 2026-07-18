@@ -44,12 +44,63 @@ class ClienteSomenteOrcado:
 
 
 @dataclass(frozen=True)
+class RotaOrcadaCertificada:
+    """Identidade code-owned de uma rota apta a papéis do grafo."""
+
+    route_id: str
+    provider_id: str
+    papeis: frozenset[str]
+
+
+@dataclass(frozen=True)
 class DependenciasOrcamento:
     cliente: ClienteSomenteOrcado
     repositorio: RepositorioOrcamento
     fabrica: Callable[
         [str, str, int, RequisitosTentativaCusteada], list[RotaTentativaCusteada]
     ]
+    rotas_certificadas: tuple[RotaOrcadaCertificada, ...]
+
+
+def validar_independencia_orcada(
+    rotas: tuple[RotaOrcadaCertificada, ...],
+) -> None:
+    """Exige providers distintos e certificados para executor e verifier."""
+    if type(rotas) is not tuple or not rotas:
+        raise ErroOrcamento("catalogo de rotas certificadas ausente")
+    route_ids: set[str] = set()
+    por_papel: dict[str, set[str]] = {"executor": set(), "verifier": set()}
+    for rota in rotas:
+        if not isinstance(rota, RotaOrcadaCertificada):
+            raise ErroOrcamento("rota certificada invalida")
+        if (
+            not isinstance(rota.route_id, str)
+            or re.fullmatch(r"[a-z0-9][a-z0-9_.:-]{0,127}", rota.route_id) is None
+            or rota.route_id in route_ids
+        ):
+            raise ErroOrcamento("route_id certificado invalido ou duplicado")
+        if (
+            not isinstance(rota.provider_id, str)
+            or re.fullmatch(r"[a-z0-9][a-z0-9_.-]{0,63}", rota.provider_id) is None
+        ):
+            raise ErroOrcamento("provider_id certificado invalido")
+        if (
+            type(rota.papeis) is not frozenset
+            or not rota.papeis
+            or any(papel not in por_papel for papel in rota.papeis)
+        ):
+            raise ErroOrcamento("papeis certificados invalidos")
+        route_ids.add(rota.route_id)
+        for papel in rota.papeis:
+            por_papel[papel].add(rota.provider_id)
+    if not any(
+        executor != verifier
+        for executor in por_papel["executor"]
+        for verifier in por_papel["verifier"]
+    ):
+        raise ErroOrcamento(
+            "independencia executor-verifier exige dois providers certificados"
+        )
 
 
 def _inteiro(dados: dict, nome: str, *, maximo: int | None = None) -> int:
@@ -136,4 +187,7 @@ def compor_orcamento_openai(
 
     return DependenciasOrcamento(
         ClienteSomenteOrcado(), RepositorioOrcamento(Path(workspace) / "orcamento"), fabricar,
+        (RotaOrcadaCertificada(
+            "openai:gpt-5", "openai", frozenset({"executor", "verifier"}),
+        ),),
     )
