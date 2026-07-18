@@ -4,7 +4,6 @@ import json
 import sys
 from decimal import Decimal
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 from langgraph.types import Command
@@ -17,7 +16,7 @@ except ImportError:
 from motor.eventos import LogEventos
 from motor import __main__ as cli
 from motor.grafo import PROMPT_SUBAGENTE, _proximo_tier
-from tests.helpers_grafo import construir_grafo_teste as construir_grafo
+from tests.helpers_grafo import composicao_stub, construir_grafo_teste as construir_grafo
 from motor.modelos import ClienteRoteador, ClienteStub
 from motor.orcamento import (
     CotacaoTentativa,
@@ -363,9 +362,12 @@ def test_cli_rascunho_propaga_perfil_para_grafo(tmp_path, monkeypatch):
     monkeypatch.setattr(sys, "argv", ["motor", "--spec", str(spec_path), "--rascunho"])
     monkeypatch.setattr(cli, "LogEventos", LogFake)
     monkeypatch.setattr(cli, "construir_cliente", lambda *args, **kwargs: ClienteStub(faz_roteador()))
-    monkeypatch.setattr(cli, "compor_orcamento_openai", lambda *_args, **_kwargs: SimpleNamespace(
-        cliente=ClienteStub(faz_roteador()), repositorio=object(), fabrica=lambda *_: [],
-    ))
+    monkeypatch.setattr(
+        cli, "compor_orcamento_openai",
+        lambda *_args, **_kwargs: composicao_stub(
+            ClienteStub(faz_roteador()), tmp_path / "orcamento-cli-rascunho",
+        ),
+    )
     monkeypatch.setattr(cli, "_drenar_orcamento_cli", lambda *_args: True)
     monkeypatch.setattr(cli, "construir_grafo", construir_fake)
 
@@ -979,7 +981,7 @@ def test_retry_com_flag_nao_escala_quando_aprova_na_primeira(tmp_path):
     assert not any(e["evento"] == "executor.escalado" for e in eventos_de(tmp_path))
 
 
-def test_cli_escalar_liga_flag_e_default_mantem_inerte(monkeypatch, capsys):
+def test_cli_escalar_liga_flag_e_default_mantem_inerte(tmp_path, monkeypatch, capsys):
     flags: list[bool] = []
 
     class GrafoFake:
@@ -987,9 +989,12 @@ def test_cli_escalar_liga_flag_e_default_mantem_inerte(monkeypatch, capsys):
             return {"resposta_final": "ok"}
 
     monkeypatch.setattr(cli, "construir_cliente", lambda cfg_modelos, dir_registro, log=None: ClienteStub(faz_roteador()))
-    monkeypatch.setattr(cli, "compor_orcamento_openai", lambda *_args, **_kwargs: SimpleNamespace(
-        cliente=ClienteStub(faz_roteador()), repositorio=object(), fabrica=lambda *_: [],
-    ))
+    monkeypatch.setattr(
+        cli, "compor_orcamento_openai",
+        lambda *_args, **_kwargs: composicao_stub(
+            ClienteStub(faz_roteador()), tmp_path / "orcamento-cli-escalar",
+        ),
+    )
     monkeypatch.setattr(cli, "_drenar_orcamento_cli", lambda *_args: True)
 
     def construir_fake(*args, **kwargs):

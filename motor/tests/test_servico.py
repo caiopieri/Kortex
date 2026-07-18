@@ -9,7 +9,10 @@ import motor.servico as servico_modulo
 from motor.modelos import ClienteStub
 from motor.eventos import LogEventos
 from motor.servico import GerenciadorJobs as GerenciadorJobsProducao
-from tests.helpers_grafo import GerenciadorJobsTeste as GerenciadorJobs, dependencias_stub
+from tests.helpers_grafo import (
+    GerenciadorJobsTeste as GerenciadorJobs,
+    dependencias_servico_stub,
+)
 from tests.test_grafo import SPEC, faz_roteador
 
 
@@ -41,7 +44,7 @@ def test_iniciar_retorna_imediato_e_chega_a_gate_pendente(tmp_path):
 
 def test_servico_certificado_injeta_orcamento_e_identidade_estavel(tmp_path):
     cliente = ClienteStub(faz_roteador())
-    deps = dependencias_stub(cliente, tmp_path / "orcamento")
+    deps = dependencias_servico_stub(cliente, tmp_path / "orcamento")
     gerenciador = GerenciadorJobs(
         db_path=tmp_path / "motor-orcado.db",
         workspace_base=tmp_path / "runs-orcadas",
@@ -103,7 +106,7 @@ def test_falha_do_sink_monetario_recupera_so_apos_lease(tmp_path, monkeypatch):
             raise RuntimeError("sink indisponivel")
 
     cliente = ClienteStub(faz_roteador())
-    deps = dependencias_stub(cliente, tmp_path / "orcamento-falho")
+    deps = dependencias_servico_stub(cliente, tmp_path / "orcamento-falho")
     log = LogFalho(tmp_path / "log-falho.jsonl")
     gerenciador = GerenciadorJobs(
         db_path=tmp_path / "motor-falho.db",

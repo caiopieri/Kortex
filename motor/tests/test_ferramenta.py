@@ -1,7 +1,6 @@
 import json
 import sys
 from pathlib import Path
-from types import SimpleNamespace
 
 try:
     from langgraph.checkpoint.memory import InMemorySaver
@@ -12,6 +11,7 @@ from motor import __main__ as cli
 from motor.eventos import LogEventos
 from tests.helpers_grafo import construir_grafo_teste as construir_grafo
 from motor.modelos import ClienteStub
+from tests.helpers_grafo import composicao_stub
 from motor.politica import PoliticaGates
 from motor.registro import ferramentas_de_registro, ferramentas_permitidas_de_registro
 from tests.runner_fake import RunnerFake
@@ -343,9 +343,12 @@ def test_cli_propaga_ferramentas_permitidas_da_config(tmp_path, monkeypatch):
     monkeypatch.setattr(sys, "argv", ["motor", "--modelos", str(cfg_path), "--spec", str(spec_path)])
     monkeypatch.setattr(cli, "LogEventos", LogFake)
     monkeypatch.setattr(cli, "construir_cliente", lambda *args, **kwargs: ClienteStub(lambda p, prompt: "ok"))
-    monkeypatch.setattr(cli, "compor_orcamento_openai", lambda *_args, **_kwargs: SimpleNamespace(
-        cliente=ClienteStub(lambda _p, _prompt: "ok"), repositorio=object(), fabrica=lambda *_: [],
-    ))
+    monkeypatch.setattr(
+        cli, "compor_orcamento_openai",
+        lambda *_args, **_kwargs: composicao_stub(
+            ClienteStub(lambda _p, _prompt: "ok"), tmp_path / "orcamento-cli",
+        ),
+    )
     monkeypatch.setattr(cli, "_drenar_orcamento_cli", lambda *_args: True)
     monkeypatch.setattr(cli, "construir_grafo", construir_fake)
 

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -14,7 +13,7 @@ except ImportError:
 from motor import __main__ as cli
 from motor.eventos import LogEventos
 from motor.grafo import montar_prompt_planner
-from tests.helpers_grafo import construir_grafo_teste as construir_grafo
+from tests.helpers_grafo import composicao_stub, construir_grafo_teste as construir_grafo
 from motor.modelos import ClienteStub
 from motor.politica import PoliticaGates
 from motor.registro import rotas_de_registro
@@ -107,7 +106,7 @@ def _preparar_cli(monkeypatch, tmp_path):
     def compor_orcamento_fake(cfg_modelos, workspace):
         chamadas["orcamento"].append((cfg_modelos, workspace))
         cliente = ClienteStub(lambda papel, prompt: "ok")
-        return SimpleNamespace(cliente=cliente, repositorio=object(), fabrica=lambda *_: [])
+        return composicao_stub(cliente, tmp_path / "orcamento-cli")
 
     def construir_grafo_fake(cliente, log, **kwargs):
         chamadas["grafo"].append(kwargs)

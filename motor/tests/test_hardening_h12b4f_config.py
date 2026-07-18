@@ -9,7 +9,7 @@ from motor.composicao_orcamento import (
     PRICING_CAPTURADO_EM, PRICING_MAX_AGE_S, ClienteSomenteOrcado,
     RotaOrcadaCertificada, compor_orcamento_openai, validar_independencia_orcada,
 )
-from motor.modelos import ClienteOpenAICompat
+from motor.modelos import ClienteOpenAICompat, ClienteStub
 from motor.eventos import LogEventos
 from motor.openai_orcado import PRICING_VERSION
 from motor.orcamento import (
@@ -17,6 +17,7 @@ from motor.orcamento import (
     ReservaOrcamento, RepositorioOrcamento, executar_tentativa_custeada,
     publicar_um_pendente,
 )
+from tests.helpers_grafo import composicao_stub
 
 
 def _cfg(capturado_em=PRICING_CAPTURADO_EM):
@@ -80,6 +81,27 @@ def test_preflight_rejeita_catalogo_sem_independencia(rotas):
 def test_preflight_rejeita_topologia_hostil(rotas):
     with pytest.raises(ErroOrcamento):
         validar_independencia_orcada(rotas)
+
+
+def test_composicao_stub_emite_as_identidades_certificadas(tmp_path):
+    deps = composicao_stub(ClienteStub(lambda *_args: "ok"), tmp_path / "stub")
+    executor = deps.fabrica(
+        "pesquisador", "p", 1, RequisitosTentativaCusteada(),
+    )[0]
+    verifier = deps.fabrica(
+        "verifier", "p", 1,
+        RequisitosTentativaCusteada(evitar_provedor=executor.provider_id),
+    )[0]
+
+    assert (executor.route_id, executor.provider_id) == (
+        "stub:executor", "stub-provider:executor",
+    )
+    assert (verifier.route_id, verifier.provider_id) == (
+        "stub:verifier", "stub-provider:verifier",
+    )
+    assert {executor.route_id, verifier.route_id} == {
+        rota.route_id for rota in deps.rotas_certificadas
+    }
 
 
 def test_config_constroi_somente_adapter_orcado_com_pricing_selado(tmp_path, monkeypatch):

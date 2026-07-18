@@ -20,7 +20,7 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.types import Command
 
 from .caixa import LedgerCaixa
-from .composicao_orcamento import compor_orcamento_openai
+from .composicao_orcamento import RotaOrcadaCertificada, compor_orcamento_openai
 from .eventos import LogEventos
 from .eventos_schema import SCHEMA_VERSAO
 from .grafo import construir_grafo
@@ -92,6 +92,7 @@ class GerenciadorJobs:
                      [str, str, int, RequisitosTentativaCusteada],
                      list[RotaTentativaCusteada],
                  ] | None = None,
+                 rotas_certificadas: tuple[RotaOrcadaCertificada, ...] | None = None,
                  ferramentas: dict[str, dict[str, Any]] | None = None,
                  fault: Callable[[str], None] | None = None,
                  outbox_poll_s: float = 0.5,
@@ -102,6 +103,8 @@ class GerenciadorJobs:
         self.workspace_base = Path(workspace_base)
         if (repositorio_orcamento is None) != (fabrica_tentativas_orcadas is None):
             raise ValueError("repo e fabrica orcados devem ser fornecidos juntos")
+        if rotas_certificadas is not None and repositorio_orcamento is None:
+            raise ValueError("topologia orcada exige repo e fabrica")
         if cliente is None:
             if repositorio_orcamento is not None:
                 raise ValueError("deps orcadas explicitas exigem cliente")
@@ -109,6 +112,7 @@ class GerenciadorJobs:
             cliente = deps.cliente
             repositorio_orcamento = deps.repositorio
             fabrica_tentativas_orcadas = deps.fabrica
+            rotas_certificadas = deps.rotas_certificadas
         elif repositorio_orcamento is None:
             raise ValueError("cliente injetado exige repo e fabrica orcados")
         self.cfg_modelos = cfg_modelos
@@ -118,6 +122,7 @@ class GerenciadorJobs:
         self._cliente = cliente
         self._repositorio_orcamento = repositorio_orcamento
         self._fabrica_tentativas_orcadas = fabrica_tentativas_orcadas
+        self._rotas_certificadas = rotas_certificadas
         self._fault = fault
         self.ferramentas = (ferramentas if ferramentas is not None else
                             ferramentas_de_registro(self.dir_registro) if self.dir_registro else {})

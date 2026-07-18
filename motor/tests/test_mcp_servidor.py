@@ -1,6 +1,5 @@
 import asyncio
 import json
-from types import SimpleNamespace
 
 import motor.servico as servico_modulo
 from motor.mcp_servidor import (
@@ -17,7 +16,10 @@ from motor.mcp_servidor import (
     criar_app,
 )
 from motor.modelos import ClienteStub
-from tests.helpers_grafo import GerenciadorJobsTeste as GerenciadorJobs, dependencias_stub
+from tests.helpers_grafo import (
+    GerenciadorJobsTeste as GerenciadorJobs,
+    composicao_stub,
+)
 from tests.test_grafo import faz_roteador
 
 
@@ -29,16 +31,11 @@ def test_gerenciador_de_env_carrega_modelos(tmp_path, monkeypatch):
     monkeypatch.setenv("MOTOR_DB", str(tmp_path / "motor.db"))
     monkeypatch.setenv("MOTOR_WORKSPACE", str(tmp_path / "runs"))
     cliente = ClienteStub(faz_roteador())
-    deps = dependencias_stub(cliente, tmp_path / "orcamento")
     observado = {}
 
     def compor(cfg, workspace):
         observado.update(cfg=cfg, workspace=workspace)
-        return SimpleNamespace(
-            cliente=cliente,
-            repositorio=deps["repositorio_orcamento"],
-            fabrica=deps["fabrica_tentativas_orcadas"],
-        )
+        return composicao_stub(cliente, tmp_path / "orcamento")
 
     monkeypatch.setattr(servico_modulo, "compor_orcamento_openai", compor)
 
@@ -57,18 +54,13 @@ def test_gerenciador_de_env_aceita_modelos_e_registro_ortogonais(tmp_path, monke
     registro = tmp_path / "registro"
     registro.mkdir()
     cliente = ClienteStub(faz_roteador())
-    deps = dependencias_stub(cliente, tmp_path / "orcamento-ortogonal")
     monkeypatch.setenv("MOTOR_MODELOS", str(modelos))
     monkeypatch.setenv("MOTOR_REGISTRO", str(registro))
     monkeypatch.setenv("MOTOR_DB", str(tmp_path / "motor-ortogonal.db"))
     monkeypatch.setattr(
         servico_modulo,
         "compor_orcamento_openai",
-        lambda *_: SimpleNamespace(
-            cliente=cliente,
-            repositorio=deps["repositorio_orcamento"],
-            fabrica=deps["fabrica_tentativas_orcadas"],
-        ),
+        lambda *_: composicao_stub(cliente, tmp_path / "orcamento-ortogonal"),
     )
 
     gerenciador = _gerenciador_de_env()
