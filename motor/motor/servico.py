@@ -13,6 +13,7 @@ import threading
 import time
 import uuid
 from collections.abc import Callable
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, cast
 
@@ -30,7 +31,7 @@ from .eventos_schema import SCHEMA_VERSAO
 from .grafo import construir_grafo
 from .modelos import ClienteModelo
 from .orcamento import (
-    RepositorioOrcamento, RequisitosTentativaCusteada, RotaTentativaCusteada,
+    ErroOrcamento, RepositorioOrcamento, RequisitosTentativaCusteada, RotaTentativaCusteada,
     publicar_um_pendente,
 )
 from .politica import PoliticaGates
@@ -97,6 +98,7 @@ class GerenciadorJobs:
                      list[RotaTentativaCusteada],
                  ] | None = None,
                  rotas_certificadas: tuple[RotaOrcadaCertificada, ...] | None = None,
+                 teto_bootstrap: Decimal | None = None,
                  ferramentas: dict[str, dict[str, Any]] | None = None,
                  fault: Callable[[str], None] | None = None,
                  outbox_poll_s: float = 0.5,
@@ -107,8 +109,8 @@ class GerenciadorJobs:
         self.workspace_base = Path(workspace_base)
         if (repositorio_orcamento is None) != (fabrica_tentativas_orcadas is None):
             raise ValueError("repo e fabrica orcados devem ser fornecidos juntos")
-        if rotas_certificadas is not None and repositorio_orcamento is None:
-            raise ValueError("topologia orcada exige repo e fabrica")
+        if (rotas_certificadas is not None or teto_bootstrap is not None) and repositorio_orcamento is None:
+            raise ValueError("topologia e teto orcados exigem repo e fabrica")
         if cliente is None:
             if repositorio_orcamento is not None:
                 raise ValueError("deps orcadas explicitas exigem cliente")
@@ -117,6 +119,7 @@ class GerenciadorJobs:
             repositorio_orcamento = deps.repositorio
             fabrica_tentativas_orcadas = deps.fabrica
             rotas_certificadas = deps.rotas_certificadas
+            teto_bootstrap = deps.teto_bootstrap
         elif repositorio_orcamento is None:
             raise ValueError("cliente injetado exige repo e fabrica orcados")
         self.cfg_modelos = cfg_modelos
@@ -127,6 +130,7 @@ class GerenciadorJobs:
         self._repositorio_orcamento = repositorio_orcamento
         self._fabrica_tentativas_orcadas = fabrica_tentativas_orcadas
         self._rotas_certificadas = rotas_certificadas
+        self._teto_bootstrap = teto_bootstrap
         self._fault = fault
         self.ferramentas = (ferramentas if ferramentas is not None else
                             ferramentas_de_registro(self.dir_registro) if self.dir_registro else {})
@@ -353,6 +357,7 @@ class GerenciadorJobs:
                 rotas=self.rotas,
                 repositorio_orcamento=self._repositorio_orcamento,
                 fabrica_tentativas_orcadas=self._fabrica_tentativas_orcadas,
+                teto_bootstrap=self._teto_bootstrap_validado(),
             )
             snapshot = grafo.get_state(self._config(job_id))
             return self._gates(getattr(snapshot, "interrupts", ()))
@@ -398,6 +403,13 @@ class GerenciadorJobs:
 
     def _exigir_topologia_orcada(self) -> None:
         validar_independencia_orcada(self._rotas_certificadas)
+        self._teto_bootstrap_validado()
+
+    def _teto_bootstrap_validado(self) -> Decimal:
+        teto = self._teto_bootstrap
+        if (not isinstance(teto, Decimal) or not teto.is_finite() or teto <= 0):
+            raise ErroOrcamento("teto bootstrap ausente ou invalido")
+        return teto
 
     def _iniciar_thread(self, job_id: str, cliente: ClienteModelo, entrada: Any,
                         claim: dict[str, Any] | None = None) -> None:
@@ -439,6 +451,7 @@ class GerenciadorJobs:
                 rotas=self.rotas,
                 repositorio_orcamento=self._repositorio_orcamento,
                 fabrica_tentativas_orcadas=self._fabrica_tentativas_orcadas,
+                teto_bootstrap=self._teto_bootstrap_validado(),
             )
             if claim is None:
                 resultado = grafo.invoke(entrada, self._config(job_id))
@@ -600,6 +613,7 @@ class GerenciadorJobs:
             rotas=self.rotas,
             repositorio_orcamento=self._repositorio_orcamento,
             fabrica_tentativas_orcadas=self._fabrica_tentativas_orcadas,
+            teto_bootstrap=self._teto_bootstrap_validado(),
         )
         try:
             snapshot = grafo.get_state(self._config(job_id))

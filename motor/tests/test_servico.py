@@ -51,6 +51,22 @@ def test_servico_preflight_bloqueia_antes_de_registrar_job(tmp_path, topologia):
         jobs.fechar()
 
 
+def test_servico_preflight_exige_teto_bootstrap_antes_de_registrar_job(tmp_path):
+    cliente = ClienteStub(faz_roteador())
+    deps = dependencias_servico_stub(cliente, tmp_path / "orcamento-sem-teto")
+    deps["teto_bootstrap"] = None
+    jobs = GerenciadorJobsProducao(
+        db_path=tmp_path / "preflight-sem-teto.db", cliente=cliente, **deps,
+    )
+    try:
+        with pytest.raises(ErroOrcamento, match="teto bootstrap"):
+            jobs.iniciar(spec=SPEC, thread_id="preflight-sem-teto")
+        assert jobs._jobs == {}
+        assert jobs._threads == set()
+    finally:
+        jobs.fechar()
+
+
 def test_servico_sem_topologia_bloqueia_resume_e_recovery_antes_de_estado(tmp_path):
     jobs = GerenciadorJobsProducao(
         db_path=tmp_path / "passivo.db",

@@ -17,7 +17,7 @@ MOTOR = Path(__file__).resolve().parents[1]
 SPEC = MOTOR / "specs/001-hardening-producao"
 MANIFEST = SPEC / "reproducer-manifest.jsonl"
 MATRIX = SPEC / "invariant-matrix.jsonl"
-CORPUS = SPEC / "reproducer-corpus-20f270dc95646f01.tar"
+CORPUS = SPEC / "reproducer-corpus-0bdbb677dd281edc.tar"
 REQUIRED = {
     "nodeid", "file_sha256", "corpus_member", "origin", "baseline", "invariant",
     "cause", "owner", "disposition", "disposition_by", "disposition_reason", "landing",

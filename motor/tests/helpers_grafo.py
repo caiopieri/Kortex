@@ -72,7 +72,11 @@ def composicao_stub(cliente: ClienteStub, raiz: Path | None = None) -> Dependenc
 def dependencias_servico_stub(
     cliente: ClienteStub, raiz: Path | None = None,
 ) -> dict[str, Any]:
-    return {**dependencias_stub(cliente, raiz), "rotas_certificadas": topologia_stub()}
+    return {
+        **dependencias_stub(cliente, raiz),
+        "rotas_certificadas": topologia_stub(),
+        "teto_bootstrap": Decimal("2"),
+    }
 
 
 def construir_grafo_teste(cliente: Any, log: Any, **kwargs: Any):

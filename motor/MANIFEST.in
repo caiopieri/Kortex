@@ -6,6 +6,6 @@ include motor_painel/grafo3d.html
 include motor_painel/painel.html
 include specs/001-hardening-producao/invariant-matrix.jsonl
 include specs/001-hardening-producao/reproducer-manifest.jsonl
-include specs/001-hardening-producao/reproducer-corpus-20f270dc95646f01.tar
+include specs/001-hardening-producao/reproducer-corpus-0bdbb677dd281edc.tar
 recursive-include exemplos *.json *.jsonl *.md
 recursive-include scripts *.py

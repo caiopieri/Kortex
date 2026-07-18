@@ -22,7 +22,7 @@ The H00-H13 program and the H12b extension through H12b4f provide causal tests f
   entrypoints when durable budget dependencies are absent.
 
 The public test corpus is content-addressed by `reproducer-manifest.jsonl` and
-`reproducer-corpus-20f270dc95646f01.tar`. `tests/test_hardening_*.py` contains the maintained
+`reproducer-corpus-0bdbb677dd281edc.tar`. `tests/test_hardening_*.py` contains the maintained
 causal tests. Loose audit copies and session reports are not part of the repository contract.
 
 ## Current gates
