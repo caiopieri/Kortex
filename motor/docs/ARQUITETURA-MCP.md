@@ -25,7 +25,8 @@ assíncrona e retorna imediatamente
 ### `metafabrica.status_missao`
 
 Retorna `em_execucao`, `gate_pendente`, `concluido` ou `erro`. Gates carregam payload cru e
-`decision_id`; artefatos são referências, mas `resposta_final` ainda é texto integral do modelo.
+`decision_id`; artefatos são referências. Toda resposta serializada tem cap de 64 KiB em UTF-8;
+`resposta_final` continua sendo texto hostil integral quando cabe nesse envelope.
 
 ### `metafabrica.responder_gate`
 
@@ -55,7 +56,7 @@ não alteram a execução nem substituem o evento autoritativo.
 |---|---|
 | Credenciais | Injetadas pelo host; nunca persistidas pelo motor |
 | Input MCP | Schema estrito, limites de tamanho e IDs validados |
-| Output de modelo | Tratado como dado hostil |
+| Output de modelo | Tratado como dado hostil; resposta MCP serializada limitada a 64 KiB |
 | Gates | Autoridade permanece fora do modelo e do motor |
 | Comandos | `DenyCommandRunner` até existir sandbox certificado |
 | Orçamento | Reserva antes da chamada; custo desconhecido bloqueia |
@@ -69,8 +70,9 @@ O estado de produção está em `../specs/001-hardening-producao/verification.md
 - Checkpoint e ledger podem divergir após crash; reconciliação precisa ser idempotente.
 - Descrições MCP vagas podem rotear tarefas erradas mesmo com implementação segura.
 - Default-deny contém a ausência de sandbox, mas não prova C2/C3.
-- Uma rota de modelo única ou um teto insuficiente mantém o MCP seguro, porém indisponível para a
+- Uma rota de modelo única ou um teto configurado insuficiente mantém o MCP seguro, porém indisponível para a
   missão; fail-closed não é certificação operacional.
-- `resposta_final` é dado hostil e ainda não tem cap explícito; o host não deve renderizá-la como
-  conteúdo ativo nem tratá-la como instrução.
+- O cap MCP é aplicado após materialização pelo serviço e lotes grandes de eventos falham em vez de
+  paginar por quantidade. O host não deve renderizar `resposta_final` como conteúdo ativo nem
+  tratá-la como instrução.
 - Crash entre a resposta de `despachar_missao` e o primeiro checkpoint/outbox pode perder a submissão.

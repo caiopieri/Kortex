@@ -61,8 +61,9 @@ python -m motor --modelos /caminho/modelos-orcados.json "pesquise oportunidades 
 ```
 
 O último comando demonstra a composição e pode bloquear antes da rede: a configuração precisa conter
-`orcamento_openai`, credencial por variável de ambiente e snapshot FX fresco; além disso, a rota única
-e o teto padrão ainda não completam uma missão real. Configurações legadas não autorizam efeitos.
+`orcamento_openai`, credencial por variável de ambiente, snapshot FX fresco e
+`teto_bootstrap_brl` positivo. A rota OpenAI única ainda reprova o preflight de independência;
+configurações legadas não autorizam efeitos.
 
 ## Estado
 
@@ -73,7 +74,7 @@ integração fail-closed dos callsites de modelo. O estado comprovado hoje é:
 - kernel/spec/grafo, reconciliação bounded e validação de capabilities hardened;
 - executor de comando com identidade e `argv` validados, mas **default-deny em produção**;
 - schema de eventos v2, ledger append-only/recovery, projeção read-only e superfície MCP tipada com
-  input limitado, identidade de gate e orçamento fail-closed;
+  input e resposta serializada limitados, identidade de gate e orçamento fail-closed;
 - curador com sombra read-only, certificação anti-Goodhart e promoção apenas como intenção humana
   (ADR-003), nunca aplicação automática;
 - Caixa do Fundador e livro-razão de orçamento com transações, replay, reserva exclusiva e relay
@@ -87,8 +88,9 @@ As fronteiras abaixo impedem declarar o gate global fechado:
    versionada, para provar isolamento de filesystem/rede/ambiente, limite de output e TERM/KILL da
    árvore de processos. Sem isso, C2/C3 permanecem indisponíveis.
 2. **Composição real ainda não é operacional:** uma única rota OpenAI não satisfaz a independência
-   entre executor e verifier, e o preço conservador de contexto excede o bootstrap atual de R$ 2 antes
-   da rede. Studio e experimentos reais falham fechados até receberem composição custeada durável.
+   entre executor e verifier. O teto bootstrap agora é governado por configuração e limita a spec
+   gerada, mas o deployment deve dimensioná-lo para a reserva conservadora. Studio e experimentos
+   reais falham fechados até receberem composição custeada durável.
 3. **Autoridade do curador é externa:** sem `RepositorioCertificacoes` autoritativo, promoção continua
    indisponível; o motor produz no máximo uma intenção sujeita a gate humano.
 
