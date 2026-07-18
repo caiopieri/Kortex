@@ -286,7 +286,8 @@ def main() -> int:
                                         perfil_execucao=perfil_execucao,
                                         ferramentas_permitidas=ferramentas_permitidas,
                                         repositorio_orcamento=deps_orcamento.repositorio,
-                                        fabrica_tentativas_orcadas=deps_orcamento.fabrica)
+                                        fabrica_tentativas_orcadas=deps_orcamento.fabrica,
+                                        teto_bootstrap=deps_orcamento.teto_bootstrap)
                 caixa = CaixaFundador(dir_caixa, log)
                 resultado = rodar_com_caixa(grafo, entrada, config, caixa, log)
             finally:
@@ -301,7 +302,8 @@ def main() -> int:
                                     perfil_execucao=perfil_execucao,
                                     ferramentas_permitidas=ferramentas_permitidas,
                                     repositorio_orcamento=deps_orcamento.repositorio,
-                                    fabrica_tentativas_orcadas=deps_orcamento.fabrica)
+                                    fabrica_tentativas_orcadas=deps_orcamento.fabrica,
+                                    teto_bootstrap=deps_orcamento.teto_bootstrap)
             resultado = grafo.invoke(entrada, config)
             while "__interrupt__" in resultado:  # gate do fundador
                 pedido = resultado["__interrupt__"][0].value

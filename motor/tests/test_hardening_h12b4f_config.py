@@ -233,6 +233,7 @@ def test_cli_injeta_identidade_repositorio_e_fabrica(tmp_path, monkeypatch):
     assert observado["config"]["configurable"]["thread_id"] == "run-config-1"
     assert observado["kwargs"]["repositorio_orcamento"] is not None
     assert callable(observado["kwargs"]["fabrica_tentativas_orcadas"])
+    assert observado["kwargs"]["teto_bootstrap"] == Decimal("2")
     assert drains == ["run-config-1", "run-config-1"]
 
 
@@ -309,6 +310,7 @@ def test_cli_caixa_injeta_mesma_identidade_e_dependencias(tmp_path, monkeypatch)
     assert observado["config"]["configurable"]["thread_id"] == "run-caixa-1"
     assert observado["kwargs"]["repositorio_orcamento"] is not None
     assert callable(observado["kwargs"]["fabrica_tentativas_orcadas"])
+    assert observado["kwargs"]["teto_bootstrap"] == Decimal("2")
     assert observado["fechou"] is True
 
 
