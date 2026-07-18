@@ -12,6 +12,8 @@ from motor.mcp_servidor import (
     MAX_DECISAO,
     MAX_OBJETIVO,
     MAX_RESTRICOES_JSON,
+    MAX_MENSAGEM_ERRO,
+    MAX_RESPOSTA_JSON,
     _gerenciador_de_env,
     criar_app,
 )
@@ -248,6 +250,28 @@ def test_mcp_limita_input_externo_antes_do_servico():
             assert resposta["estado"] == "erro"
             assert resposta["erro"]["tipo"] == "ValueError"
         assert espiao.chamadas == 0
+
+    asyncio.run(cenario())
+
+
+def test_mcp_limita_saida_e_mensagem_de_erro():
+    class Espiao:
+        def status(self, _job_id):
+            return {"estado": "concluido", "resposta_final": "á" * MAX_RESPOSTA_JSON}
+
+        def resumo(self, _job_id):
+            raise RuntimeError("x" * (MAX_MENSAGEM_ERRO + 100))
+
+    async def cenario():
+        app = criar_app(Espiao())
+        resposta = await chamar(app, "metafabrica.status_missao", {"job_id": "job"})
+        assert resposta == {
+            "estado": "erro",
+            "erro": {"tipo": "ValueError", "mensagem": "resposta MCP excede limite"},
+        }
+        erro = await chamar(app, "metafabrica.resumo_missao", {"job_id": "job"})
+        assert erro["erro"]["tipo"] == "RuntimeError"
+        assert len(erro["erro"]["mensagem"]) == MAX_MENSAGEM_ERRO
 
     asyncio.run(cenario())
 
