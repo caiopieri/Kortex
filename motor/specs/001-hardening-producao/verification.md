@@ -20,6 +20,11 @@ The H00-H13 program and the H12b extension through H12b4f provide causal tests f
   and synthesizer callsites, with distinct retry/failover identities and `UNKNOWN_COST` fail-closed;
 - sealed, fresh pricing/FX composition for the costed OpenAI adapter and fail-closed production
   entrypoints when durable budget dependencies are absent.
+- certified route topology preflight requiring independent executor/verifier provider identities
+  before active CLI/service paths, with same-provider aliases rejected;
+- a mandatory governed bootstrap ceiling propagated through CLI, service and planner, without
+  weakening conservative reservation;
+- a 64 KiB UTF-8 cap on serialized MCP tool responses and bounded error messages.
 
 The public test corpus is content-addressed by `reproducer-manifest.jsonl` and
 `reproducer-corpus-0bdbb677dd281edc.tar`. `tests/test_hardening_*.py` contains the maintained
@@ -52,6 +57,12 @@ MCP, service and panel modules, contained both runtime HTML fallbacks, and exclu
 helpers, scripts and examples. The sdist retained the examples, scripts, corpus and test helpers
 required to reproduce its suite.
 
+The follow-up H12b/H13 integration through `bdd883d` added certified topology preflight, governed
+bootstrap wiring and bounded MCP responses. The full suite completed with `826 passed`; Ruff, mypy,
+Bandit high/high, compileall, manifest validation, Gitleaks, diff checks and source/wheel build passed.
+The recurrent H11 scheduling test missed its five-second polling window once by about 10 ms, then
+passed isolated and in the final full run without test relaxation.
+
 H05b follow-up is intentionally not certified: `DockerSandboxRunner` and 14 causal preflight/policy
 tests now exist in the source tree, but the Docker daemon is unreachable on this macOS host and no
 Linux runner, preloaded image digest or conformance job is available. C2/C3 remain blocked; the
@@ -66,10 +77,11 @@ checkout.
    concrete backend satisfies `sandbox-conformance.md`. String validation and a working
    directory are not sandboxing.
 2. **Budget operation:** callsite/run-identity integration and a costed OpenAI adapter are present,
-   but one OpenAI route cannot satisfy executor-verifier provider independence and conservative
-   pricing exceeds the current R$ 2 bootstrap before transport. Studio and real experiments remain
-   unavailable until durable costed composition is supplied. Relay recovery requires polling in the
-   service or explicit reuse of the same CLI `run_id`.
+   but one OpenAI route cannot satisfy executor-verifier provider independence. The deployment must
+   supply two certified provider routes and size mandatory `teto_bootstrap_brl` for conservative
+   reservation. Studio and real experiments remain unavailable until durable costed composition is
+   supplied. Relay recovery requires polling in the service or explicit reuse of the same CLI
+   `run_id`.
 3. **Curator authority:** the protocol fails closed without an authoritative certification
    repository supplied by the deployment.
 

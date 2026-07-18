@@ -16,6 +16,9 @@ expressed as Now, Next and Later.
   cost, stale pricing/FX or missing durable dependencies fail closed.
 - Budget events are relayed to the JSONL ledger with stable `event_id`, ACK-after-append and
   deduplication across reopen/redelivery in the CLI and `GerenciadorJobs` paths.
+- Executor and verifier require distinct certified provider identities before active CLI/service
+  paths; the planner bootstrap ceiling is mandatory deployment configuration.
+- MCP input and serialized UTF-8 responses are bounded; oversized output fails closed.
 - Command execution is default-deny because no production sandbox backend is certified.
 - The complete status is maintained in
   `../motor/specs/001-hardening-producao/verification.md`.
@@ -64,4 +67,5 @@ expressed as Now, Next and Later.
 - A polling-only relay can leave monetary events pending until status is requested after a crash.
 - CLI recovery of an abandoned monetary outbox requires explicitly reusing the same `run_id`.
 - Conservative full-context reservation can make a safe route operationally unusable.
-- Full model text returned by MCP has no explicit response-size cap yet.
+- MCP output is capped only after service materialization, and oversized event batches do not yet
+  paginate by count.
