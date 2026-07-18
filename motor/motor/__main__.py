@@ -37,7 +37,7 @@ except ImportError:  # nome antigo
 from langgraph.checkpoint.sqlite import SqliteSaver
 
 from .caixa import CaixaFundador, rodar_com_caixa
-from .composicao_orcamento import compor_orcamento_openai
+from .composicao_orcamento import compor_orcamento_openai, validar_independencia_orcada
 from .eventos import LogEventos
 from .grafo import construir_grafo
 from .modelos import ClienteClaudeCLI, ClienteModelo, ProvedorIndisponivel, cliente_de_config
@@ -256,6 +256,7 @@ def main() -> int:
             print("aviso: pins ignorados — precisam de 'provedores' (via --modelos ou ~/.motor/pins.json).")
         try:
             deps_orcamento = compor_orcamento_openai(cfg_modelos or {}, workspace_base)
+            validar_independencia_orcada(deps_orcamento.rotas_certificadas)
             cliente = deps_orcamento.cliente
             if not _drenar_orcamento_cli(deps_orcamento.repositorio, run_id, log):
                 raise ErroOrcamento("relay monetario pendente")

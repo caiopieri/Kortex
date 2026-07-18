@@ -94,10 +94,10 @@ def test_composicao_stub_emite_as_identidades_certificadas(tmp_path):
     )[0]
 
     assert (executor.route_id, executor.provider_id) == (
-        "stub:executor", "stub-provider:executor",
+        "stub:executor", "stub-provider-executor",
     )
     assert (verifier.route_id, verifier.provider_id) == (
-        "stub:verifier", "stub-provider:verifier",
+        "stub:verifier", "stub-provider-verifier",
     )
     assert {executor.route_id, verifier.route_id} == {
         rota.route_id for rota in deps.rotas_certificadas
@@ -204,6 +204,11 @@ def test_cli_injeta_identidade_repositorio_e_fabrica(tmp_path, monkeypatch):
         observado.update(cliente=cliente, kwargs=kwargs)
         return Grafo()
 
+    cliente = ClienteStub(lambda *_args: "ok")
+    monkeypatch.setattr(
+        "motor.__main__.compor_orcamento_openai",
+        lambda *_args, **_kwargs: composicao_stub(cliente, tmp_path / "orcamento-cli"),
+    )
     monkeypatch.setattr("motor.__main__.construir_grafo", construir)
     monkeypatch.setattr(
         "motor.__main__._drenar_orcamento_cli",
@@ -215,7 +220,7 @@ def test_cli_injeta_identidade_repositorio_e_fabrica(tmp_path, monkeypatch):
     ])
 
     assert main() == 0
-    assert isinstance(observado["cliente"], ClienteSomenteOrcado)
+    assert observado["cliente"] is cliente
     assert observado["entrada"]["run_id"] == observado["entrada"]["thread_id"] == "run-config-1"
     assert observado["config"]["configurable"]["thread_id"] == "run-config-1"
     assert observado["kwargs"]["repositorio_orcamento"] is not None
@@ -275,6 +280,11 @@ def test_cli_caixa_injeta_mesma_identidade_e_dependencias(tmp_path, monkeypatch)
     monkeypatch.setattr("motor.__main__.SqliteSaver", Saver)
     monkeypatch.setattr("motor.__main__.CaixaFundador", lambda *_args: object())
     monkeypatch.setattr("motor.__main__._drenar_orcamento_cli", lambda *_args: True)
+    cliente = ClienteStub(lambda *_args: "ok")
+    monkeypatch.setattr(
+        "motor.__main__.compor_orcamento_openai",
+        lambda *_args, **_kwargs: composicao_stub(cliente, tmp_path / "orcamento-caixa"),
+    )
     monkeypatch.setattr("motor.__main__.construir_grafo", lambda cliente, _log, **kwargs: (
         observado.update(cliente=cliente, kwargs=kwargs) or object()
     ))
@@ -292,3 +302,25 @@ def test_cli_caixa_injeta_mesma_identidade_e_dependencias(tmp_path, monkeypatch)
     assert observado["kwargs"]["repositorio_orcamento"] is not None
     assert callable(observado["kwargs"]["fabrica_tentativas_orcadas"])
     assert observado["fechou"] is True
+
+
+def test_cli_single_provider_falha_antes_de_relay_ou_grafo(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "segredo")
+    cfg = tmp_path / "modelos.json"
+    cfg.write_text(json.dumps(_cfg()), encoding="utf-8")
+    efeitos: list[str] = []
+    monkeypatch.setattr(
+        "motor.__main__._drenar_orcamento_cli",
+        lambda *_args: efeitos.append("relay") or True,
+    )
+    monkeypatch.setattr(
+        "motor.__main__.construir_grafo",
+        lambda *_args, **_kwargs: efeitos.append("grafo"),
+    )
+    monkeypatch.setattr(sys, "argv", [
+        "motor", "missao", "--modelos", str(cfg), "--workspace", str(tmp_path),
+        "--run-id", "run-single-provider",
+    ])
+
+    assert main() == 1
+    assert efeitos == []

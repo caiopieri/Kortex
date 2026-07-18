@@ -8,6 +8,8 @@ import pytest
 import motor.servico as servico_modulo
 from motor.modelos import ClienteStub
 from motor.eventos import LogEventos
+from motor.composicao_orcamento import RotaOrcadaCertificada
+from motor.orcamento import ErroOrcamento, RepositorioOrcamento
 from motor.servico import GerenciadorJobs as GerenciadorJobsProducao
 from tests.helpers_grafo import (
     GerenciadorJobsTeste as GerenciadorJobs,
@@ -25,6 +27,46 @@ def aguardar_estado(gerenciador: GerenciadorJobs, job_id: str, estado: str, time
             return ultimo
         time.sleep(0.02)
     raise AssertionError(f"estado {estado!r} não alcançado; último={ultimo!r}")
+
+
+@pytest.mark.parametrize("topologia", [
+    None,
+    (RotaOrcadaCertificada(
+        "stub:unica", "stub-provider-unico", frozenset({"executor", "verifier"}),
+    ),),
+])
+def test_servico_preflight_bloqueia_antes_de_registrar_job(tmp_path, topologia):
+    cliente = ClienteStub(faz_roteador())
+    deps = dependencias_servico_stub(cliente, tmp_path / "orcamento-preflight")
+    deps["rotas_certificadas"] = topologia
+    jobs = GerenciadorJobsProducao(
+        db_path=tmp_path / "preflight.db", cliente=cliente, **deps,
+    )
+    try:
+        with pytest.raises(ErroOrcamento, match="catalogo|dois providers"):
+            jobs.iniciar(spec=SPEC, thread_id="preflight-bloqueado")
+        assert jobs._jobs == {}
+        assert jobs._threads == set()
+    finally:
+        jobs.fechar()
+
+
+def test_servico_sem_topologia_bloqueia_resume_e_recovery_antes_de_estado(tmp_path):
+    jobs = GerenciadorJobsProducao(
+        db_path=tmp_path / "passivo.db",
+        cliente=ClienteStub(faz_roteador()),
+        repositorio_orcamento=RepositorioOrcamento(tmp_path / "orcamento-passivo"),
+        fabrica_tentativas_orcadas=lambda *_args: [],
+    )
+    try:
+        with pytest.raises(ErroOrcamento, match="catalogo"):
+            jobs.responder_gate("job-passivo", "prosseguir")
+        with pytest.raises(ErroOrcamento, match="catalogo"):
+            jobs._recuperar_outbox("job-passivo")
+        assert jobs._jobs == {}
+        assert jobs._threads == set()
+    finally:
+        jobs.fechar()
 
 
 def test_iniciar_retorna_imediato_e_chega_a_gate_pendente(tmp_path):

@@ -63,7 +63,7 @@ class DependenciasOrcamento:
 
 
 def validar_independencia_orcada(
-    rotas: tuple[RotaOrcadaCertificada, ...],
+    rotas: object,
 ) -> None:
     """Exige providers distintos e certificados para executor e verifier."""
     if type(rotas) is not tuple or not rotas:

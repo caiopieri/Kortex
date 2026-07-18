@@ -20,7 +20,11 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.types import Command
 
 from .caixa import LedgerCaixa
-from .composicao_orcamento import RotaOrcadaCertificada, compor_orcamento_openai
+from .composicao_orcamento import (
+    RotaOrcadaCertificada,
+    compor_orcamento_openai,
+    validar_independencia_orcada,
+)
 from .eventos import LogEventos
 from .eventos_schema import SCHEMA_VERSAO
 from .grafo import construir_grafo
@@ -169,6 +173,7 @@ class GerenciadorJobs:
         if not thread_id:
             raise ValueError("thread_id é obrigatório")
         _validar_job_id(thread_id)
+        self._exigir_topologia_orcada()
 
         cliente = self._obter_cliente()
         entrada: dict[str, Any] = (
@@ -200,6 +205,7 @@ class GerenciadorJobs:
         with self._lock:
             self._exigir_aberto()
         _validar_job_id(job_id)
+        self._exigir_topologia_orcada()
         if decision_id is not None and (
             not isinstance(decision_id, str)
             or not PADRAO_JOB_ID.fullmatch(decision_id)
@@ -390,8 +396,12 @@ class GerenciadorJobs:
     def _obter_cliente(self) -> ClienteModelo:
         return self._cliente
 
+    def _exigir_topologia_orcada(self) -> None:
+        validar_independencia_orcada(self._rotas_certificadas)
+
     def _iniciar_thread(self, job_id: str, cliente: ClienteModelo, entrada: Any,
                         claim: dict[str, Any] | None = None) -> None:
+        self._exigir_topologia_orcada()
         def executar() -> None:
             try:
                 self._executar(job_id, cliente, entrada, claim)
@@ -485,6 +495,7 @@ class GerenciadorJobs:
         return self._repositorio_orcamento.listar_pendentes(job_id) == []
 
     def _recuperar_outbox(self, job_id: str) -> bool:
+        self._exigir_topologia_orcada()
         with self._lock:
             self._exigir_aberto()
         ledger = LedgerCaixa(self.db_path)
@@ -507,6 +518,7 @@ class GerenciadorJobs:
     def _reconciliar_outbox(self) -> None:
         while not self._stop_reconciliador.is_set():
             try:
+                self._exigir_topologia_orcada()
                 ledger = LedgerCaixa(self.db_path)
                 try:
                     claim = ledger.claim(

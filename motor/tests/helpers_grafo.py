@@ -23,10 +23,10 @@ def topologia_stub() -> tuple[RotaOrcadaCertificada, ...]:
     """Topologia offline explícita; não é evidência de providers reais."""
     return (
         RotaOrcadaCertificada(
-            "stub:executor", "stub-provider:executor", frozenset({"executor"}),
+            "stub:executor", "stub-provider-executor", frozenset({"executor"}),
         ),
         RotaOrcadaCertificada(
-            "stub:verifier", "stub-provider:verifier", frozenset({"verifier"}),
+            "stub:verifier", "stub-provider-verifier", frozenset({"verifier"}),
         ),
     )
 
@@ -51,7 +51,7 @@ def dependencias_stub(cliente: ClienteStub, raiz: Path | None = None) -> dict[st
         papel: str, prompt: str, _tentativa: int, requisitos: RequisitosTentativaCusteada,
     ) -> list[RotaTentativaCusteada]:
         papel_topologia = "verifier" if papel == "verifier" else "executor"
-        provider_id = f"stub-provider:{papel_topologia}"
+        provider_id = f"stub-provider-{papel_topologia}"
         if requisitos.evitar_provedor == provider_id:
             return []
         return [RotaTentativaCusteada(
