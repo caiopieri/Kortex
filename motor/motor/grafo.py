@@ -370,13 +370,17 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                     fabrica_tentativas_orcadas: Callable[
                         [str, str, int, RequisitosTentativaCusteada],
                         list[RotaTentativaCusteada],
-                    ] | None = None):
+                    ] | None = None,
+                    teto_bootstrap: Decimal = Decimal("2.0")):
     """Compila o grafo. `cliente` e `log` são injetados — o grafo não conhece backends.
     `politica` decide quais gates pausam (manual) ou resolvem sozinhos (auto-mode);
     ausente = tudo manual (comportamento default).
     `max_rodadas_reconciliacao` limita quantas rodadas de preenchimento de cobertura
     podem rodar antes de seguir parcial."""
     politica = politica or PoliticaGates()
+    if (not isinstance(teto_bootstrap, Decimal) or not teto_bootstrap.is_finite()
+            or teto_bootstrap <= 0):
+        raise ErroOrcamento("teto bootstrap invalido")
     workspace_base = Path(workspace_base)
     ferramentas = ferramentas or {}
     command_runner = command_runner if command_runner is not None else DenyCommandRunner()
@@ -402,7 +406,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
     ) -> str | None:
         thread_id = state.get("thread_id") or (run_id if isinstance(cliente, ClienteStub) else None)
         resposta = chamar_orcado(
-            run_id, thread_id, Decimal("2.0"), "planner", fase, "planner", prompt, tentativa,
+            run_id, thread_id, teto_bootstrap, "planner", fase, "planner", prompt, tentativa,
         )
         return resposta.texto if resposta is not None else None
 
@@ -532,7 +536,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
             if bruto is not None:
                 try:
                     spec = WorkflowSpec.model_validate(bruto)
-                    if Decimal(str(spec.restricoes.teto_custo)) > Decimal("2.0"):
+                    if Decimal(str(spec.restricoes.teto_custo)) > teto_bootstrap:
                         raise ValueError("spec gerada nao pode elevar teto bootstrap")
                     log.evento("spec.criada", missao=spec.missao.id, subagentes=len(spec.subagentes))
                     return {"spec": spec.model_dump(), "run_id": run_id}

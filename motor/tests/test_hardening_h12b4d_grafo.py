@@ -8,7 +8,7 @@ import pytest
 from motor.eventos import LogEventos
 from motor.grafo import construir_grafo
 from motor.orcamento import (
-    CotacaoTentativa,
+    CotacaoTentativa, ErroOrcamento,
     RequisitosTentativaCusteada,
     RepositorioOrcamento,
     ResultadoTentativa,
@@ -80,6 +80,36 @@ def test_orcamento_insuficiente_impede_efeito_do_executor(tmp_path):
 
     assert efeitos == []
     assert resultado["resultados"][0]["aprovado"] is False
+
+
+def test_teto_bootstrap_governa_reserva_e_spec_gerada(tmp_path):
+    efeitos = []
+    repo = RepositorioOrcamento(tmp_path / "runs-bootstrap")
+    spec_acima = json.dumps(_spec(teto=3))
+
+    def fabrica(_papel, _prompt, _tentativa, _requisitos):
+        return [RotaTentativaCusteada(
+            "planner-a", "provedor-a", _Tentativa(efeitos, spec_acima, Decimal("0.1")),
+        )]
+
+    grafo = construir_grafo(
+        object(), LogEventos(tmp_path / "eventos-bootstrap.jsonl"),
+        repositorio_orcamento=repo, fabrica_tentativas_orcadas=fabrica,
+        teto_bootstrap=Decimal("0.5"),
+    )
+
+    with pytest.raises(RuntimeError, match="planner não produziu"):
+        grafo.invoke({"missao_texto": "missao", "run_id": "run-b", "thread_id": "thread-b"})
+
+    assert efeitos == ["efeito", "efeito", "efeito"]
+    assert repo.sessao("run-b", "thread-b", Decimal("0.5")).teto == Decimal("0.5")
+
+
+@pytest.mark.parametrize("teto", [Decimal("0"), Decimal("NaN"), "2"])
+def test_teto_bootstrap_injetado_invalido_falha_fechado(tmp_path, teto):
+    with pytest.raises(ErroOrcamento, match="teto bootstrap invalido"):
+        construir_grafo(object(), LogEventos(tmp_path / "eventos-invalido.jsonl"),
+                        teto_bootstrap=teto)
 
 
 @pytest.mark.parametrize(
