@@ -65,7 +65,7 @@ def composicao_stub(cliente: ClienteStub, raiz: Path | None = None) -> Dependenc
     deps = dependencias_stub(cliente, raiz)
     return DependenciasOrcamento(
         cliente, deps["repositorio_orcamento"],
-        deps["fabrica_tentativas_orcadas"], topologia_stub(),
+        deps["fabrica_tentativas_orcadas"], topologia_stub(), Decimal("2"),
     )
 
 

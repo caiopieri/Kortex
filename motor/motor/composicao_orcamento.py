@@ -60,6 +60,7 @@ class DependenciasOrcamento:
         [str, str, int, RequisitosTentativaCusteada], list[RotaTentativaCusteada]
     ]
     rotas_certificadas: tuple[RotaOrcadaCertificada, ...]
+    teto_bootstrap: Decimal
 
 
 def validar_independencia_orcada(
@@ -140,7 +141,7 @@ def compor_orcamento_openai(
     bloco = cfg.get("orcamento_openai") if isinstance(cfg, dict) else None
     esperados = {
         "api_key_env", "capacidades", "max_completion_tokens", "fx", "fx_max_age_s",
-        "margem", "timeout",
+        "margem", "teto_bootstrap_brl", "timeout",
     }
     if not isinstance(bloco, dict) or set(bloco) != esperados:
         raise ErroOrcamento("configuracao orcada ausente ou invalida")
@@ -157,6 +158,7 @@ def compor_orcamento_openai(
     fx_max_age = _inteiro(bloco, "fx_max_age_s", maximo=FX_MAX_AGE_LIMITE_S)
     timeout = _inteiro(bloco, "timeout", maximo=600)
     margem = _decimal(bloco, "margem")
+    teto_bootstrap = _decimal(bloco, "teto_bootstrap_brl")
     capacidades_brutas = bloco["capacidades"]
     if (not isinstance(capacidades_brutas, list) or not capacidades_brutas
             or any(not isinstance(item, str) for item in capacidades_brutas)):
@@ -190,4 +192,5 @@ def compor_orcamento_openai(
         (RotaOrcadaCertificada(
             "openai:gpt-5", "openai", frozenset({"executor", "verifier"}),
         ),),
+        teto_bootstrap,
     )

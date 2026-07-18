@@ -29,6 +29,7 @@ def _cfg(capturado_em=PRICING_CAPTURADO_EM):
                "cotacao_venda": "5.50"},
         "fx_max_age_s": 3600,
         "margem": "1.20",
+        "teto_bootstrap_brl": "25.00",
         "timeout": 30,
     }}
 
@@ -121,6 +122,7 @@ def test_config_constroi_somente_adapter_orcado_com_pricing_selado(tmp_path, mon
         f"{PRICING_VERSION}@{PRICING_CAPTURADO_EM}+fx:ptax-2026-07-14"
     )
     assert cotacao.maximo > Decimal("0")
+    assert deps.teto_bootstrap == Decimal("25.00")
 
 
 def test_snapshot_envelhece_por_tentativa_e_bloqueia_sem_rede(tmp_path, monkeypatch):
@@ -172,7 +174,9 @@ def test_provider_e_ferramenta_incompativeis_nao_criam_adapter(tmp_path, monkeyp
         deps.fabrica("planner", "p", 1, RequisitosTentativaCusteada())
 
 
-@pytest.mark.parametrize("mutacao", ["ausente", "extra", "decimal_float", "env_vazia"])
+@pytest.mark.parametrize("mutacao", [
+    "ausente", "extra", "decimal_float", "teto_ausente", "teto_float", "env_vazia",
+])
 def test_config_hostil_falha_fechado(tmp_path, monkeypatch, mutacao):
     monkeypatch.setenv("OPENAI_API_KEY", "segredo")
     cfg = _cfg()
@@ -182,6 +186,10 @@ def test_config_hostil_falha_fechado(tmp_path, monkeypatch, mutacao):
         cfg["orcamento_openai"]["surpresa"] = True
     elif mutacao == "decimal_float":
         cfg["orcamento_openai"]["margem"] = 1.2
+    elif mutacao == "teto_ausente":
+        del cfg["orcamento_openai"]["teto_bootstrap_brl"]
+    elif mutacao == "teto_float":
+        cfg["orcamento_openai"]["teto_bootstrap_brl"] = 25.0
     else:
         monkeypatch.delenv("OPENAI_API_KEY")
     with pytest.raises(ErroOrcamento):
