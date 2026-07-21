@@ -7,7 +7,9 @@ eles ativam sozinhos e são o DoD: NUNCA ajustar o teste à implementação.
 """
 from __future__ import annotations
 
+import json
 import types
+from pathlib import Path
 
 import pytest
 
@@ -790,6 +792,35 @@ def test_config_tiers_e_papeis_coexistem(monkeypatch):
            "papeis": {"pesquisador": "codex/default"}}
     r = cliente_de_config(cfg)
     assert set(r.tiers) == {"media"} and set(r.mapa) == {"pesquisador"}
+
+
+def test_config_codex_resolve_papeis_do_planner_por_tier_e_capacidade(monkeypatch):
+    from motor.modelos import cliente_de_config
+
+    cfg = json.loads(
+        (Path(__file__).parent.parent / "exemplos" / "modelos-codex.json").read_text()
+    )
+    roteador = cliente_de_config(cfg)
+    monkeypatch.setattr(
+        roteador.tiers["media"], "chamar", lambda *_args, **_kwargs: "CODEX"
+    )
+    monkeypatch.setattr(
+        roteador.padrao, "chamar", lambda *_args, **_kwargs: "CLAUDE"
+    )
+
+    assert roteador.descricao_de(
+        "redator", tier="media", capacidades=["redacao"]
+    ) == "codex/default"
+    assert roteador.chamar(
+        "redator", "p", tier="media", capacidades=["redacao"]
+    ) == "CODEX"
+    assert roteador.descricao_de(
+        "analista", tier="complexa", capacidades=["calculo", "raciocinio-longo"]
+    ) == "claude"
+    assert roteador.chamar(
+        "analista", "p", tier="complexa",
+        capacidades=["calculo", "raciocinio-longo"],
+    ) == "CLAUDE"
 
 
 def test_config_tier_destino_invalido_falha(monkeypatch):

@@ -898,10 +898,29 @@ def cliente_de_config(cfg: dict, log: Optional[Any] = None) -> "ClienteModelo":
     padrao = ClienteClaudeCLI(log=log)
 
     if "provedores" in cfg:  # formato multi-plataforma
+        capacidades_validas = {
+            "codigo", "redacao", "calculo", "pesquisa", "raciocinio-longo",
+        }
+
+        def _capacidades_config(valor: Any, quem: str) -> frozenset[str] | None:
+            if valor is None:
+                return None
+            if (
+                not isinstance(valor, list)
+                or not valor
+                or any(not isinstance(item, str) for item in valor)
+                or len(set(valor)) != len(valor)
+                or not set(valor) <= capacidades_validas
+            ):
+                raise ValueError(f"{quem}: capacidades invalidas")
+            return frozenset(valor)
+
+        clientes_destino: dict[str, Any] = {"padrao": padrao}
+
         def _cliente_destino(destino: str, quem: str):
             """Constrói UM cliente para 'provedor/modelo' (ou 'padrao')."""
-            if destino == "padrao":
-                return padrao
+            if destino in clientes_destino:
+                return clientes_destino[destino]
             prov, sep, modelo = destino.partition("/")
             if not sep or not modelo or prov not in cfg["provedores"]:
                 raise ValueError(
@@ -926,6 +945,7 @@ def cliente_de_config(cfg: dict, log: Optional[Any] = None) -> "ClienteModelo":
                     f"(use 'codex', 'opencode' ou 'openai-compat')")
             if p.get("custo_ordem") is not None:
                 setattr(cliente, "custo_ordem", p.get("custo_ordem"))
+            clientes_destino[destino] = cliente
             return cliente
 
         # Rota legada papel→modelo: um cliente por provedor, compartilhado, com mapa_papeis.
@@ -978,8 +998,30 @@ def cliente_de_config(cfg: dict, log: Optional[Any] = None) -> "ClienteModelo":
             if c is not padrao and not any(c is x for x in cadeia):
                 cadeia.append(c)
         cadeia = _ordenar_cadeia_por_custo(cadeia)
+        catalogo: list[tuple[Any, frozenset[str], int]] = []
+        vistos_catalogo: set[int] = set()
+        for cliente in [*cadeia, padrao]:
+            if id(cliente) in vistos_catalogo:
+                continue
+            provedor = getattr(cliente, "provedor", None)
+            if cliente is padrao:
+                capacidades = _capacidades_config(
+                    cfg.get("capacidades_padrao"), "capacidades_padrao"
+                )
+                ordem = cfg.get("custo_ordem_padrao", 100)
+            else:
+                provedor_cfg = cfg["provedores"].get(provedor, {})
+                capacidades = _capacidades_config(
+                    provedor_cfg.get("capacidades"),
+                    f"provedor {provedor!r}",
+                )
+                ordem = provedor_cfg.get("custo_ordem", 0)
+            if capacidades is not None:
+                catalogo.append((cliente, capacidades, ordem))
+                vistos_catalogo.add(id(cliente))
         return ClienteRoteador(padrao=padrao, mapa=mapa, tiers=tiers_map, pins=pins_map,
                                esgotados=set(cfg.get("esgotados", [])), cadeia=cadeia,
+                               catalogo=catalogo,
                                auto_esgotar=bool(cfg.get("auto_esgotar", False)), log=log)
 
     # formato v1 — um provedor
