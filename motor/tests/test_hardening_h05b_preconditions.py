@@ -1,4 +1,6 @@
+import os
 import shlex
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any, cast
@@ -79,22 +81,72 @@ def test_limites_de_timeout_sao_delegados_ao_runner(tmp_path: Path, timeout: int
 def test_docker_runner_rejeita_digest_e_allowlist_invalidos() -> None:
     with pytest.raises(ValueError, match="digest"):
         DockerSandboxRunner("latest", ("/bin/echo",))
+    with pytest.raises(ValueError, match="OCI"):
+        DockerSandboxRunner("sha256:" + "a" * 64, ("/bin/echo",))
     with pytest.raises(ValueError, match="allowlist"):
-        DockerSandboxRunner("sha256:" + "a" * 64, ("echo",))
+        DockerSandboxRunner("docker.io/library/alpine@sha256:" + "a" * 64, ("echo",))
 
 
 def test_docker_runner_preflight_falha_fechado_sem_daemon(tmp_path: Path, monkeypatch) -> None:
-    runner = DockerSandboxRunner("sha256:" + "a" * 64, ("/bin/echo",))
+    runner = DockerSandboxRunner("docker.io/library/alpine@sha256:" + "a" * 64, ("/bin/echo",))
     monkeypatch.setattr(runner, "_preflight", lambda: "preflight Docker indisponivel")
     resultado = runner.run(CommandRequest(("/bin/echo", "ok"), tmp_path, 1))
     assert resultado.erro == "sandbox_indisponivel"
 
 
 def test_docker_runner_constroi_policy_selada(tmp_path: Path) -> None:
-    runner = DockerSandboxRunner("sha256:" + "b" * 64, ("/bin/echo",))
+    runner = DockerSandboxRunner("docker.io/library/alpine@sha256:" + "b" * 64, ("/bin/echo",))
     comando = runner._argv(CommandRequest(("/bin/echo", "ok"), tmp_path, 3))
     assert "--pull" in comando and comando[comando.index("--pull") + 1] == "never"
     assert "none" in comando and "--read-only" in comando
     assert "--cap-drop" in comando and "ALL" in comando
     assert "--security-opt" in comando and "no-new-privileges" in comando
-    assert "--env" not in comando and "sh" not in comando
+    assert "--env" not in comando and "--tmpfs" not in comando and "sh" not in comando
+    assert comando[comando.index("--user") + 1] == f"{os.getuid()}:{os.getgid()}"
+
+
+def test_docker_runner_rejeita_host_root_antes_do_daemon(tmp_path: Path, monkeypatch) -> None:
+    imagem = "docker.io/library/alpine@sha256:" + "e" * 64
+    monkeypatch.setattr("motor.runner.os.getuid", lambda: 0)
+
+    resultado = DockerSandboxRunner(imagem, ("/bin/echo",)).run(
+        CommandRequest(("/bin/echo", "ok"), tmp_path, 1)
+    )
+
+    assert resultado.erro == "request_invalido"
+    assert "host root" in resultado.motivo
+
+
+def test_docker_runner_preflight_exige_linux_e_digest_efetivo(monkeypatch) -> None:
+    imagem = "docker.io/library/alpine@sha256:" + "c" * 64
+    respostas = iter([
+        subprocess.CompletedProcess([], 0, stdout="29.0.0\n", stderr=""),
+        subprocess.CompletedProcess([], 0, stdout="linux\n", stderr=""),
+        subprocess.CompletedProcess(
+            [], 0, stdout=f'["alpine@{imagem.rsplit("@", 1)[1]}"]\n', stderr="",
+        ),
+    ])
+    monkeypatch.setattr("motor.runner.subprocess.run", lambda *_args, **_kwargs: next(respostas))
+
+    assert DockerSandboxRunner(imagem, ("/bin/echo",))._preflight() is None
+
+
+@pytest.mark.parametrize(("sistema", "digests"), [
+    ("darwin", "[]"),
+    ("linux", "[]"),
+    ("linux", "null"),
+])
+def test_docker_runner_preflight_rejeita_deployment_divergente(
+    monkeypatch, sistema: str, digests: str,
+) -> None:
+    imagem = "docker.io/library/alpine@sha256:" + "d" * 64
+    respostas = iter([
+        subprocess.CompletedProcess([], 0, stdout="29.0.0\n", stderr=""),
+        subprocess.CompletedProcess([], 0, stdout=sistema + "\n", stderr=""),
+        subprocess.CompletedProcess([], 0, stdout=digests + "\n", stderr=""),
+    ])
+    monkeypatch.setattr("motor.runner.subprocess.run", lambda *_args, **_kwargs: next(respostas))
+
+    assert "deployment selado" in (
+        DockerSandboxRunner(imagem, ("/bin/echo",))._preflight() or ""
+    )
