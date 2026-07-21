@@ -10,6 +10,7 @@ import fcntl
 import json
 import os
 import stat
+import threading
 import time
 from pathlib import Path
 from typing import Any, BinaryIO, NoReturn
@@ -88,6 +89,7 @@ class LogEventos:
     """Writer exclusivo; checks pre-write pressupõem um diretorio pai confiavel."""
 
     def __init__(self, path: str | Path, truncar: bool = False):
+        self._thread_lock = threading.RLock()
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock_path = self.path.with_name(f".{self.path.name}.lock")
@@ -211,26 +213,27 @@ class LogEventos:
         _validar_arquivo_regular(aberto, self.path)
 
     def evento(self, tipo_evento: str, **dados: Any) -> None:
-        if "evento" in dados or "t" in dados or "seq" in dados:
-            raise ValueError("campo reservado no payload de evento")
+        with self._thread_lock:
+            if "evento" in dados or "t" in dados or "seq" in dados:
+                raise ValueError("campo reservado no payload de evento")
 
-        seq = self._proximo_seq
-        instante = self._tempo_atual()
-        e = {"t": instante, "seq": seq, "evento": tipo_evento, **dados}
-        if not valido(e):
-            raise ValueError("evento fora do schema")
+            seq = self._proximo_seq
+            instante = self._tempo_atual()
+            e = {"t": instante, "seq": seq, "evento": tipo_evento, **dados}
+            if not valido(e):
+                raise ValueError("evento fora do schema")
 
-        linha = (json.dumps(e, ensure_ascii=False, allow_nan=False) + "\n").encode()
-        try:
-            self._validar_path_aberto()
-            self._f.write(linha)
-            self._f.flush()
-            os.fsync(self._f.fileno())
-        except BaseException:
-            self._fechar_descritores()
-            raise
-        self._proximo_seq = seq + 1
-        self._ultimo_t = instante
+            linha = (json.dumps(e, ensure_ascii=False, allow_nan=False) + "\n").encode()
+            try:
+                self._validar_path_aberto()
+                self._f.write(linha)
+                self._f.flush()
+                os.fsync(self._f.fileno())
+            except BaseException:
+                self._fechar_descritores()
+                raise
+            self._proximo_seq = seq + 1
+            self._ultimo_t = instante
 
     def _fechar_descritores(self) -> BaseException | None:
         erro: BaseException | None = None
@@ -267,6 +270,7 @@ class LogEventos:
         return erro
 
     def fechar(self) -> None:
-        erro = self._fechar_descritores()
-        if erro is not None:
-            raise erro
+        with self._thread_lock:
+            erro = self._fechar_descritores()
+            if erro is not None:
+                raise erro

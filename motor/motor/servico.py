@@ -385,8 +385,9 @@ class GerenciadorJobs:
 
     def _executar(self, job_id: str, cliente: ClienteModelo, entrada: Any,
                   claim: dict[str, Any] | None = None) -> None:
-        log = self._log_do_job(job_id)
+        log: LogEventos | None = None
         try:
+            log = self._log_do_job(job_id)
             grafo = construir_grafo(
                 cliente,
                 log,
@@ -421,7 +422,7 @@ class GerenciadorJobs:
                     "erro": {"tipo": type(ex).__name__, "mensagem": str(ex)},
                 }
         finally:
-            if log is not self.log:
+            if log is not None and log is not self.log:
                 log.fechar()
 
     def _recuperar_outbox(self, job_id: str) -> bool:
