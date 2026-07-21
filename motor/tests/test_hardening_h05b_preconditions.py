@@ -1,14 +1,21 @@
 import os
 import shlex
+import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Any, cast
 
 import pytest
 
 from tests.helpers_grafo import construir_grafo_teste as construir_grafo
-from motor.runner import CommandRequest, CommandResult, DockerSandboxRunner
+from motor.runner import (
+    MAX_COMBINED_OUTPUT_BYTES,
+    CommandRequest,
+    CommandResult,
+    DockerSandboxRunner,
+)
 
 
 class _Nulo:
@@ -150,3 +157,108 @@ def test_docker_runner_preflight_rejeita_deployment_divergente(
     assert "deployment selado" in (
         DockerSandboxRunner(imagem, ("/bin/echo",))._preflight() or ""
     )
+
+
+def _docker_falso(tmp_path: Path) -> tuple[Path, Path, Path]:
+    marcador = tmp_path / "container-live"
+    cleanup = tmp_path / "cleanup"
+    pid_filho = tmp_path / "child-pid"
+    executavel = tmp_path / "docker-falso"
+    executavel.write_text(f"""#!{sys.executable}
+import os, pathlib, signal, subprocess, sys, time
+live = pathlib.Path({str(marcador)!r})
+cleanup = pathlib.Path({str(cleanup)!r})
+child_pid = pathlib.Path({str(pid_filho)!r})
+if sys.argv[1] == 'rm':
+    live.unlink(missing_ok=True)
+    cleanup.write_text(' '.join(sys.argv[1:]))
+    raise SystemExit(0)
+live.write_text('live')
+modo = sys.argv[-1]
+if modo == 'ok':
+    os.write(1, b'out')
+    os.write(2, b'err')
+    raise SystemExit(0)
+if modo == 'limit':
+    os.write(1, b'a' * ({MAX_COMBINED_OUTPUT_BYTES} // 2))
+    os.write(2, b'b' * ({MAX_COMBINED_OUTPUT_BYTES} // 2))
+    raise SystemExit(0)
+signal.signal(signal.SIGTERM, signal.SIG_IGN)
+filho = subprocess.Popen([
+    sys.executable, '-c',
+    'import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(60)',
+])
+child_pid.write_text(str(filho.pid))
+if modo == 'overflow':
+    bloco = b'x' * 65536
+    for _ in range(17):
+        os.write(1, bloco)
+time.sleep(60)
+""")
+    executavel.chmod(0o755)
+    return executavel, marcador, pid_filho
+
+
+def _runner_falso(tmp_path: Path, monkeypatch) -> tuple[DockerSandboxRunner, Path, Path]:
+    executavel, marcador, pid_filho = _docker_falso(tmp_path)
+    runner = DockerSandboxRunner(
+        "docker.io/library/alpine@sha256:" + "f" * 64,
+        ("/bin/echo",),
+        str(executavel),
+    )
+    monkeypatch.setattr(runner, "_preflight", lambda: None)
+    return runner, marcador, pid_filho
+
+
+def _assert_sem_residuo(marcador: Path, pid_filho: Path) -> None:
+    assert not marcador.exists()
+    pid = int(pid_filho.read_text())
+    for _ in range(100):
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return
+        time.sleep(0.01)
+    os.kill(pid, signal.SIGKILL)
+    pytest.fail(f"processo residual: {pid}")
+
+
+def test_docker_runner_limita_output_e_remove_arvore_container(tmp_path: Path, monkeypatch) -> None:
+    runner, marcador, pid_filho = _runner_falso(tmp_path, monkeypatch)
+
+    resultado = runner.run(CommandRequest(("/bin/echo", "overflow"), tmp_path, 5))
+
+    assert resultado.erro == "output_overflow"
+    assert resultado.truncated is True
+    assert len(resultado.stdout.encode()) + len(resultado.stderr.encode()) == MAX_COMBINED_OUTPUT_BYTES
+    _assert_sem_residuo(marcador, pid_filho)
+
+
+def test_docker_runner_aceita_limite_combinado_exato(tmp_path: Path, monkeypatch) -> None:
+    runner, marcador, _ = _runner_falso(tmp_path, monkeypatch)
+
+    resultado = runner.run(CommandRequest(("/bin/echo", "limit"), tmp_path, 5))
+
+    assert resultado.returncode == 0 and resultado.truncated is False
+    assert len(resultado.stdout.encode()) + len(resultado.stderr.encode()) == MAX_COMBINED_OUTPUT_BYTES
+    assert not marcador.exists()
+
+
+def test_docker_runner_timeout_remove_arvore_container(tmp_path: Path, monkeypatch) -> None:
+    runner, marcador, pid_filho = _runner_falso(tmp_path, monkeypatch)
+
+    resultado = runner.run(CommandRequest(("/bin/echo", "timeout"), tmp_path, 1))
+
+    assert resultado.erro == "timeout" and resultado.timed_out is True
+    _assert_sem_residuo(marcador, pid_filho)
+
+
+def test_docker_runner_cleanup_explicito_tambem_no_sucesso(tmp_path: Path, monkeypatch) -> None:
+    runner, marcador, _ = _runner_falso(tmp_path, monkeypatch)
+
+    resultado = runner.run(CommandRequest(("/bin/echo", "ok"), tmp_path, 1))
+
+    assert resultado.returncode == 0
+    assert (resultado.stdout, resultado.stderr) == ("out", "err")
+    assert not marcador.exists()
+    assert (tmp_path / "cleanup").read_text().startswith("rm -f motor-sandbox-")

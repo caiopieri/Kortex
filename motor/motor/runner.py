@@ -5,8 +5,10 @@ from dataclasses import dataclass
 import json
 import os
 import re
+import selectors
 import signal
 import subprocess
+import time
 from pathlib import Path
 from typing import Protocol
 from uuid import uuid4
@@ -106,13 +108,80 @@ class DockerSandboxRunner:
         if os.getuid() == 0:
             raise ValueError("host root nao pode definir usuario do sandbox")
         return [
-            self.docker_bin, "run", "--rm", "--init", "--pull", "never", "--network", "none",
+            self.docker_bin, "run", "--init", "--pull", "never", "--network", "none",
             "--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
             "--pids-limit", "64",
             "--mount", f"type=bind,src={request.workspace},dst=/workspace,rw",
             "--workdir", "/workspace", "--user", f"{os.getuid()}:{os.getgid()}", self.image_digest,
             *request.argv,
         ]
+
+    @staticmethod
+    def _capture_limited(
+        processo: subprocess.Popen[bytes], timeout_s: int,
+    ) -> tuple[bytes, bytes, str | None]:
+        buffers = {"stdout": bytearray(), "stderr": bytearray()}
+        limite = time.monotonic() + timeout_s
+        seletor = selectors.DefaultSelector()
+        assert processo.stdout is not None and processo.stderr is not None
+        seletor.register(processo.stdout, selectors.EVENT_READ, "stdout")
+        seletor.register(processo.stderr, selectors.EVENT_READ, "stderr")
+        try:
+            while seletor.get_map():
+                restante = limite - time.monotonic()
+                if restante <= 0:
+                    return bytes(buffers["stdout"]), bytes(buffers["stderr"]), "timeout"
+                eventos = seletor.select(restante)
+                if not eventos:
+                    return bytes(buffers["stdout"]), bytes(buffers["stderr"]), "timeout"
+                for chave, _ in eventos:
+                    usado = len(buffers["stdout"]) + len(buffers["stderr"])
+                    dados = os.read(chave.fd, min(65536, MAX_COMBINED_OUTPUT_BYTES - usado + 1))
+                    if not dados:
+                        seletor.unregister(chave.fileobj)
+                        continue
+                    disponivel = MAX_COMBINED_OUTPUT_BYTES - usado
+                    buffers[chave.data].extend(dados[:disponivel])
+                    if len(dados) > disponivel:
+                        return bytes(buffers["stdout"]), bytes(buffers["stderr"]), "overflow"
+            try:
+                processo.wait(timeout=max(0, limite - time.monotonic()))
+            except subprocess.TimeoutExpired:
+                return bytes(buffers["stdout"]), bytes(buffers["stderr"]), "timeout"
+            return bytes(buffers["stdout"]), bytes(buffers["stderr"]), None
+        finally:
+            seletor.close()
+
+    @staticmethod
+    def _terminate_tree(processo: subprocess.Popen[bytes]) -> bool:
+        encerrado = True
+        try:
+            os.killpg(processo.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        except OSError:
+            encerrado = False
+        prazo = time.monotonic() + TERM_GRACE_S
+        while time.monotonic() < prazo:
+            try:
+                os.killpg(processo.pid, 0)
+            except ProcessLookupError:
+                break
+            except OSError:
+                encerrado = False
+                break
+            time.sleep(0.01)
+        try:
+            os.killpg(processo.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        except OSError:
+            encerrado = False
+        try:
+            processo.wait(timeout=TERM_GRACE_S)
+        except subprocess.TimeoutExpired:
+            encerrado = False
+        return encerrado
 
     def run(self, request: CommandRequest) -> CommandResult:
         try:
@@ -124,34 +193,49 @@ class DockerSandboxRunner:
             return CommandResult(erro="sandbox_indisponivel", motivo=motivo)
         nome = f"motor-sandbox-{uuid4().hex}"
         comando[comando.index("--read-only"):comando.index("--read-only")] = ["--name", nome]
+        resultado: CommandResult
+        cleanup_erro: BaseException | None = None
         try:
-            processo = subprocess.Popen(
-                comando, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                start_new_session=True,
-            )
-            stdout, stderr = processo.communicate(timeout=request.timeout_s)
-        except subprocess.TimeoutExpired:
-            os.killpg(processo.pid, signal.SIGTERM)
             try:
-                stdout, stderr = processo.communicate(timeout=TERM_GRACE_S)
-            except subprocess.TimeoutExpired:
-                os.killpg(processo.pid, signal.SIGKILL)
-                stdout, stderr = processo.communicate()
-            subprocess.run([self.docker_bin, "rm", "-f", nome], capture_output=True, timeout=TERM_GRACE_S)
-            combinado = (stdout or b"") + (stderr or b"")
+                processo = subprocess.Popen(
+                    comando, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                    start_new_session=True,
+                )
+                stdout, stderr, causa = self._capture_limited(processo, request.timeout_s)
+                if causa is not None:
+                    encerrado = self._terminate_tree(processo)
+                    resultado = CommandResult(
+                        stdout=stdout.decode(errors="replace"),
+                        stderr=stderr.decode(errors="replace"),
+                        erro=("termination_falhou" if not encerrado else
+                              "output_overflow" if causa == "overflow" else "timeout"),
+                        motivo=("encerramento da arvore falhou" if not encerrado else
+                                "output combinado excedeu 1 MiB" if causa == "overflow"
+                                else "timeout do sandbox"),
+                        timed_out=causa == "timeout", truncated=causa == "overflow",
+                    )
+                else:
+                    resultado = CommandResult(
+                        returncode=processo.returncode,
+                        stdout=stdout.decode(errors="replace"),
+                        stderr=stderr.decode(errors="replace"),
+                    )
+            except OSError as erro:
+                if "processo" in locals():
+                    self._terminate_tree(processo)
+                resultado = CommandResult(erro="sandbox_indisponivel", motivo=type(erro).__name__)
+        finally:
+            try:
+                subprocess.run(
+                    [self.docker_bin, "rm", "-f", nome], check=True,
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=TERM_GRACE_S,
+                )
+            except (OSError, subprocess.SubprocessError) as erro:
+                cleanup_erro = erro
+        if cleanup_erro is not None:
             return CommandResult(
-                stdout=stdout.decode(errors="replace"), stderr=stderr.decode(errors="replace"),
-                erro="timeout", motivo="timeout do sandbox", timed_out=True,
-                truncated=len(combinado) > MAX_COMBINED_OUTPUT_BYTES,
+                stdout=resultado.stdout, stderr=resultado.stderr,
+                erro="cleanup_falhou", motivo=type(cleanup_erro).__name__,
+                timed_out=resultado.timed_out, truncated=resultado.truncated,
             )
-        except OSError as erro:
-            return CommandResult(erro="sandbox_indisponivel", motivo=type(erro).__name__)
-        combinado = stdout + stderr
-        truncado = len(combinado) > MAX_COMBINED_OUTPUT_BYTES
-        if truncado:
-            stdout, stderr = combinado[:MAX_COMBINED_OUTPUT_BYTES], b""
-        return CommandResult(
-            returncode=processo.returncode,
-            stdout=stdout.decode(errors="replace"), stderr=stderr.decode(errors="replace"),
-            truncated=truncado,
-        )
+        return resultado
