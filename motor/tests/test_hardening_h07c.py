@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import stat
+import threading
 from pathlib import Path
 
 import pytest
@@ -133,3 +134,30 @@ def test_schema_v2_exige_seq_presente() -> None:
     evento = {"t": 0, "evento": "tarefa.concluida", "missao": "teste"}
     assert not valido(evento)
     assert valido({**evento, "seq": 1})
+
+
+def test_writer_serializa_emissoes_concorrentes_e_reabre(tmp_path: Path) -> None:
+    path = tmp_path / "eventos.jsonl"
+    log = LogEventos(path)
+    barreira = threading.Barrier(8)
+
+    def emitir(indice: int) -> None:
+        barreira.wait()
+        for numero in range(20):
+            log.evento("tarefa.concluida", missao=f"{indice}-{numero}")
+
+    threads = [threading.Thread(target=emitir, args=(indice,)) for indice in range(8)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=10)
+
+    assert all(not thread.is_alive() for thread in threads)
+    log.fechar()
+    eventos = [json.loads(linha) for linha in path.read_text().splitlines()]
+    assert [evento["seq"] for evento in eventos] == list(range(1, 161))
+
+    reaberto = LogEventos(path)
+    reaberto.evento("tarefa.concluida", missao="retomada")
+    reaberto.fechar()
+    assert json.loads(path.read_text().splitlines()[-1])["seq"] == 161

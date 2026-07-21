@@ -266,6 +266,56 @@ def test_responder_gate_em_job_nao_pausado_vira_erro_tratavel(tmp_path):
     assert status["erro"]["tipo"] == "EstadoInvalido"
 
 
+def test_falha_ao_abrir_log_encerra_job_com_erro(tmp_path, monkeypatch):
+    gerenciador = GerenciadorJobs(
+        db_path=tmp_path / "motor.db",
+        workspace_base=tmp_path / "runs",
+        cliente=ClienteStub(faz_roteador()),
+    )
+
+    def falhar(_job_id: str, truncar: bool = True):
+        raise ValueError("sequencia invalida na linha 9")
+
+    monkeypatch.setattr(gerenciador, "_log_do_job", falhar)
+    gerenciador.iniciar(spec=SPEC, thread_id="log-invalido")
+
+    status = aguardar_estado(gerenciador, "log-invalido", "erro")
+    assert status == {
+        "estado": "erro",
+        "erro": {
+            "tipo": "ValueError",
+            "mensagem": "sequencia invalida na linha 9",
+        },
+    }
+
+
+def test_fan_out_dois_gates_aborta_e_log_reabre_com_seq_continua(tmp_path):
+    runs = tmp_path / "runs"
+    gerenciador = GerenciadorJobs(
+        db_path=tmp_path / "motor.db",
+        workspace_base=runs,
+        cliente=ClienteStub(faz_roteador(evaluator_aprova=False)),
+    )
+    gerenciador.iniciar(spec=SPEC, thread_id="fan-out-gates")
+    plano = aguardar_estado(gerenciador, "fan-out-gates", "gate_pendente")
+    assert plano["gate"]["portao"] == "plano"
+
+    gerenciador.responder_gate("fan-out-gates", "prosseguir")
+    cobertura = aguardar_estado(gerenciador, "fan-out-gates", "gate_pendente")
+    assert cobertura["gate"]["portao"] == "cobertura"
+
+    gerenciador.responder_gate("fan-out-gates", "abortar")
+    abortado = aguardar_estado(gerenciador, "fan-out-gates", "erro")
+    assert abortado["erro"]["tipo"] == "MissaoAbortada"
+    gerenciador.fechar()
+
+    path = runs / "fan-out-gates" / "log.jsonl"
+    eventos = [json.loads(linha) for linha in path.read_text().splitlines()]
+    assert [evento["seq"] for evento in eventos] == list(range(1, len(eventos) + 1))
+    reaberto = LogEventos(path)
+    reaberto.fechar()
+
+
 def _spec_com_artefato() -> dict:
     return {
         "versao": "0.1",

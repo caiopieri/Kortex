@@ -437,9 +437,10 @@ class GerenciadorJobs:
 
     def _executar(self, job_id: str, cliente: ClienteModelo, entrada: Any,
                   claim: dict[str, Any] | None = None) -> None:
-        log = self._log_do_job(job_id)
+        log: LogEventos | None = None
         registro: dict[str, Any]
         try:
+            log = self._log_do_job(job_id)
             grafo = construir_grafo(
                 cliente,
                 log,
@@ -474,22 +475,23 @@ class GerenciadorJobs:
                 "estado": "erro",
                 "erro": {"tipo": type(ex).__name__, "mensagem": str(ex)},
             }
-        try:
-            if not self._drenar_orcamento(job_id, log):
-                raise RuntimeError("relay monetario pendente")
-        except Exception as ex:
-            registro = {
-                "estado": "erro",
-                "erro": {"tipo": type(ex).__name__, "mensagem": str(ex)},
-            }
-        try:
-            if log is not self.log:
-                log.fechar()
-        except Exception as ex:
-            registro = {
-                "estado": "erro",
-                "erro": {"tipo": type(ex).__name__, "mensagem": str(ex)},
-            }
+        if log is not None:
+            try:
+                if not self._drenar_orcamento(job_id, log):
+                    raise RuntimeError("relay monetario pendente")
+            except Exception as ex:
+                registro = {
+                    "estado": "erro",
+                    "erro": {"tipo": type(ex).__name__, "mensagem": str(ex)},
+                }
+            try:
+                if log is not self.log:
+                    log.fechar()
+            except Exception as ex:
+                registro = {
+                    "estado": "erro",
+                    "erro": {"tipo": type(ex).__name__, "mensagem": str(ex)},
+                }
         with self._lock:
             self._jobs[job_id] = registro
 

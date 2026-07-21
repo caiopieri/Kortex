@@ -252,7 +252,6 @@ class LogEventos:
                           allow_nan=False)
 
     def _escrever(self, tipo_evento: str, dados: dict[str, Any]) -> None:
-
         seq = self._proximo_seq
         instante = self._tempo_atual()
         e = {"t": instante, "seq": seq, "evento": tipo_evento, **dados}
@@ -306,6 +305,7 @@ class LogEventos:
         return erro
 
     def fechar(self) -> None:
-        erro = self._fechar_descritores()
-        if erro is not None:
-            raise erro
+        with self._mutex:
+            erro = self._fechar_descritores()
+            if erro is not None:
+                raise erro
