@@ -386,6 +386,7 @@ class GerenciadorJobs:
     def _executar(self, job_id: str, cliente: ClienteModelo, entrada: Any,
                   claim: dict[str, Any] | None = None) -> None:
         log: LogEventos | None = None
+        registro: dict[str, Any]
         try:
             log = self._log_do_job(job_id)
             grafo = construir_grafo(
@@ -413,17 +414,22 @@ class GerenciadorJobs:
                     )
                 finally:
                     ledger.fechar()
-            with self._lock:
-                self._jobs[job_id] = self._registro_de_resultado(resultado)
+            registro = self._registro_de_resultado(resultado)
         except Exception as ex:  # erro tratável: o gerenciador não cai
-            with self._lock:
-                self._jobs[job_id] = {
+            registro = {
+                "estado": "erro",
+                "erro": {"tipo": type(ex).__name__, "mensagem": str(ex)},
+            }
+        if log is not None and log is not self.log:
+            try:
+                log.fechar()
+            except Exception as ex:
+                registro = {
                     "estado": "erro",
                     "erro": {"tipo": type(ex).__name__, "mensagem": str(ex)},
                 }
-        finally:
-            if log is not None and log is not self.log:
-                log.fechar()
+        with self._lock:
+            self._jobs[job_id] = registro
 
     def _recuperar_outbox(self, job_id: str) -> bool:
         with self._lock:
