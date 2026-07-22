@@ -45,7 +45,7 @@ como dívida em vez de virar confiança verbal.
 | # | Invariante | Enforço | Teste que prova |
 |---|---|---|---|
 | E1 | O conjunto de tipos de evento é fechado; evento emitido no código e ausente do schema quebra o guard anti-drift. | `motor/motor/eventos_schema.py::ESQUEMA`; AST guard em teste | `motor/tests/test_eventos_schema.py::test_schema_cobre_todos_eventos_emitidos_no_codigo`, `test_guarda_anti_drift_falharia_com_evento_nao_declarado` |
-| E2 | Ledger JSONL v2 é append-only, durável e estrito: writer único, `seq` contígua, tempo não regressivo, recovery de tail com quarentena e defesa contra troca/link de arquivo. V1 permanece somente leitura e não autoriza gate. Painel e curador são projeções. | `motor/motor/eventos.py::LogEventos`; `motor_painel.painel::parse_eventos`; `motor/motor/curador.py::carregar_runs` | `motor/tests/test_hardening_h07a.py` até `test_hardening_h07e.py`; manifest em `motor/tests/test_hardening_h07.py` |
+| E2 | Ledger JSONL v2 é append-only, durável e estrito: writer único intra/interprocesso, `seq` contígua, tempo não regressivo, recovery de tail com quarentena e defesa contra troca/link de arquivo. V1 permanece somente leitura e não autoriza gate. Painel e curador são projeções. | `motor/motor/eventos.py::LogEventos`; `motor_painel.painel::parse_eventos`; `motor/motor/curador.py::carregar_runs` | `motor/tests/test_hardening_h07a.py` até `test_hardening_h07e.py`; `test_hardening_h07c.py::test_writer_serializa_emissoes_concorrentes_e_reabre`; manifest em `motor/tests/test_hardening_h07.py` |
 
 ## Curador
 
@@ -59,9 +59,18 @@ como dívida em vez de virar confiança verbal.
 
 | # | Invariante | Enforço | Teste que prova |
 |---|---|---|---|
-| F1 | Decisão pendente e retomada sobrevivem a crash por outbox SQLite com claim/lease/ack e reconciliação automática. A entrega é **at-least-once**, deduplicada por `decision_id`; não há promessa de exactly-once entre stores. | `motor/motor/caixa.py::LedgerCaixa`; `rodar_com_caixa`; `motor/motor/servico.py::GerenciadorJobs` | `motor/tests/test_hardening_h11.py::test_crash_em_cada_fronteira_converge_apos_restart`, `test_servico_reconcilia_automaticamente_apos_restart_de_processo` |
+| F1 | Decisão pendente e retomada sobrevivem a crash por outbox SQLite com claim/lease renovável/ack e reconciliação automática. Gate só é publicado após handoff do writer. A entrega é **at-least-once**, deduplicada por `decision_id`; não há promessa de exactly-once entre stores. | `motor/motor/caixa.py::LedgerCaixa`; `rodar_com_caixa`; `motor/motor/servico.py::GerenciadorJobs` | `motor/tests/test_hardening_h11.py::test_crash_em_cada_fronteira_converge_apos_restart`, `test_servico_reconcilia_automaticamente_apos_restart_de_processo`; `motor/tests/test_servico.py::test_gate_so_fica_observavel_depois_que_writer_fecha`, `test_retomada_longa_renova_claim_sem_segundo_writer` |
 | F2 | Gate humano persiste decisão antes de arquivar nota; múltiplos interrupts exigem `decision_id`, são serializados por job e continuam independentes entre jobs. Timeout preserva evidência para depuração. | `motor/motor/caixa.py::CaixaFundador`; `LedgerCaixa`; `motor/motor/servico.py::GerenciadorJobs` | `motor/tests/test_hardening_h11.py::test_servico_serializa_dois_interrupts_paralelos_por_job`, `test_claim_serializa_mesmo_job_e_mantem_jobs_distintos_paralelos`; controles em `motor/tests/test_caixa.py` |
 | F3 | Gate `promocao` é sensível e nunca é auto-respondido, mesmo com `auto_mode`, override ou default. `plano` e `cobertura` não são classificados como sensíveis pelo contrato atual. | `motor/motor/politica.py::PoliticaGates` | `motor/tests/test_hardening_h01.py::test_reprodutor_h01` materializa os casos F3 aceitos em `motor/specs/001-hardening-producao/reproducer-manifest.jsonl` |
+
+## Evidência de integração A1
+
+Em 2026-07-21, o fluxo real Jarvis↔motor `jarvis-a1-green-a6f4bb3e0d`
+comprovou despacho, gate de plano, resposta imediata pelo porteiro, fan-out
+Codex/Claude por múltiplos leases e conclusão com log íntegro e resposta final.
+A evidência valida conjuntamente `b52b8e2`, `fa08eab`, `b6c9810` e `5d3e959`.
+Esses commits permanecem pendentes de integração em
+`hardening/h12b3-integration` antes do H13 final dessa branch.
 
 ## Dívidas conhecidas
 
