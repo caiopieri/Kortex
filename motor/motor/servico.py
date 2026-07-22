@@ -411,6 +411,7 @@ class GerenciadorJobs:
                             self._config(job_id),
                         ),
                         fault=self._fault,
+                        lease_s=self._outbox_lease_s,
                     )
                 finally:
                     ledger.fechar()
