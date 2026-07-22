@@ -1,0 +1,58 @@
+name: H05b Linux evidence (not certification)
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_digest:
+        description: Pre-provisioned OCI image reference pinned by sha256
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  deployment-evidence:
+    name: Dedicated Linux runner evidence
+    runs-on: [self-hosted, linux, h05b-sandbox]
+    timeout-minutes: 15
+    env:
+      H05B_IMAGE_DIGEST: ${{ inputs.image_digest }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Require a non-root dedicated host
+        run: test "$(id -u)" -ne 0
+
+      - name: Install the adapter and test tooling
+        run: python3 -m pip install ./motor pytest
+
+      - name: Run local H05b causal tests
+        working-directory: motor
+        run: python3 -m pytest -q tests/test_hardening_h05b_preconditions.py
+
+      - name: Collect observed deployment identity
+        env:
+          EVIDENCE_PATH: ${{ runner.temp }}/h05b-deployment-evidence.json
+        run: |
+          python3 - <<'PY'
+          from dataclasses import asdict
+          import json
+          import os
+          from pathlib import Path
+
+          from motor.runner import DockerSandboxRunner
+
+          runner = DockerSandboxRunner(os.environ["H05B_IMAGE_DIGEST"], ("/bin/true",))
+          evidence = asdict(runner.deployment_evidence())
+          path = Path(os.environ["EVIDENCE_PATH"])
+          path.write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n")
+          print(path.read_text())
+          PY
+
+      - name: Upload observed evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: h05b-linux-evidence-not-certification
+          path: ${{ runner.temp }}/h05b-deployment-evidence.json
+          if-no-files-found: error

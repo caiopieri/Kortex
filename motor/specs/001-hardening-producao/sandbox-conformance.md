@@ -43,3 +43,14 @@ The backend must prove:
 - the sandbox unit is removed after success, failure, overflow and timeout.
 
 Absence of any prerequisite fails the conformance job rather than skipping it.
+
+## Linux evidence baseline
+
+The manual workflow `.github/workflows/h05b-linux-evidence.yml` targets a dedicated,
+non-root, self-hosted Linux runner labelled `h05b-sandbox`. It requires an operator-supplied
+immutable digest whose image is already provisioned, runs the local H05b causal tests, and
+uploads the adapter's observed deployment identity as JSON.
+
+A successful run is evidence of the engine, OS, adapter, policy, requested digest and effective
+RepoDigest only. It is not certification. The next independent issue is a Linux harness covering
+every causal test above; only that harness may become a human promotion-gate input.
