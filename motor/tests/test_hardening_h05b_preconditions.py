@@ -1,3 +1,4 @@
+import json
 import os
 import shlex
 import signal
@@ -11,6 +12,7 @@ import pytest
 
 from tests.helpers_grafo import construir_grafo_teste as construir_grafo
 from motor.runner import (
+    DOCKER_POLICY_VERSION,
     MAX_COMBINED_OUTPUT_BYTES,
     CommandRequest,
     CommandResult,
@@ -110,6 +112,10 @@ def test_docker_runner_constroi_policy_selada(tmp_path: Path) -> None:
     assert "--security-opt" in comando and "no-new-privileges" in comando
     assert "--env" not in comando and "--tmpfs" not in comando and "sh" not in comando
     assert comando[comando.index("--user") + 1] == f"{os.getuid()}:{os.getgid()}"
+    indice = comando.index("--entrypoint")
+    assert comando[indice + 1] == "/bin/echo"
+    assert comando[indice + 2:] == [runner.image_digest, "ok"]
+    assert comando.count("/bin/echo") == 1
 
 
 def test_docker_runner_rejeita_host_root_antes_do_daemon(tmp_path: Path, monkeypatch) -> None:
@@ -124,7 +130,7 @@ def test_docker_runner_rejeita_host_root_antes_do_daemon(tmp_path: Path, monkeyp
     assert "host root" in resultado.motivo
 
 
-def test_docker_runner_preflight_exige_linux_e_digest_efetivo(monkeypatch) -> None:
+def test_docker_runner_preflight_produz_identidade_e_digest_efetivo(monkeypatch) -> None:
     imagem = "docker.io/library/alpine@sha256:" + "c" * 64
     respostas = iter([
         subprocess.CompletedProcess([], 0, stdout="29.0.0\n", stderr=""),
@@ -135,7 +141,15 @@ def test_docker_runner_preflight_exige_linux_e_digest_efetivo(monkeypatch) -> No
     ])
     monkeypatch.setattr("motor.runner.subprocess.run", lambda *_args, **_kwargs: next(respostas))
 
-    assert DockerSandboxRunner(imagem, ("/bin/echo",))._preflight() is None
+    runner = DockerSandboxRunner(imagem, ("/bin/echo",))
+    evidencia = runner.deployment_evidence()
+
+    assert evidencia.engine_version == "29.0.0"
+    assert evidencia.os_type == "linux"
+    assert evidencia.adapter == "motor.runner.DockerSandboxRunner"
+    assert evidencia.policy_version == DOCKER_POLICY_VERSION
+    assert evidencia.requested_image_digest == imagem
+    assert evidencia.effective_repo_digest == f"alpine@{imagem.rsplit('@', 1)[1]}"
 
 
 @pytest.mark.parametrize(("sistema", "digests"), [
@@ -163,16 +177,19 @@ def _docker_falso(tmp_path: Path) -> tuple[Path, Path, Path]:
     marcador = tmp_path / "container-live"
     cleanup = tmp_path / "cleanup"
     pid_filho = tmp_path / "child-pid"
+    argv_log = tmp_path / "docker-argv.json"
     executavel = tmp_path / "docker-falso"
     executavel.write_text(f"""#!{sys.executable}
-import os, pathlib, signal, subprocess, sys, time
+import json, os, pathlib, signal, subprocess, sys, time
 live = pathlib.Path({str(marcador)!r})
 cleanup = pathlib.Path({str(cleanup)!r})
 child_pid = pathlib.Path({str(pid_filho)!r})
+argv_log = pathlib.Path({str(argv_log)!r})
 if sys.argv[1] == 'rm':
     live.unlink(missing_ok=True)
     cleanup.write_text(' '.join(sys.argv[1:]))
     raise SystemExit(0)
+argv_log.write_text(json.dumps(sys.argv[1:]))
 live.write_text('live')
 modo = sys.argv[-1]
 if modo == 'ok':
@@ -262,3 +279,6 @@ def test_docker_runner_cleanup_explicito_tambem_no_sucesso(tmp_path: Path, monke
     assert (resultado.stdout, resultado.stderr) == ("out", "err")
     assert not marcador.exists()
     assert (tmp_path / "cleanup").read_text().startswith("rm -f motor-sandbox-")
+    argv = json.loads((tmp_path / "docker-argv.json").read_text())
+    indice = argv.index("--entrypoint")
+    assert argv[indice + 1:indice + 4] == ["/bin/echo", runner.image_digest, "ok"]

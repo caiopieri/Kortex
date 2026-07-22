@@ -42,6 +42,18 @@ class CommandResult:
     truncated: bool = False
 
 
+@dataclass(frozen=True)
+class DockerSandboxEvidence:
+    """Identidade observada no preflight; nao representa certificacao."""
+
+    engine_version: str
+    os_type: str
+    adapter: str
+    policy_version: str
+    requested_image_digest: str
+    effective_repo_digest: str
+
+
 class CommandRunner(Protocol):
     """Contrato a certificar em H05b; sua implementação não é validada por este tipo."""
 
@@ -71,31 +83,47 @@ class DockerSandboxRunner:
         self.executaveis = frozenset(executaveis)
         self.docker_bin = docker_bin
 
+    def deployment_evidence(self) -> DockerSandboxEvidence:
+        """Coleta a identidade efetiva sem alegar conformidade ou certificacao."""
+        servidor = subprocess.run(
+            [self.docker_bin, "version", "--format", "{{.Server.Version}}"],
+            check=True, capture_output=True, text=True, timeout=5,
+        )
+        sistema = subprocess.run(
+            [self.docker_bin, "info", "--format", "{{.OSType}}"],
+            check=True, capture_output=True, text=True, timeout=5,
+        )
+        inspecao = subprocess.run(
+            [self.docker_bin, "image", "inspect", "--format", "{{json .RepoDigests}}",
+             self.image_digest],
+            check=True, capture_output=True, text=True, timeout=5,
+        )
+        digests = json.loads(inspecao.stdout)
+        digest_esperado = self.image_digest.rsplit("@", 1)[1]
+        efetivos = [
+            item for item in digests if isinstance(item, str)
+            and item.rsplit("@", 1)[-1] == digest_esperado
+        ] if isinstance(digests, list) else []
+        versao = servidor.stdout.strip()
+        os_type = sistema.stdout.strip()
+        if not versao or os_type != "linux" or not efetivos:
+            raise ValueError("preflight Docker nao corresponde ao deployment selado")
+        return DockerSandboxEvidence(
+            engine_version=versao,
+            os_type=os_type,
+            adapter=f"{type(self).__module__}.{type(self).__qualname__}",
+            policy_version=DOCKER_POLICY_VERSION,
+            requested_image_digest=self.image_digest,
+            effective_repo_digest=efetivos[0],
+        )
+
     def _preflight(self) -> str | None:
         try:
-            servidor = subprocess.run(
-                [self.docker_bin, "version", "--format", "{{.Server.Version}}"],
-                check=True, capture_output=True, text=True, timeout=5,
-            )
-            sistema = subprocess.run(
-                [self.docker_bin, "info", "--format", "{{.OSType}}"],
-                check=True, capture_output=True, text=True, timeout=5,
-            )
-            inspecao = subprocess.run(
-                [self.docker_bin, "image", "inspect", "--format", "{{json .RepoDigests}}",
-                 self.image_digest],
-                check=True, capture_output=True, text=True, timeout=5,
-            )
-            digests = json.loads(inspecao.stdout)
-            digest_esperado = self.image_digest.rsplit("@", 1)[1]
-            if (not servidor.stdout.strip() or sistema.stdout.strip() != "linux"
-                    or not isinstance(digests, list)
-                    or digest_esperado not in {
-                        item.rsplit("@", 1)[-1] for item in digests if isinstance(item, str)
-                    }):
-                return "preflight Docker nao corresponde ao deployment selado"
+            self.deployment_evidence()
         except (OSError, subprocess.SubprocessError, json.JSONDecodeError) as erro:
             return f"preflight Docker indisponivel: {type(erro).__name__}"
+        except ValueError as erro:
+            return str(erro)
         return None
 
     def _argv(self, request: CommandRequest) -> list[str]:
@@ -112,8 +140,8 @@ class DockerSandboxRunner:
             "--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
             "--pids-limit", "64",
             "--mount", f"type=bind,src={request.workspace},dst=/workspace,rw",
-            "--workdir", "/workspace", "--user", f"{os.getuid()}:{os.getgid()}", self.image_digest,
-            *request.argv,
+            "--workdir", "/workspace", "--user", f"{os.getuid()}:{os.getgid()}",
+            "--entrypoint", request.argv[0], self.image_digest, *request.argv[1:],
         ]
 
     @staticmethod
