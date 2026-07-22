@@ -1,6 +1,7 @@
 import time
 import json
 import sqlite3
+import threading
 from pathlib import Path
 
 import pytest
@@ -314,6 +315,42 @@ def test_fan_out_dois_gates_aborta_e_log_reabre_com_seq_continua(tmp_path):
     assert [evento["seq"] for evento in eventos] == list(range(1, len(eventos) + 1))
     reaberto = LogEventos(path)
     reaberto.fechar()
+
+
+@pytest.mark.parametrize("_repeticao", range(5))
+def test_gate_so_fica_observavel_depois_que_writer_fecha(
+    tmp_path, monkeypatch, _repeticao
+):
+    iniciou_fechamento = threading.Event()
+    liberar_fechamento = threading.Event()
+    fechar_real = LogEventos.fechar
+
+    def fechar_bloqueado(log: LogEventos) -> None:
+        iniciou_fechamento.set()
+        assert liberar_fechamento.wait(timeout=3)
+        fechar_real(log)
+
+    monkeypatch.setattr(LogEventos, "fechar", fechar_bloqueado)
+    gerenciador = GerenciadorJobs(
+        db_path=tmp_path / "motor.db",
+        workspace_base=tmp_path / "runs",
+        cliente=ClienteStub(faz_roteador()),
+    )
+    gerenciador.iniciar(spec=SPEC, thread_id="handoff-writer")
+
+    assert iniciou_fechamento.wait(timeout=3)
+    assert gerenciador.status("handoff-writer") == {"estado": "em_execucao"}
+    liberar_fechamento.set()
+    gate = aguardar_estado(gerenciador, "handoff-writer", "gate_pendente")
+    assert gate["gate"]["portao"] == "plano"
+
+    assert gerenciador.responder_gate("handoff-writer", "prosseguir") == {
+        "estado": "em_execucao"
+    }
+    assert aguardar_estado(gerenciador, "handoff-writer", "concluido")[
+        "estado"
+    ] == "concluido"
+    gerenciador.fechar()
 
 
 def _spec_com_artefato() -> dict:
