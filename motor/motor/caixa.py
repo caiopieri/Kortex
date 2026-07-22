@@ -21,6 +21,7 @@ import json
 import math
 import re
 import sqlite3
+import threading
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -341,7 +342,8 @@ class LedgerCaixa:
 
     def consumir(self, claim: dict[str, Any],
                  aplicar: Callable[[dict[str, Any]], Any], *,
-                 fault: Callable[[str], None] | None = None) -> Any:
+                 fault: Callable[[str], None] | None = None,
+                 lease_s: float | None = None) -> Any:
         """Entrega at-least-once; `aplicar` deve deduplicar por `decisao_id`."""
         claim = self._validar_claim_para_entrega(claim)
         outbox_id = claim.get("outbox_id")
@@ -357,9 +359,50 @@ class LedgerCaixa:
             raise ValueError("claim inválido")
         if fault is not None:
             fault("apos_claim")
-        resultado = aplicar(payload)
+        parar_renovacao = threading.Event()
+        claim_atual = claim
+        lock_claim = threading.Lock()
+        erro_renovacao: list[BaseException] = []
+        renovador: threading.Thread | None = None
+        if lease_s is not None:
+            duracao = self._duracao(lease_s)
+
+            def renovar() -> None:
+                ledger = LedgerCaixa(self.db_path, clock=self._clock)
+                try:
+                    while not parar_renovacao.wait(duracao / 3):
+                        with lock_claim:
+                            atual = dict(claim_atual)
+                        renovado = ledger.renovar_claim(
+                            atual["outbox_id"], atual["lease_owner"],
+                            lease_version=atual["lease_version"], lease_s=duracao,
+                        )
+                        with lock_claim:
+                            claim_atual.update(renovado)
+                except BaseException as ex:
+                    erro_renovacao.append(ex)
+                    parar_renovacao.set()
+                finally:
+                    ledger.fechar()
+
+            renovador = threading.Thread(
+                target=renovar,
+                name=f"caixa-lease-{outbox_id}",
+                daemon=True,
+            )
+            renovador.start()
+        try:
+            resultado = aplicar(payload)
+        finally:
+            parar_renovacao.set()
+            if renovador is not None:
+                renovador.join()
+        if erro_renovacao:
+            raise RuntimeError("falha ao renovar lease da decisão") from erro_renovacao[0]
         if fault is not None:
             fault("apos_aplicar")
+        with lock_claim:
+            lease_version = claim_atual["lease_version"]
         self.ack(outbox_id, owner_id, lease_version=lease_version)
         if fault is not None:
             fault("apos_ack")

@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 import motor.servico as servico_modulo
+from motor.caixa import LedgerCaixa
 from motor.modelos import ClienteStub
 from motor.eventos import LogEventos
 from motor.composicao_orcamento import RotaOrcadaCertificada
@@ -350,6 +351,61 @@ def test_gate_so_fica_observavel_depois_que_writer_fecha(
     assert aguardar_estado(gerenciador, "handoff-writer", "concluido")[
         "estado"
     ] == "concluido"
+    gerenciador.fechar()
+
+
+def test_retomada_longa_renova_claim_sem_segundo_writer(tmp_path, monkeypatch):
+    executor_iniciou = threading.Event()
+    liberar_executor = threading.Event()
+
+    def roteador(papel: str, prompt: str):
+        if papel == "pesquisador":
+            executor_iniciou.set()
+            assert liberar_executor.wait(timeout=3)
+        return faz_roteador()(papel, prompt)
+
+    aberturas: list[str] = []
+    abrir_real = GerenciadorJobs._log_do_job
+
+    def contar_abertura(self, job_id: str, truncar: bool = True):
+        if truncar:
+            aberturas.append(job_id)
+        return abrir_real(self, job_id, truncar)
+
+    monkeypatch.setattr(GerenciadorJobs, "_log_do_job", contar_abertura)
+    gerenciador = GerenciadorJobs(
+        db_path=tmp_path / "motor.db",
+        workspace_base=tmp_path / "runs",
+        cliente=ClienteStub(roteador),
+        outbox_poll_s=0.01,
+        outbox_lease_s=0.15,
+    )
+    gerenciador.iniciar(spec=SPEC, thread_id="lease-longo")
+    gate = aguardar_estado(gerenciador, "lease-longo", "gate_pendente")
+    decision_id = gate["gate"]["decision_id"]
+    gerenciador.responder_gate("lease-longo", "prosseguir")
+    assert executor_iniciou.wait(timeout=3)
+
+    observador = LedgerCaixa(tmp_path / "motor.db")
+    limite = time.monotonic() + 3
+    registro = observador.buscar_decisao(decision_id)
+    while registro is not None and registro["lease_version"] < 2:
+        assert time.monotonic() < limite
+        time.sleep(0.01)
+        registro = observador.buscar_decisao(decision_id)
+    assert registro is not None and registro["estado"] == "CLAIMED"
+    assert observador.claim(
+        "consumer-concorrente", lease_s=1, decisao_id=decision_id
+    ) is None
+    assert aberturas.count("lease-longo") == 2
+    assert gerenciador.status("lease-longo") == {"estado": "em_execucao"}
+
+    liberar_executor.set()
+    assert aguardar_estado(gerenciador, "lease-longo", "concluido")[
+        "estado"
+    ] == "concluido"
+    assert aberturas.count("lease-longo") == 2
+    observador.fechar()
     gerenciador.fechar()
 
 
