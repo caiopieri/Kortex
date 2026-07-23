@@ -63,10 +63,12 @@ Bandit high/high, compileall, manifest validation, Gitleaks, diff checks and sou
 The recurrent H11 scheduling test missed its five-second polling window once by about 10 ms, then
 passed isolated and in the final full run without test relaxation.
 
-H05b follow-up is intentionally not certified: `DockerSandboxRunner` and 14 causal preflight/policy
-tests now exist in the source tree, but the Docker daemon is unreachable on this macOS host and no
-Linux runner, preloaded image digest or conformance job is available. C2/C3 remain blocked; the
-adapter's post-capture truncation is not claimed as streaming output control.
+H05b follow-up is intentionally not certified: `DockerSandboxRunner`, its local causal tests and a
+manual `h05b-linux-evidence.yml` workflow now exist. The workflow fails closed without a dedicated
+non-root Linux runner and preprovisioned image digest, then records actual isolation, output,
+timeout and cleanup probes as reviewable evidence. No such artifact has been reviewed from this
+macOS checkout, so C2/C3 remain blocked; the runner's selector-based output limit is not treated as
+deployment proof.
 
 Counts are evidence for that revision only. A release must rerun every gate from a clean
 checkout.

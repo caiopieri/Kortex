@@ -191,6 +191,7 @@ class DockerSandboxRunner:
             encerrado = False
         prazo = time.monotonic() + TERM_GRACE_S
         while time.monotonic() < prazo:
+            processo.poll()  # Reap the leader so an empty process group can disappear.
             try:
                 os.killpg(processo.pid, 0)
             except ProcessLookupError:

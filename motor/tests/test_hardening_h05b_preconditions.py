@@ -273,7 +273,7 @@ def test_docker_runner_timeout_remove_arvore_container(tmp_path: Path, monkeypat
 def test_docker_runner_cleanup_explicito_tambem_no_sucesso(tmp_path: Path, monkeypatch) -> None:
     runner, marcador, _ = _runner_falso(tmp_path, monkeypatch)
 
-    resultado = runner.run(CommandRequest(("/bin/echo", "ok"), tmp_path, 1))
+    resultado = runner.run(CommandRequest(("/bin/echo", "ok"), tmp_path, 5))
 
     assert resultado.returncode == 0
     assert (resultado.stdout, resultado.stderr) == ("out", "err")

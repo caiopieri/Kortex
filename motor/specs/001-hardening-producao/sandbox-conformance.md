@@ -51,6 +51,7 @@ non-root, self-hosted Linux runner labelled `h05b-sandbox`. It requires an opera
 immutable digest whose image is already provisioned, runs the local H05b causal tests, and
 uploads the adapter's observed deployment identity as JSON.
 
-A successful run is evidence of the engine, OS, adapter, policy, requested digest and effective
-RepoDigest only. It is not certification. The next independent issue is a Linux harness covering
-every causal test above; only that harness may become a human promotion-gate input.
+A successful run records engine, OS, adapter, policy, requested/effective digest and causal probes
+for isolation, output, timeout and cleanup. The pre-provisioned image must expose
+`/usr/bin/python3`; absence fails the job. The report remains evidence rather than certification
+and may become a human promotion-gate input only after independent review on the target deployment.
