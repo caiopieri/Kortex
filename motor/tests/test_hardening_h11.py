@@ -615,10 +615,23 @@ def test_servico_serializa_dois_interrupts_paralelos_por_job(
     liberar_primeira = threading.Event()
     aplicacoes: list[str] = []
     lock_aplicacoes = threading.Lock()
+    fechamentos = 0
+    lock_fechamentos = threading.Lock()
+    fechar_real = servico_modulo.LogEventos.fechar
+
+    def registrar_fechamento(log: Any) -> None:
+        nonlocal fechamentos
+        fechar_real(log)
+        with lock_fechamentos:
+            fechamentos += 1
+
+    monkeypatch.setattr(servico_modulo.LogEventos, "fechar", registrar_fechamento)
 
     def fault(ponto: str) -> None:
         if ponto != "apos_aplicar":
             return
+        with lock_fechamentos:
+            assert fechamentos >= 2
         with lock_aplicacoes:
             aplicacoes.append(ponto)
             primeira = len(aplicacoes) == 1

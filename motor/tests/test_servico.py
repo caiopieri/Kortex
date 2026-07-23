@@ -3,6 +3,7 @@ import json
 import sqlite3
 import threading
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -331,6 +332,21 @@ def test_gate_so_fica_observavel_depois_que_writer_fecha(
         assert liberar_fechamento.wait(timeout=3)
         fechar_real(log)
 
+    interrupcao = SimpleNamespace(
+        id="decisao-handoff",
+        value={"portao": "plano", "pergunta": "Revisar?", "opcoes": "prosseguir"},
+    )
+
+    class GrafoControlado:
+        def invoke(self, entrada, _config):
+            if isinstance(entrada, dict):
+                return {"__interrupt__": [interrupcao]}
+            return {"resposta_final": "ok", "run_id": "handoff-writer", "resultados": []}
+
+        def get_state(self, _config):
+            return SimpleNamespace(interrupts=(interrupcao,), values={})
+
+    monkeypatch.setattr(servico_modulo, "construir_grafo", lambda *_a, **_kw: GrafoControlado())
     monkeypatch.setattr(LogEventos, "fechar", fechar_bloqueado)
     gerenciador = GerenciadorJobs(
         db_path=tmp_path / "motor.db",

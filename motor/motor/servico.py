@@ -439,6 +439,20 @@ class GerenciadorJobs:
                   claim: dict[str, Any] | None = None) -> None:
         log: LogEventos | None = None
         registro: dict[str, Any]
+
+        def finalizar_log() -> None:
+            nonlocal log
+            if log is None:
+                return
+            log_atual = log
+            try:
+                if not self._drenar_orcamento(job_id, log_atual):
+                    raise RuntimeError("relay monetario pendente")
+            finally:
+                if log_atual is not self.log:
+                    log_atual.fechar()
+                log = None
+
         try:
             log = self._log_do_job(job_id)
             grafo = construir_grafo(
@@ -459,12 +473,19 @@ class GerenciadorJobs:
             else:
                 ledger = LedgerCaixa(self.db_path)
                 try:
-                    resultado = ledger.consumir(
-                        claim,
-                        lambda payload: grafo.invoke(
+                    def aplicar(payload: dict[str, Any]) -> dict[str, Any]:
+                        resultado_claim = grafo.invoke(
                             Command(resume={payload["decisao_id"]: payload["decisao"]}),
                             self._config(job_id),
-                        ),
+                        )
+                        # O ACK libera o próximo interrupt do job; o writer precisa
+                        # ter sido entregue antes dessa transição durável.
+                        finalizar_log()
+                        return cast(dict[str, Any], resultado_claim)
+
+                    resultado = ledger.consumir(
+                        claim,
+                        aplicar,
                         fault=self._fault,
                         lease_s=self._outbox_lease_s,
                     )
@@ -478,16 +499,7 @@ class GerenciadorJobs:
             }
         if log is not None:
             try:
-                if not self._drenar_orcamento(job_id, log):
-                    raise RuntimeError("relay monetario pendente")
-            except Exception as ex:
-                registro = {
-                    "estado": "erro",
-                    "erro": {"tipo": type(ex).__name__, "mensagem": str(ex)},
-                }
-            try:
-                if log is not self.log:
-                    log.fechar()
+                finalizar_log()
             except Exception as ex:
                 registro = {
                     "estado": "erro",
