@@ -159,6 +159,9 @@ const BUILTINS = [
 const THEME_KEY = 'mf-theme-active';
 const MODE_KEY = 'mf-theme-mode';
 const CUSTOM_THEMES_KEY = 'mf-themes-custom';
+const TEMA_PADRAO = 'kortex';
+/* Marca que a migracao do default antigo ja rodou, para acontecer uma vez so. */
+const MIGRACAO_KEY = 'mf-theme-migrado-kortex';
 
 export function getCustomThemes() {
   try {
@@ -178,8 +181,21 @@ export function getAllThemes() {
   return [...BUILTINS, ...getCustomThemes()];
 }
 
+/* Le o tema ativo. Tem efeito colateral de proposito: quem ficou parado no
+   default antigo herda o novo uma unica vez. Depois disso a escolha do usuario
+   sempre vence, inclusive se ele voltar para metafabrica. */
 export function getStoredTheme() {
-  return localStorage.getItem(THEME_KEY) || 'metafabrica';
+  const salvo = localStorage.getItem(THEME_KEY);
+  if (!salvo) return TEMA_PADRAO;
+  if (salvo === 'metafabrica' && !localStorage.getItem(MIGRACAO_KEY)) {
+    try {
+      localStorage.setItem(MIGRACAO_KEY, '1');
+    } catch (e) {
+      return salvo;
+    }
+    return TEMA_PADRAO;
+  }
+  return salvo;
 }
 
 export function getStoredMode() {
