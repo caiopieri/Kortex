@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics="">
+<script src="mf-themes.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+  body{margin:0;background:#0B0C0E}
+  .mf-root{
+    --bg:#0B0C0E;--surface:#121417;--surface2:#17191D;--border:#26292E;--focus:#3E434A;
+    --text:#E8E6E1;--text2:#8A8F98;--text3:#5A5F66;--accent:#E8A33D;
+    --red:#E5484D;--amber:#E8A33D;--green:#30A46C;--blue:#3E63DD;--inv-bg:#E8E6E1;--inv-text:#0B0C0E;
+    min-height:100vh;background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif;font-size:14px;
+  }
+  .mf-root[data-theme="stark"]{
+    --bg:#F4F3F0;--surface:#FFFFFF;--surface2:#EDEBE6;--border:#D8D6D0;--focus:#A9A69E;
+    --text:#111213;--text2:#5D6167;--text3:#8B8E93;--accent:#B87514;
+    --red:#C62A30;--amber:#B87514;--green:#1E7F50;--blue:#2F4FC4;--inv-bg:#111213;--inv-text:#F4F3F0;
+  }
+  .eyebrow{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3)}
+  .num{font-family:'IBM Plex Mono',monospace;font-size:10.5px;font-weight:600;letter-spacing:1.4px;color:var(--text2);text-transform:uppercase}
+  .mono{font-family:'IBM Plex Mono',monospace}
+  .title{font-family:'Space Grotesk',system-ui;font-weight:600;letter-spacing:.2px}
+  .pill{display:inline-flex;align-items:center;gap:6px;font-family:'IBM Plex Mono',monospace;font-size:10.5px;font-weight:600;letter-spacing:.6px;padding:7px 11px;border:1px solid var(--border);border-radius:2px;color:var(--text2);background:transparent;cursor:pointer}
+  .pill:hover{border-color:var(--focus);color:var(--text)}
+  .pill.on{color:var(--text);border-color:var(--accent);background:var(--surface2)}
+  .pill.sm{padding:5px 9px;font-size:10px}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;font-family:Inter;font-weight:600;font-size:13px;padding:11px 16px;border-radius:2px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer}
+  .btn:hover{border-color:var(--focus)}
+  .btn-primary{background:var(--inv-bg);color:var(--inv-text);border-color:var(--inv-bg)}
+  .field{display:flex;flex-direction:column;gap:9px}
+  .inp{background:var(--bg);border:1px solid var(--border);color:var(--text);font-family:Inter;font-size:13px;padding:10px 12px;border-radius:2px;outline:none;width:100%;box-sizing:border-box}
+  .inp:focus{border-color:var(--focus)}
+  textarea.inp{resize:vertical;min-height:72px;line-height:1.5}
+  .row{display:flex;flex-wrap:wrap;gap:8px}
+  .rsum{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:9px 0;border-bottom:1px solid var(--border)}
+  .rsum .k{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:var(--text3);flex:none}
+  .rsum .v{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--text);text-align:right}
+  .bk{position:absolute;width:12px;height:12px;border:1.5px solid var(--focus);opacity:.7}
+  .bk.tl{top:-1px;left:-1px;border-right:0;border-bottom:0}.bk.tr{top:-1px;right:-1px;border-left:0;border-bottom:0}
+  .bk.bl{bottom:-1px;left:-1px;border-right:0;border-top:0}.bk.br{bottom:-1px;right:-1px;border-left:0;border-top:0}
+</style>
+</helmet>
+
+<div class="mf-root" data-theme="{{ theme }}" style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:28px;box-sizing:border-box;position:relative">
+
+  <!-- dimmed backdrop hint -->
+  <div style="position:absolute;inset:0;background:var(--bg);opacity:.6"></div>
+  <div style="position:absolute;top:0;left:0;right:0;height:52px;border-bottom:1px solid var(--border);background:var(--surface);opacity:.5;display:flex;align-items:center;padding:0 18px;gap:10px">
+    <div style="width:19px;height:19px;border:1.5px solid var(--text);border-radius:2px"></div><span class="title" style="font-size:13px;letter-spacing:1px">META-FÁBRICA</span>
+  </div>
+
+  <!-- MODAL -->
+  <div style="position:relative;width:880px;max-width:100%;max-height:calc(100vh - 56px);background:var(--surface);border:1px solid var(--focus);border-radius:2px;box-shadow:0 30px 90px rgba(0,0,0,.5);display:flex;flex-direction:column;overflow:hidden">
+    <span class="bk tl"></span><span class="bk tr"></span><span class="bk bl"></span><span class="bk br"></span>
+
+    <!-- header -->
+    <div style="display:flex;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid var(--border)">
+      <span class="eyebrow" style="color:var(--accent)">Nova missão</span>
+      <span class="mono" style="font-size:10px;color:var(--text3)">global · dispara um run</span>
+      <div style="flex:1"></div>
+      
+      <span class="mono" style="font-size:14px;color:var(--text3);cursor:pointer">✕</span>
+    </div>
+
+    <!-- ============ FORM STATE ============ -->
+    <sc-if value="{{ notDone }}" hint-placeholder-val="{{ true }}">
+      <div style="display:grid;grid-template-columns:1fr 320px;min-height:0;flex:1">
+
+        <!-- left: form -->
+        <div style="padding:20px;overflow:auto;display:flex;flex-direction:column;gap:20px;border-right:1px solid var(--border)">
+          <div class="field">
+            <span class="eyebrow">Descrição da missão</span>
+            <textarea class="inp" placeholder="ex.: spec de pipeline CSV→JSON com validação e testes"></textarea>
+          </div>
+
+          <div class="field">
+            <span class="eyebrow">ROTA/WORKKFLOW</span>
+            <div class="row">
+              <sc-for list="{{ rotaOpts }}" as="o" hint-placeholder-count="4"><span class="{{ o.cls }}" onClick="{{ o.onClick }}">{{ o.label }}</span></sc-for>
+            </div>
+          </div>
+
+          
+
+          <div class="field" style="position: relative">
+            <span class="eyebrow">Insumos</span>
+            <div class="row" style="gap:8px;align-items:stretch">
+              <input class="inp" style="flex:1" placeholder="caminho, arquivo ou spec — ex.: exemplos/missao-pesquisa.json">
+              <label class="btn" style="flex:none;cursor:pointer;white-space:nowrap;padding:9px 14px;font-size:12px">⬆ Anexar arquivo<input type="file" onChange="{{ onFile }}" style="display:none"></label>
+            </div>
+            <span class="mono" style="font-size:10px;color:{{ insumoColor }}">{{ insumoHint }}</span>
+          </div><div class="field">
+            <span class="eyebrow">Preset de catálogo</span>
+            <div class="row">
+              <sc-for list="{{ presetOpts }}" as="o" hint-placeholder-count="5"><span class="{{ o.cls }}" onClick="{{ o.onClick }}">{{ o.label }}</span></sc-for>
+            </div>
+            <span class="mono" style="font-size:10.5px;color:var(--text2)">{{ presetNota }}</span>
+          </div>
+
+          <div class="field">
+            <span class="eyebrow">Opções</span>
+            <div class="row" style="gap:10px">
+              <sc-for list="{{ toggles }}" as="t" hint-placeholder-count="4"><span class="{{ t.cls }}" onClick="{{ t.onClick }}">{{ t.label }}</span></sc-for>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
+              <span class="mono" style="font-size:10.5px;color:var(--text3)">teto de reconciliação</span>
+              <div class="row">
+                <sc-for list="{{ tetoOpts }}" as="o" hint-placeholder-count="5"><span class="{{ o.cls }}" onClick="{{ o.onClick }}">{{ o.label }}</span></sc-for>
+              </div>
+            </div>
+          </div>
+
+          <!-- orquestrador door -->
+          <div style="border:1px dashed var(--border);border-radius:2px;padding:14px;display:flex;flex-direction:column;gap:10px">
+            <span class="eyebrow">Ou peça ao Orquestrador</span>
+            <div style="display:flex;align-items:center;gap:8px;padding:9px 11px;border:1px solid var(--border);border-radius:2px;background:var(--bg)">
+              <span class="mono" style="font-size:11.5px;color:var(--text3);flex:1">"Roda uma pesquisa de canais e me traz um digest…"</span><span style="color:var(--text3)">↑</span>
+            </div>
+            <span class="mono" style="font-size:10px;color:var(--text3);line-height:1.5">Ele preenche este mesmo formulário e devolve o mesmo resumo pra você confirmar — uma só mecânica de disparo, duas portas.</span>
+          </div>
+        </div>
+
+        <!-- right: resumo -->
+        <div style="padding:20px;display:flex;flex-direction:column;background:var(--surface2)">
+          <span class="num" style="color:var(--accent);margin-bottom:14px">O que vai acontecer</span>
+          <div style="flex:1">
+            <div class="rsum"><span class="k">rota</span><span class="v">{{ r.rota }}</span></div>
+            <div class="rsum"><span class="k">preset</span><span class="v">{{ r.preset }}</span></div>
+            <div style="padding:10px 0;border-bottom:1px solid var(--border)">
+              <span class="eyebrow" style="font-size:9px">mapeamento papel → modelo</span>
+              <div style="margin-top:7px;display:flex;flex-direction:column;gap:4px">
+                <sc-for list="{{ r.map }}" as="m" hint-placeholder-count="4"><div style="display:flex;justify-content:space-between;gap:10px"><span class="mono" style="font-size:10px;color:var(--text3)">{{ m.k }}</span><span class="mono" style="font-size:10px;color:var(--text2);text-align:right">{{ m.v }}</span></div></sc-for>
+              </div>
+            </div>
+            <div class="rsum"><span class="k">modo</span><span class="v">{{ r.modo }}</span></div>
+            <div class="rsum"><span class="k">escalada</span><span class="v">{{ r.escalada }}</span></div>
+            <div class="rsum"><span class="k">reconciliação</span><span class="v">{{ r.recon }}</span></div>
+            <div class="rsum"><span class="k">gate cobertura</span><span class="v">{{ r.gate }}</span></div>
+            <div class="rsum"><span class="k">nós estimados</span><span class="v">{{ r.nodes }}</span></div>
+          </div>
+          <div style="margin:16px 0 12px;padding:12px;border:1px solid var(--border);border-radius:2px;background:var(--surface)">
+            <span class="eyebrow" style="font-size:9px">custo estimado · run</span>
+            <div class="mono" style="font-size:18px;font-weight:600;margin-top:5px;color:var(--text)">{{ r.custo }}</div>
+            <span class="mono" style="font-size:9.5px;color:var(--text3)">escolhas custam tempo e dinheiro</span>
+          </div>
+          <div class="btn btn-primary" onClick="{{ confirmar }}">Confirmar disparo →</div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ============ LAUNCHED STATE ============ -->
+    <sc-if value="{{ done }}" hint-placeholder-val="{{ false }}">
+      <div style="padding:56px 40px;display:flex;flex-direction:column;align-items:center;gap:16px;text-align:center">
+        <div style="width:40px;height:40px;border:1.5px solid var(--blue);border-radius:50%;display:flex;align-items:center;justify-content:center;position:relative">
+          <span style="width:11px;height:11px;border-radius:50%;background:var(--blue)"></span>
+        </div>
+        <div class="title" style="font-size:20px">Missão disparada</div>
+        <div class="mono" style="font-size:12px;color:var(--text2)">{{ runId }} · rota {{ r.rota }} · {{ r.preset }}</div>
+        <div class="mono" style="font-size:11.5px;color:var(--text3);max-width:440px;line-height:1.6">O motor emitiu <b style="color:var(--text2)">spec.recebida</b>. Acompanhe os nós acendendo no Grafo 2D; você será chamado na Caixa do Fundador se um gate pedir decisão.</div>
+        <div class="row" style="justify-content:center;margin-top:6px">
+          <span class="btn btn-primary">Abrir Grafo 2D →</span>
+          <span class="btn" onClick="{{ reset }}">Nova missão</span>
+        </div>
+      </div>
+    </sc-if>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;100%&quot;,&quot;height&quot;:&quot;100%&quot;}}">
+class Component extends DCLogic {
+  state = {
+    theme: 'paperclip', descricao: '', rota: 'pesquisa', preset: 'free-escalada',
+    modo: 'supervisionado', escalada: true, reconciliacao: true, teto: 3, gateCobertura: true,
+    done: false, runId: '', arquivo: '',
+  };
+
+  presets() {
+    return {
+      'free-escalada': { map: [['planner', 'kimi-k2.6'], ['exec simples', 'llama-3.3-70b'], ['exec media', 'kimi-k2.6'], ['exec complexa', 'codex/gpt-5.4'], ['verifier', 'codex/gpt-5.4']], custo: 'US$ 0.20 – 0.60', nota: 'Free primeiro; sobe de tier só quando reprova. O padrão barato.' },
+      'codex': { map: [['todos os papéis', 'codex/gpt-5.4'], ['verifier', 'codex/gpt-5.4']], custo: 'US$ 1.20 – 2.40', nota: 'Confiável e estrito em todos os papéis; custo médio.' },
+      'claude': { map: [['executores', 'codex/gpt-5.4'], ['verifier/topo', 'claude']], custo: 'US$ 2.50 – 4.00', nota: 'Topo no verificador; reserva o limite do Claude para o que importa.' },
+      'construcao': { map: [['planner', 'kimi-k2.6'], ['redator', 'deepseek-v4'], ['verifier', 'codex/gpt-5.4']], custo: 'US$ 0.40 – 1.00', nota: 'Rota de construção/documentos.' },
+      'pesquisa-sintese': { map: [['pesquisador', 'llama-3.3 → kimi'], ['evaluator', 'codex/gpt-5.4'], ['synthesizer', 'codex/gpt-5.4']], custo: 'US$ 0.30 – 0.80', nota: 'Fan-out de pesquisa com síntese final.' },
+    };
+  }
+  rotas() {
+    return {
+      pesquisa: { label: 'pesquisa', n: 7 },
+      forja: { label: 'forja · software', n: 6 },
+      construcao: { label: 'construção', n: 4 },
+      hardware: { label: 'hardware', n: 4 },
+    };
+  }
+
+  seg(list, cur, key) {
+    return list.map(o => ({ label: o.label, cls: 'pill' + (cur === o.v ? ' on' : ''), onClick: () => this.setState({ [key]: o.v }) }));
+  }
+
+  renderVals() {
+    const s = this.state;
+    const P = this.presets()[s.preset];
+    const R = this.rotas()[s.rota];
+    const resumo = {
+      rota: R.label, preset: s.preset, custo: P.custo,
+      map: P.map.map(m => ({ k: m[0], v: m[1] })),
+      modo: s.modo === 'auto' ? 'auto (--auto, sem parar)' : 'supervisionado',
+      escalada: s.escalada ? 'ligada · sobe tier ao reprovar' : 'desligada',
+      recon: s.reconciliacao ? ('ligada · teto ' + s.teto + ' rodadas') : 'desligada',
+      gate: s.gateCobertura ? 'humano' : 'sem gate',
+      nodes: '~' + R.n,
+    };
+    return {
+      theme: s.theme, themeLabel: s.theme === 'paperclip' ? 'ESCURO' : 'CLARO',
+      descricao: s.descricao, presetNota: P.nota, r: resumo,
+      insumoHint: s.arquivo ? ('arquivo anexado · ' + s.arquivo) : 'arraste um arquivo ou cole um caminho · opcional',
+      insumoColor: s.arquivo ? 'var(--green)' : 'var(--text3)',
+      onFile: (e) => { const f = e && e.target && e.target.files && e.target.files[0]; this.setState({ arquivo: f ? f.name : '' }); },
+      done: s.done, notDone: !s.done, runId: s.runId,
+      rotaOpts: this.seg([{ v: 'forja', label: 'forja' }, { v: 'construcao', label: 'construção' }, { v: 'pesquisa', label: 'pesquisa' }, { v: 'hardware', label: 'hardware' }], s.rota, 'rota'),
+      presetOpts: this.seg([{ v: 'free-escalada', label: 'free-escalada' }, { v: 'codex', label: 'codex' }, { v: 'claude', label: 'claude' }, { v: 'construcao', label: 'construção' }, { v: 'pesquisa-sintese', label: 'pesquisa-síntese' }], s.preset, 'preset'),
+      tetoOpts: this.seg([{ v: 1, label: '1' }, { v: 2, label: '2' }, { v: 3, label: '3' }, { v: 4, label: '4' }, { v: 5, label: '5' }], s.teto, 'teto'),
+      toggles: [
+        { label: s.modo === 'auto' ? '● auto' : '○ supervisionado', cls: 'pill' + (s.modo === 'auto' ? ' on' : ''), onClick: () => this.setState({ modo: s.modo === 'auto' ? 'supervisionado' : 'auto' }) },
+        { label: (s.escalada ? '● ' : '○ ') + 'escalada', cls: 'pill' + (s.escalada ? ' on' : ''), onClick: () => this.setState({ escalada: !s.escalada }) },
+        { label: (s.reconciliacao ? '● ' : '○ ') + 'reconciliação', cls: 'pill' + (s.reconciliacao ? ' on' : ''), onClick: () => this.setState({ reconciliacao: !s.reconciliacao }) },
+        { label: (s.gateCobertura ? '● ' : '○ ') + 'gate cobertura', cls: 'pill' + (s.gateCobertura ? ' on' : ''), onClick: () => this.setState({ gateCobertura: !s.gateCobertura }) },
+      ],
+      confirmar: () => this.setState({ done: true, runId: 'RUN-2026-07-02-' + String(20 + Math.floor(Math.random() * 79)).padStart(3, '0') }),
+      reset: () => this.setState({ done: false }),
+      toggleTheme: () => this.setState({ theme: s.theme === 'paperclip' ? 'stark' : 'paperclip' }),
+    };
+  }
+}
+</script>
+</body>
+</html>

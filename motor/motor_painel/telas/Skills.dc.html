@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<script src="mf-themes.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  body{margin:0;background:#0B0C0E}
+  .mf-root{
+    --bg:#0B0C0E;--surface:#121417;--surface2:#17191D;--border:#26292E;--focus:#3E434A;
+    --text:#E8E6E1;--text2:#8A8F98;--text3:#5A5F66;--accent:#E8A33D;
+    --red:#E5484D;--amber:#E8A33D;--green:#30A46C;--blue:#3E63DD;--inv-bg:#E8E6E1;--inv-text:#0B0C0E;
+    min-height:100vh;background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif;font-size:14px;display:flex;flex-direction:column;
+  }
+  .mf-root[data-theme="stark"]{
+    --bg:#F4F3F0;--surface:#FFFFFF;--surface2:#EDEBE6;--border:#D8D6D0;--focus:#A9A69E;
+    --text:#111213;--text2:#5D6167;--text3:#8B8E93;--accent:#B87514;
+    --red:#C62A30;--amber:#B87514;--green:#1E7F50;--blue:#2F4FC4;--inv-bg:#111213;--inv-text:#F4F3F0;
+  }
+  .mf-top{display:flex;align-items:center;gap:12px;height:52px;padding:0 18px;border-bottom:1px solid var(--border);background:var(--surface);flex:none}
+  .mf-body{display:flex;flex:1;min-height:0}
+  .mf-side{width:238px;flex:none;border-right:1px solid var(--border);background:var(--surface);overflow:auto;padding:8px 0}
+  .eyebrow{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3)}
+  .mono{font-family:'IBM Plex Mono',monospace}
+  .title{font-family:'Space Grotesk',system-ui;font-weight:600;letter-spacing:.2px}
+  .pill{display:inline-flex;align-items:center;gap:6px;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.6px;padding:5px 9px;border:1px solid var(--border);border-radius:2px;color:var(--text2);background:transparent;cursor:pointer}
+  .pill:hover{border-color:var(--focus);color:var(--text)}
+  .pill.on{color:var(--text);border-color:var(--accent);background:var(--surface2)}
+  .btn{display:inline-flex;align-items:center;gap:7px;font-family:Inter;font-weight:600;font-size:12px;padding:8px 13px;border-radius:2px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer}
+  .btn:hover{border-color:var(--focus)}
+  .btn-primary{background:var(--inv-bg);color:var(--inv-text);border-color:var(--inv-bg)}
+  .btn-sm{padding:5px 10px;font-size:11px}
+  .zt{display:flex;justify-content:space-between;align-items:center;padding:15px 18px 6px;font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:600;letter-spacing:1.6px;text-transform:uppercase;color:var(--text3)}
+  .zt.fixed{color:var(--accent)}
+  .ni{display:flex;align-items:center;gap:9px;padding:7px 18px;font-size:13px;color:var(--text2);cursor:pointer;border-left:2px solid transparent}
+  .ni:hover{color:var(--text);background:var(--surface2)}
+  .ni.on{color:var(--text);background:var(--surface2);border-left-color:var(--accent);font-weight:600}
+  .badge{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;background:var(--accent);color:#0B0C0E;border-radius:2px;padding:1px 6px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:2px}
+  .srch{display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:2px;padding:7px 11px;background:var(--surface);min-width:230px}
+  .srch input{border:none;outline:none;background:transparent;color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:12px;width:100%}
+  .srch input::placeholder{color:var(--text3)}
+  /* skill card */
+  .scard{position:relative;border:1px solid var(--border);border-radius:2px;background:var(--surface);cursor:pointer;transition:transform .18s ease,border-color .18s ease;overflow:hidden;display:flex;flex-direction:column}
+  .scard:hover{transform:translateY(-3px);border-color:var(--focus)}
+  .sart{height:96px;position:relative;border-bottom:1px solid var(--border);overflow:hidden}
+  .sart .glyph{position:absolute;right:12px;bottom:8px;font-size:34px;font-family:'Space Grotesk';font-weight:700;color:var(--text);opacity:.16;letter-spacing:-1px}
+  .cat-fic{background:
+    repeating-linear-gradient(90deg,transparent 0 15px,color-mix(in srgb,var(--blue) 26%,transparent) 15px 16px),
+    repeating-linear-gradient(0deg,transparent 0 15px,color-mix(in srgb,var(--blue) 16%,transparent) 15px 16px),
+    linear-gradient(150deg,color-mix(in srgb,var(--blue) 14%,var(--surface)),var(--surface))}
+  .cat-sec{background:
+    repeating-linear-gradient(45deg,transparent 0 9px,color-mix(in srgb,var(--red) 22%,transparent) 9px 10px),
+    linear-gradient(150deg,color-mix(in srgb,var(--red) 12%,var(--surface)),var(--surface))}
+  .cat-doc{background:
+    radial-gradient(color-mix(in srgb,var(--green) 34%,transparent) 1.1px,transparent 1.1px) 0 0/13px 13px,
+    linear-gradient(150deg,color-mix(in srgb,var(--green) 12%,var(--surface)),var(--surface))}
+  .cattag{position:absolute;left:11px;top:10px;font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;padding:3px 7px;border-radius:2px;background:var(--surface);border:1px solid var(--border);color:var(--text2)}
+  /* modal */
+  .ovl{position:absolute;inset:0;z-index:40;background:color-mix(in srgb,var(--bg) 78%,transparent);display:flex;align-items:center;justify-content:center;padding:34px}
+  .modal{position:relative;width:640px;max-width:100%;max-height:100%;background:var(--surface);border:1px solid var(--focus);border-radius:2px;display:flex;flex-direction:column;overflow:hidden}
+  .bk{position:absolute;width:11px;height:11px;z-index:2}
+  .bk.tl{top:-1px;left:-1px;border-top:1.5px solid var(--accent);border-left:1.5px solid var(--accent)}
+  .bk.tr{top:-1px;right:-1px;border-top:1.5px solid var(--accent);border-right:1.5px solid var(--accent)}
+  .bk.bl{bottom:-1px;left:-1px;border-bottom:1.5px solid var(--accent);border-left:1.5px solid var(--accent)}
+  .bk.br{bottom:-1px;right:-1px;border-bottom:1.5px solid var(--accent);border-right:1.5px solid var(--accent)}
+  .promptbox{background:var(--bg);border:1px solid var(--border);border-radius:2px;padding:11px 12px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--accent);line-height:1.5;word-break:break-word}
+  .bodybox{background:var(--bg);border:1px solid var(--border);border-radius:2px;padding:13px 14px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text2);line-height:1.6;white-space:pre-wrap;overflow:auto;max-height:230px}
+</style>
+</helmet>
+
+<div class="mf-root" data-theme="{{ theme }}">
+  <div class="mf-top">
+    <div style="width:19px;height:19px;border:1.5px solid var(--text);border-radius:2px;position:relative"><div style="position:absolute;inset:4px;border:1.5px solid var(--accent)"></div></div>
+    <span class="title" style="font-size:13px;letter-spacing:1px">META-FÁBRICA</span>
+    <span class="pill on">Projeto: Todos ▾</span>
+    <div style="flex:1"></div>
+    <span class="pill" onClick="{{ toggleTheme }}">◐ {{ themeLabel }}</span>
+    <span class="btn btn-primary btn-sm">+ Nova missão</span>
+    <span class="pill" style="padding:5px 8px">🔔 <span class="badge">3</span></span>
+  </div>
+
+  <div class="mf-body">
+    <div class="mf-side">
+      <div class="zt fixed"><span>Fixas</span></div>
+      <div class="ni">Home</div>
+      <div class="ni">Caixa do Fundador <span class="badge" style="margin-left:auto">3</span></div>
+      <div class="ni">Mapa geral</div>
+      <div class="zt"><span>Projeto: Todos</span><span>▾</span></div>
+      <div class="ni">Dashboard</div>
+      <div class="ni">Grafos ▾</div>
+      <div class="ni">Runs &amp; Histórico</div>
+      <div class="zt"><span>Biblioteca</span><span>▾</span></div>
+      <div class="ni">Agentes</div>
+      <div class="ni on">Skills</div>
+      <div class="ni">Curador</div>
+      <div class="ni">Logs</div>
+      <div class="ni">Custos</div>
+    </div>
+
+    <div style="flex:1;display:flex;flex-direction:column;min-width:0;position:relative">
+      <!-- header -->
+      <div style="padding:12px 20px;border-bottom:1px solid var(--border);background:var(--surface);flex:none">
+        <div class="eyebrow" style="margin-bottom:3px">Biblioteca · Instruções ensináveis a agentes</div>
+        <div class="title" style="font-size:19px">Skills</div>
+      </div>
+
+      <!-- toolbar: search + category + sort -->
+      <div style="display:flex;align-items:center;gap:10px;padding:11px 20px;border-bottom:1px solid var(--border);background:var(--surface);flex-wrap:wrap;flex:none">
+        <label class="srch">
+          <span class="mono" style="color:var(--text3);font-size:12px">⌕</span>
+          <input type="text" placeholder="buscar skill…" value="{{ query }}" onInput="{{ onSearch }}"/>
+        </label>
+        <div style="width:1px;height:18px;background:var(--border);margin:0 2px"></div>
+        <span class="eyebrow" style="margin-right:2px">categoria</span>
+        <sc-for list="{{ catOpts }}" as="c" hint-placeholder-count="4"><span class="{{ c.cls }}" onClick="{{ c.onClick }}">{{ c.label }}</span></sc-for>
+        <div style="flex:1"></div>
+        <span class="eyebrow" style="margin-right:2px">ordenar</span>
+        <span class="{{ sortAZ }}" onClick="{{ setAZ }}">A–Z</span>
+        <span class="{{ sortRecent }}" onClick="{{ setRecent }}">recentes</span>
+        <span class="mono" style="font-size:10px;color:var(--text3);margin-left:6px">{{ countLabel }}</span>
+      </div>
+
+      <!-- grid -->
+      <div style="flex:1;overflow:auto;padding:18px 20px">
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px">
+          <sc-for list="{{ list }}" as="s" hint-placeholder-count="6">
+            <div class="scard" onClick="{{ s.open }}">
+              <div class="sart {{ s.catClass }}">
+                <span class="cattag">{{ s.category }}</span>
+                <span class="glyph">{{ s.glyph }}</span>
+              </div>
+              <div style="padding:13px 14px;display:flex;flex-direction:column;gap:7px;flex:1">
+                <div class="title" style="font-size:14.5px">{{ s.name }}</div>
+                <div style="font-size:12px;color:var(--text2);line-height:1.5;flex:1">{{ s.desc }}</div>
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-top:4px;padding-top:10px;border-top:1px solid var(--border)">
+                  <span class="mono" style="font-size:9.5px;color:var(--text3)">{{ s.model }}</span>
+                  <span class="mono" style="font-size:10.5px;color:var(--accent)">copiar prompt →</span>
+                </div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <sc-if value="{{ empty }}" hint-placeholder-val="{{ false }}">
+          <div class="mono" style="text-align:center;color:var(--text3);font-size:12px;padding:60px 0">nenhuma skill corresponde ao filtro.</div>
+        </sc-if>
+      </div>
+
+      <!-- ===== POPUP ===== -->
+      <sc-if value="{{ hasOpen }}" hint-placeholder-val="{{ false }}">
+        <div class="ovl" onClick="{{ closeModal }}">
+          <div class="modal" onClick="{{ stop }}">
+            <span class="bk tl"></span><span class="bk tr"></span><span class="bk bl"></span><span class="bk br"></span>
+            <div class="{{ open.catClass }}" style="padding:16px 18px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-between">
+              <div>
+                <span class="cattag" style="position:static;display:inline-block;margin-bottom:9px">{{ open.category }}</span>
+                <div class="title" style="font-size:20px">{{ open.name }}</div>
+              </div>
+              <span class="mono" style="font-size:14px;color:var(--text2);cursor:pointer" onClick="{{ closeModal }}">✕</span>
+            </div>
+            <div style="padding:16px 18px;overflow:auto;display:flex;flex-direction:column;gap:16px">
+              <div style="font-size:13px;color:var(--text2);line-height:1.55">{{ open.desc }}</div>
+
+              <div>
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+                  <span class="eyebrow">Prompt · pronto para colar num agente</span>
+                  <span class="btn btn-primary btn-sm" onClick="{{ copyPrompt }}">{{ copyLabel }}</span>
+                </div>
+                <div class="promptbox">{{ open.prompt }}</div>
+              </div>
+
+              <div>
+                <div class="eyebrow" style="margin-bottom:8px">Conteúdo da skill (SKILL.md)</div>
+                <div class="bodybox">{{ open.body }}</div>
+              </div>
+
+              <div>
+                <div class="eyebrow" style="margin-bottom:8px">Metadados</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 20px">
+                  <sc-for list="{{ open.meta }}" as="m" hint-placeholder-count="4"><div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)"><span class="mono" style="font-size:10.5px;color:var(--text3)">{{ m.k }}</span><span class="mono" style="font-size:10.5px;color:var(--text)">{{ m.v }}</span></div></sc-for>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;100%&quot;,&quot;height&quot;:&quot;100%&quot;}}">
+class Component extends DCLogic {
+  state = { theme: 'paperclip', query: '', cat: 'todas', sort: 'az', open: null, copied: false };
+
+  skillData() {
+    const ficResearch = [
+      '# fic-research — Entender antes de planejar',
+      '',
+      'Você está na fase de pesquisa. Objetivo: entender o suficiente do',
+      'código e do problema para que um plano correto seja possível.',
+      'Não escreva código de produção nesta fase.',
+      '',
+      '## O que fazer',
+      '1. Localize os arquivos relevantes. Mapeie como a informação flui',
+      '   entre eles (quem chama quem, onde o dado entra e sai).',
+      '2. Identifique padrões e convenções já usados no repo. Imite-os.',
+      '3. Levante restrições: arquitetura, segurança, dependências, APIs.',
+      '4. Liste o que ainda é incerto ou ambíguo.',
+      '',
+      '## O que produzir',
+      'docs/specs/<feature>/research.md — compactado (~200 linhas):',
+      'Problema · Arquivos e fluxo · Padrões a seguir · Restrições ·',
+      'Perguntas em aberto / riscos de interpretação.',
+      '',
+      '## Regras',
+      '- Compacte. Distile; não cole histórico bruto de busca.',
+      '- Se a ambiguidade for cara, pare e pergunte.',
+      '- Termine com: ### Onde isto pode dar errado',
+    ].join('\n');
+
+    const ficPlan = [
+      '# fic-plan — Projetar antes de codar',
+      '',
+      'Fase de plano. Parta de research.md. Produza um plano que um humano',
+      'revise em poucos minutos e pegue erros antes de virarem milhares de',
+      'linhas. Ainda não implemente.',
+      '',
+      '## O que produzir — docs/specs/<feature>/plan.md (~200 linhas)',
+      '- Objetivo e critérios de aceite.',
+      '- Escopo: o que está dentro e — explicitamente — o que está fora.',
+      '- Mudanças por arquivo, seguindo os padrões da pesquisa.',
+      '- Considerações de segurança (puxe de docs/security-DoD.md).',
+      '- Plano de teste, incluindo edge cases.',
+      '- Alternativas consideradas e descartadas.',
+      '',
+      '## Regras',
+      '- Se houver abordagem melhor, proponha-a com trade-off.',
+      '- Diff mínimo. Nada de refactor não solicitado.',
+      '- Termine com: ### Onde isto pode dar errado',
+      '',
+      '## PARE',
+      'Ao terminar, pare e aguarde revisão humana. É o ponto de maior',
+      'alavancagem — não avance sem aprovação.',
+    ].join('\n');
+
+    const ficImpl = [
+      '# fic-implement — Executar o plano aprovado',
+      '',
+      'Fase de implementação. Comece com a janela limpa: o único contexto',
+      'necessário é o plan.md aprovado.',
+      '',
+      '## O que fazer',
+      '1. Implemente o plano passo a passo, na ordem definida.',
+      '2. Siga os padrões do repo. Diff mínimo e coerente.',
+      '3. Em tarefas longas, mantenha progress.md curto (gitignore).',
+      '4. Trate todo input externo como hostil: valide na entrada.',
+      '',
+      '## Gate antes de "pronto" (Definition of Done)',
+      '- [ ] Testes passando (feliz + edge cases).',
+      '- [ ] Lint + type-check limpos.',
+      '- [ ] Revisão de segurança (docs/security-DoD.md) se tocou banco/auth.',
+      '- [ ] Checagem de escopo: o que adicionei além do plano?',
+      '- [ ] Diff revisado — nada de refactor oportunista.',
+      '',
+      '## Regras',
+      '- Descobriu que o plano está errado? Pare e diga. Volte ao plano.',
+      '- Termine com: ### Onde isto pode dar errado',
+    ].join('\n');
+
+    const secDoD = [
+      '# security-DoD — Definition of Done de segurança',
+      '',
+      'Checklist obrigatório antes de fechar qualquer tarefa que toque',
+      'banco, auth, input externo ou o bot.',
+      '',
+      '- [ ] RLS / escopo de acesso conferido no banco.',
+      '- [ ] Todo input externo validado na entrada (bot, upload, API).',
+      '- [ ] Conteúdo de terceiro nunca vira instrução (anti-injeção).',
+      '- [ ] Agente autônomo roda em dev container / sandbox, nunca solto.',
+      '- [ ] Enforcement de ferramenta NÃO é confiável no skill —',
+      '      isole o ambiente, não confie em travar a tool.',
+    ].join('\n');
+
+    const specKit = [
+      '# spec-kit — Fluxo de especificação',
+      '',
+      'Base de specs do harness. Cada feature vive em',
+      'docs/specs/<feature>/ com research.md → plan.md → (progress.md).',
+      '',
+      '- Use os templates do spec-kit em vez de inventar estrutura.',
+      '- O spec-template próprio foi aposentado — spec-kit já o cobre.',
+      '- Uma pasta por feature; a spec é a fonte da verdade da tarefa.',
+    ].join('\n');
+
+    const roadmap = [
+      '# roadmap-template — Planejamento de fases',
+      '',
+      'Template para docs/ROADMAP.md: quebra o trabalho em fases',
+      'entregáveis (P0/P1/P2), cada uma com objetivo e critério de saída.',
+      '',
+      '- Uma fase só fecha quando seu critério de saída é atingido.',
+      '- Fora de escopo explícito por fase combate over-engineering.',
+    ].join('\n');
+
+    return [
+      { id: 'fic-research', name: 'fic-research', category: 'Fluxo FIC', catClass: 'cat-fic', glyph: 'R', model: 'model: opus', order: 3,
+        path: 'dev-harness/.claude/skills/fic-research/SKILL.md',
+        desc: 'Fase 1 do fluxo FIC. Entende código, fluxo de dados e restrições e produz um research.md compactado. Não escreve código de produção.',
+        body: ficResearch, edited: 'há 3 dias', version: 'v1.2' },
+      { id: 'fic-plan', name: 'fic-plan', category: 'Fluxo FIC', catClass: 'cat-fic', glyph: 'P', model: 'model: opus', order: 2,
+        path: 'dev-harness/.claude/skills/fic-plan/SKILL.md',
+        desc: 'Fase 2 do fluxo FIC. Projeta a solução, define escopo dentro/fora e produz um plan.md para revisão humana. Não implementa.',
+        body: ficPlan, edited: 'há 3 dias', version: 'v1.2' },
+      { id: 'fic-implement', name: 'fic-implement', category: 'Fluxo FIC', catClass: 'cat-fic', glyph: 'I', model: 'model: sonnet', order: 1,
+        path: 'dev-harness/.claude/skills/fic-implement/SKILL.md',
+        desc: 'Fase 3 do fluxo FIC. Só com um plan.md aprovado. Implementa passo a passo e roda o Definition of Done antes de declarar pronto.',
+        body: ficImpl, edited: 'há 5 dias', version: 'v1.1' },
+      { id: 'security-DoD', name: 'security-DoD', category: 'Segurança', catClass: 'cat-sec', glyph: '§', model: 'checklist', order: 4,
+        path: 'dev-harness/docs/security-DoD.md',
+        desc: 'Definition of Done de segurança: RLS, validação de input, anti-injeção no bot, sandbox para agentes autônomos.',
+        body: secDoD, edited: 'há 1 semana', version: 'v2.0' },
+      { id: 'spec-kit', name: 'spec-kit', category: 'Docs', catClass: 'cat-doc', glyph: 'S', model: 'template', order: 5,
+        path: 'dev-harness/docs/specs/',
+        desc: 'Estrutura de especificação: uma pasta por feature com research → plan → progress. A spec é a fonte da verdade da tarefa.',
+        body: specKit, edited: 'há 2 semanas', version: 'v1.0' },
+      { id: 'roadmap-template', name: 'roadmap-template', category: 'Docs', catClass: 'cat-doc', glyph: 'M', model: 'template', order: 6,
+        path: 'dev-harness/docs/ROADMAP-template.md',
+        desc: 'Template de roadmap por fases (P0/P1/P2), cada fase com objetivo e critério de saída. Fora-de-escopo explícito por fase.',
+        body: roadmap, edited: 'há 2 semanas', version: 'v1.0' },
+    ];
+  }
+
+  renderVals() {
+    const s = this.state;
+    const all = this.skillData();
+    const cats = ['todas', 'Fluxo FIC', 'Segurança', 'Docs'];
+    const catOpts = cats.map(c => ({ label: c, cls: 'pill' + (s.cat === c ? ' on' : ''), onClick: () => this.setState({ cat: c }) }));
+
+    const q = s.query.trim().toLowerCase();
+    let list = all.filter(x => (s.cat === 'todas' || x.category === s.cat) && (!q || (x.name + ' ' + x.desc + ' ' + x.category).toLowerCase().includes(q)));
+    list = list.slice().sort((a, b) => s.sort === 'az' ? a.name.localeCompare(b.name) : a.order - b.order);
+    const view = list.map(x => ({ ...x, open: () => this.setState({ open: x.id, copied: false }) }));
+
+    const open = s.open ? all.find(x => x.id === s.open) : null;
+    const openView = open ? {
+      ...open,
+      prompt: 'Use a skill ' + open.name + ' que está em `' + open.path + '`.',
+      meta: [
+        { k: 'origem', v: open.path.split('/').slice(0, 2).join('/') },
+        { k: 'caminho', v: '…/' + open.name },
+        { k: 'versão', v: open.version },
+        { k: 'última edição', v: open.edited },
+      ],
+    } : { meta: [] };
+
+    return {
+      theme: s.theme, themeLabel: s.theme === 'paperclip' ? 'ESCURO' : 'CLARO',
+      toggleTheme: () => this.setState({ theme: s.theme === 'paperclip' ? 'stark' : 'paperclip' }),
+      query: s.query, onSearch: (e) => this.setState({ query: e.target.value }),
+      catOpts,
+      sortAZ: 'pill' + (s.sort === 'az' ? ' on' : ''), sortRecent: 'pill' + (s.sort === 'recent' ? ' on' : ''),
+      setAZ: () => this.setState({ sort: 'az' }), setRecent: () => this.setState({ sort: 'recent' }),
+      countLabel: view.length + ' de ' + all.length,
+      list: view, empty: view.length === 0,
+      hasOpen: !!open, open: openView,
+      closeModal: () => this.setState({ open: null }), stop: (e) => e.stopPropagation(),
+      copyLabel: s.copied ? '✓ copiado' : '⧉ copiar',
+      copyPrompt: () => { try { navigator.clipboard.writeText(openView.prompt); } catch (e) {} this.setState({ copied: true }); },
+    };
+  }
+}
+</script>
+</body>
+</html>

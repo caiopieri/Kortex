@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<script src="mf-themes.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  body{margin:0;background:#0B0C0E}
+  .mf-root{
+    --bg:#0B0C0E;--surface:#121417;--surface2:#17191D;--border:#26292E;--focus:#3E434A;
+    --text:#E8E6E1;--text2:#8A8F98;--text3:#5A5F66;--accent:#E8A33D;
+    --red:#E5484D;--amber:#E8A33D;--green:#30A46C;--blue:#3E63DD;--inv-bg:#E8E6E1;--inv-text:#0B0C0E;
+    --grap1:#20242A;--grap2:#171A1F;--rim:#3A4048;
+    min-height:100vh;background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif;font-size:14px;display:flex;flex-direction:column;
+  }
+  .mf-root[data-theme="stark"]{
+    --bg:#F4F3F0;--surface:#FFFFFF;--surface2:#EDEBE6;--border:#D8D6D0;--focus:#A9A69E;
+    --text:#111213;--text2:#5D6167;--text3:#8B8E93;--accent:#B87514;
+    --red:#C62A30;--amber:#B87514;--green:#1E7F50;--blue:#2F4FC4;--inv-bg:#111213;--inv-text:#F4F3F0;
+    --grap1:#3A3E44;--grap2:#2A2E34;--rim:#6A6F76;
+  }
+  .mf-top{display:flex;align-items:center;gap:12px;height:52px;padding:0 18px;border-bottom:1px solid var(--border);background:var(--surface);flex:none}
+  .mf-body{display:flex;flex:1;min-height:0}
+  .mf-side{width:238px;flex:none;border-right:1px solid var(--border);background:var(--surface);overflow:auto;padding:8px 0}
+  .eyebrow{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3)}
+  .num{font-family:'IBM Plex Mono',monospace;font-weight:600;letter-spacing:.4px}
+  .mono{font-family:'IBM Plex Mono',monospace}
+  .title{font-family:'Space Grotesk',system-ui;font-weight:600;letter-spacing:.2px}
+  .pill{display:inline-flex;align-items:center;gap:6px;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.6px;padding:5px 9px;border:1px solid var(--border);border-radius:2px;color:var(--text2);background:transparent;cursor:pointer}
+  .pill:hover{border-color:var(--focus);color:var(--text)}
+  .pill.on{color:var(--text);border-color:var(--accent);background:var(--surface2)}
+  .btn{display:inline-flex;align-items:center;gap:7px;font-family:Inter;font-weight:600;font-size:12px;padding:8px 13px;border-radius:2px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer}
+  .btn:hover{border-color:var(--focus)}
+  .btn-primary{background:var(--inv-bg);color:var(--inv-text);border-color:var(--inv-bg)}
+  .btn-sm{padding:5px 10px;font-size:11px}
+  .zt{display:flex;justify-content:space-between;align-items:center;padding:15px 18px 6px;font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:600;letter-spacing:1.6px;text-transform:uppercase;color:var(--text3)}
+  .zt.fixed{color:var(--accent)}
+  .ni{display:flex;align-items:center;gap:9px;padding:7px 18px;font-size:13px;color:var(--text2);cursor:pointer;border-left:2px solid transparent}
+  .ni:hover{color:var(--text);background:var(--surface2)}
+  .ni.on{color:var(--text);background:var(--surface2);border-left-color:var(--accent);font-weight:600}
+  .badge{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;background:var(--accent);color:#0B0C0E;border-radius:2px;padding:1px 6px}
+  .sh{flex:none;display:inline-block}
+  .sh.blue{width:9px;height:9px;border-radius:50%;background:var(--blue)}
+  .sh.green{width:9px;height:9px;border-radius:50%;background:var(--green)}
+  .sh.amber{width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:9px solid var(--amber)}
+  .sh.red{width:10px;height:10px;background:var(--red);clip-path:polygon(30% 0,70% 0,100% 30%,100% 70%,70% 100%,30% 100%,0 70%,0 30%)}
+  .sh.idle{width:9px;height:9px;border-radius:50%;background:var(--text3)}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:2px}
+  /* ---- procedural bust ---- */
+  .bust{position:relative;width:96px;height:74px;margin:0 auto}
+  .bust .ring{position:absolute;left:50%;top:-6px;transform:translateX(-50%);width:60px;height:60px;border-radius:50%;border:2px solid var(--text3)}
+  .bust.big{width:150px;height:150px}
+  .bust.big .ring{width:120px;height:120px;top:-4px}
+  .ring.rblue{border-color:var(--blue);box-shadow:0 0 16px -3px var(--blue)}
+  .ring.rgreen{border-color:var(--green)}
+  .ring.ramber{border-color:var(--amber);box-shadow:0 0 16px -3px var(--amber)}
+  .ring.rred{border-color:var(--red)}
+  .ring.ridle{border-color:var(--focus)}
+  .shoulders{position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:96px;height:44px;background:linear-gradient(160deg,var(--grap1),var(--grap2));border:1px solid var(--rim);border-bottom:none;border-radius:48px 48px 4px 4px}
+  .bust.big .shoulders{width:150px;height:72px;border-radius:74px 74px 6px 6px}
+  .head{position:absolute;top:0;left:50%;transform:translateX(-50%);width:48px;height:56px;background:linear-gradient(155deg,var(--grap1),var(--grap2));border:1px solid var(--rim);border-radius:20px 20px 18px 18px;overflow:hidden}
+  .bust.big .head{width:76px;height:88px;border-radius:32px 32px 28px 28px;top:2px}
+  .head.hv1{border-radius:14px 14px 20px 20px}
+  .head.hv2{border-radius:26px 26px 14px 14px}
+  .visor{position:absolute;top:44%;left:16%;right:16%;height:4px;border-radius:2px;background:var(--accent);box-shadow:0 0 8px 0 var(--accent)}
+  .bust.big .visor{height:6px;top:42%}
+  .rimlight{position:absolute;top:14%;left:8%;width:2px;height:56%;background:linear-gradient(var(--rim),transparent);opacity:.7}
+  .emblem{position:absolute;bottom:5px;left:50%;transform:translateX(-50%);font-size:8px;letter-spacing:1px;color:var(--text3)}
+  .bust.big .emblem{font-size:10px;bottom:9px}
+  .acard{position:relative;background:var(--surface);border:1px solid var(--border);border-radius:2px;padding:44px 14px 14px;cursor:pointer;transition:transform .18s ease,border-color .18s ease;overflow:visible}
+  .acard:hover{transform:translateY(-3px);border-color:var(--focus)}
+  .acard .bustwrap{position:absolute;top:-30px;left:0;right:0}
+  .stbadge{display:inline-flex;align-items:center;gap:6px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--text2)}
+  .certtag{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.8px;text-transform:uppercase;padding:2px 6px;border-radius:2px;border:1px solid var(--border)}
+  .cert-ok{color:var(--green);border-color:color-mix(in srgb,var(--green) 40%,transparent)}
+  .cert-shadow{color:var(--text2);border-color:var(--border)}
+  .cert-bad{color:var(--red);border-color:color-mix(in srgb,var(--red) 40%,transparent)}
+  .row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)}
+  .step{position:relative;flex:1;background:var(--surface);border:1px solid var(--border);border-radius:2px;padding:14px 13px;display:flex;flex-direction:column;gap:5px}
+  .provdot{width:8px;height:8px;border-radius:50%;flex:none}
+</style>
+</helmet>
+
+<div class="mf-root" data-theme="{{ theme }}">
+  <div class="mf-top">
+    <div style="width:19px;height:19px;border:1.5px solid var(--text);border-radius:2px;position:relative"><div style="position:absolute;inset:4px;border:1.5px solid var(--accent)"></div></div>
+    <span class="title" style="font-size:13px;letter-spacing:1px">META-FÁBRICA</span>
+    <span class="pill on">Projeto: Todos ▾</span>
+    <div style="flex:1"></div>
+    <span class="pill" onClick="{{ toggleTheme }}">◐ {{ themeLabel }}</span>
+    <span class="btn btn-primary btn-sm">+ Nova missão</span>
+    <span class="pill" style="padding:5px 8px">🔔 <span class="badge">3</span></span>
+  </div>
+
+  <div class="mf-body">
+    <div class="mf-side">
+      <div class="zt fixed"><span>Fixas</span></div>
+      <div class="ni">Home</div>
+      <div class="ni">Caixa do Fundador <span class="badge" style="margin-left:auto">3</span></div>
+      <div class="ni">Mapa geral</div>
+      <div class="zt"><span>Projeto: Todos</span><span>▾</span></div>
+      <div class="ni">Dashboard</div>
+      <div class="ni">Grafos ▾</div>
+      <div class="ni">Runs &amp; Histórico</div>
+      <div class="zt"><span>Biblioteca</span><span>▾</span></div>
+      <div class="ni on">Agentes</div>
+      <div class="ni">Skills</div>
+      <div class="ni">Curador</div>
+      <div class="ni">Logs</div>
+      <div class="ni">Custos</div>
+    </div>
+
+    <div style="flex:1;display:flex;flex-direction:column;min-width:0">
+      <!-- header + tabs -->
+      <div style="display:flex;align-items:center;gap:12px;padding:12px 20px;border-bottom:1px solid var(--border);background:var(--surface);flex:none">
+        <div style="display:flex;align-items:center;gap:11px;min-width:0">
+          <sc-if value="{{ onPage }}" hint-placeholder-val="{{ false }}">
+            <span class="mono" style="font-size:12px;color:var(--text2);cursor:pointer" onClick="{{ backToGallery }}">← Agentes</span>
+          </sc-if>
+          <div>
+            <div class="eyebrow" style="margin-bottom:3px">Biblioteca · Modelos personificados</div>
+            <div class="title" style="font-size:19px">{{ headTitle }}</div>
+          </div>
+        </div>
+        <div style="width:1px;height:30px;background:var(--border);margin:0 6px"></div>
+        <span class="{{ tabGal }}" onClick="{{ setGal }}">Galeria</span>
+        <span class="{{ tabLad }}" onClick="{{ setLad }}">Escada &amp; Rotas</span>
+        <div style="flex:1"></div>
+        <span class="mono" style="font-size:10px;color:var(--text2);display:flex;align-items:center;gap:6px"><span class="sh blue"></span>AO VIVO · MOTOR v0.5</span>
+      </div>
+
+      <!-- ============ GALERIA ============ -->
+      <sc-if value="{{ isGallery }}" hint-placeholder-val="{{ true }}">
+      <div style="flex:1;overflow:auto;padding:44px 20px 20px">
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:38px 16px">
+          <sc-for list="{{ agents }}" as="a" hint-placeholder-count="6">
+            <div class="acard" onClick="{{ a.open }}">
+              <div class="bustwrap">
+                <div class="bust {{ a.hv }}">
+                  <div class="ring {{ a.ring }}"></div>
+                  <div class="shoulders"></div>
+                  <div class="head {{ a.hv }}"><div class="rimlight"></div><div class="visor"></div></div>
+                  <div class="emblem mono">{{ a.emblem }}</div>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:6px">
+                <span class="title" style="font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ a.name }}</span>
+                <span class="{{ a.certcls }} certtag">{{ a.certShort }}</span>
+              </div>
+              <div class="mono" style="font-size:10px;color:var(--text3);margin-top:3px">{{ a.model }}</div>
+              <div class="stbadge" style="margin-top:10px"><span class="{{ a.sh }}"></span>{{ a.activity }}</div>
+              <div class="mono" style="font-size:10px;color:var(--text3);margin-top:2px">{{ a.role }} · {{ a.tierLabel }}</div>
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;padding-top:11px;border-top:1px solid var(--border)">
+                <span class="mono" style="font-size:10px;color:var(--text3)">{{ a.provider }}</span>
+                <span class="mono" style="font-size:11px;color:var(--accent)">Falar →</span>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ============ PÁGINA DO AGENTE ============ -->
+      <sc-if value="{{ onPage }}" hint-placeholder-val="{{ false }}">
+      <div style="flex:1;overflow:auto;padding:20px;display:grid;grid-template-columns:340px 1fr;gap:18px;align-items:start">
+
+        <!-- left: portrait + presence + chat -->
+        <div style="display:flex;flex-direction:column;gap:18px;min-width:0">
+          <div class="card" style="padding:92px 18px 18px;position:relative;overflow:visible;margin-top:34px">
+            <div style="position:absolute;top:-70px;left:0;right:0">
+              <div class="bust big {{ ag.hv }}">
+                <div class="ring {{ ag.ring }}"></div>
+                <div class="shoulders"></div>
+                <div class="head {{ ag.hv }}"><div class="rimlight"></div><div class="visor"></div></div>
+                <div class="emblem mono">{{ ag.emblem }}</div>
+              </div>
+            </div>
+            <div style="text-align:center;margin-top:6px">
+              <div class="title" style="font-size:20px">{{ ag.name }}</div>
+              <div class="mono" style="font-size:11px;color:var(--text2);margin-top:4px">{{ ag.model }}</div>
+              <div class="stbadge" style="justify-content:center;margin-top:12px"><span class="{{ ag.sh }}"></span>{{ ag.activity }}</div>
+              <div style="margin-top:12px"><span class="{{ ag.certcls }} certtag">{{ ag.certLong }}</span></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div style="padding:12px 14px;border-bottom:1px solid var(--border)"><span class="eyebrow">Fazendo agora</span></div>
+            <div style="padding:10px 14px;display:flex;flex-direction:column;gap:8px">
+              <sc-for list="{{ ag.doing }}" as="d" hint-placeholder-count="2">
+                <div style="display:flex;align-items:center;gap:9px"><span class="{{ d.sh }}"></span><div style="min-width:0"><div class="mono" style="font-size:11.5px;color:var(--text)">{{ d.node }}</div><div class="mono" style="font-size:9.5px;color:var(--text3)">{{ d.where }}</div></div></div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div class="card" style="display:flex;flex-direction:column">
+            <div style="padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between"><span class="eyebrow">Falar com {{ ag.short }}</span><span class="mono" style="font-size:9px;color:var(--text3)">canal de direcionamento</span></div>
+            <div style="padding:14px;display:flex;flex-direction:column;gap:12px">
+              <div style="align-self:flex-start;max-width:85%;background:var(--surface2);border:1px solid var(--border);border-radius:2px;padding:9px 11px"><div class="mono" style="font-size:9px;color:var(--text3);margin-bottom:4px">{{ ag.short }}</div><div style="font-size:12.5px;color:var(--text);line-height:1.5">{{ ag.chatMsg }}</div></div>
+              <div style="align-self:flex-end;max-width:85%;background:var(--inv-bg);color:var(--inv-text);border-radius:2px;padding:9px 11px;font-size:12.5px;line-height:1.5">Priorize cobertura de casos-limite no CSV malformado.</div>
+            </div>
+            <div style="padding:10px 14px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center">
+              <div style="flex:1;border:1px solid var(--border);border-radius:2px;padding:8px 10px;font-size:12px;color:var(--text3)">Escreva uma direção…</div>
+              <span class="btn btn-primary btn-sm">Enviar</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- right: ficha + telemetria + escada -->
+        <div style="display:flex;flex-direction:column;gap:18px;min-width:0">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:18px;align-items:start">
+            <div class="card">
+              <div style="padding:12px 14px;border-bottom:1px solid var(--border)"><span class="eyebrow">01 — Ficha técnica</span></div>
+              <div style="padding:6px 14px 10px">
+                <div class="row"><span class="mono" style="font-size:10.5px;color:var(--text3)">modelo</span><span class="mono" style="font-size:11px;color:var(--text)">{{ ag.model }}</span></div>
+                <div class="row"><span class="mono" style="font-size:10.5px;color:var(--text3)">provedor</span><span class="mono" style="font-size:11px;color:var(--text)">{{ ag.provider }}</span></div>
+                <div class="row"><span class="mono" style="font-size:10.5px;color:var(--text3)">Hugging Face</span><span class="mono" style="font-size:11px;color:var(--accent)">{{ ag.hf }}</span></div>
+                <div class="row"><span class="mono" style="font-size:10.5px;color:var(--text3)">credencial</span><span class="mono" style="font-size:11px;color:{{ ag.credColor }}">{{ ag.cred }}</span></div>
+                <div class="row" style="border-bottom:none"><span class="mono" style="font-size:10.5px;color:var(--text3)">fine-tunings</span><span class="mono" style="font-size:11px;color:var(--text)">{{ ag.finetune }}</span></div>
+              </div>
+            </div>
+            <div class="card">
+              <div style="padding:12px 14px;border-bottom:1px solid var(--border)"><span class="eyebrow">02 — Posição na escada</span></div>
+              <div style="padding:14px">
+                <div class="mono" style="font-size:11px;color:var(--text2);margin-bottom:10px">degrau atual</div>
+                <div class="title" style="font-size:22px;color:var(--text)">{{ ag.rung }}</div>
+                <div class="mono" style="font-size:10px;color:var(--text3);margin-top:4px">{{ ag.rungNote }}</div>
+                <div style="margin-top:16px"><span class="{{ ag.certcls }} certtag">{{ ag.certLong }}</span></div>
+                <div class="mono" style="font-size:10px;color:var(--text3);line-height:1.5;margin-top:10px">{{ ag.certNote }}</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div style="padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between"><span class="eyebrow">03 — Telemetria do Curador</span><span class="mono" style="font-size:9px;color:var(--text3)">14 runs · {{ ag.sample }}</span></div>
+            <div style="display:grid;grid-template-columns:repeat(5,1fr)">
+              <sc-for list="{{ ag.metrics }}" as="m" hint-placeholder-count="5">
+                <div style="padding:14px;border-right:1px solid var(--border)">
+                  <div class="eyebrow" style="font-size:9px">{{ m.label }}</div>
+                  <div class="num" style="font-size:20px;color:{{ m.color }};margin-top:8px">{{ m.val }}</div>
+                  <div class="mono" style="font-size:9px;color:var(--text3);margin-top:3px">{{ m.sub }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div class="card">
+            <div style="padding:12px 14px;border-bottom:1px solid var(--border)"><span class="eyebrow">04 — Motivos de reprovação recorrentes (agregado)</span></div>
+            <div style="padding:12px 14px;display:flex;flex-direction:column;gap:9px">
+              <sc-for list="{{ ag.reasons }}" as="r" hint-placeholder-count="2">
+                <div style="display:flex;gap:10px;align-items:baseline"><span class="mono" style="font-size:11px;color:var(--red);width:30px;flex:none">{{ r.pct }}</span><span style="font-size:12px;color:var(--text2);line-height:1.5">{{ r.text }}</span></div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ============ ESCADA & ROTAS ============ -->
+      <sc-if value="{{ isLadder }}" hint-placeholder-val="{{ false }}">
+      <div style="flex:1;overflow:auto;padding:18px 20px;display:flex;flex-direction:column;gap:18px">
+
+        <!-- escada -->
+        <div class="card">
+          <div style="padding:12px 14px;border-bottom:1px solid var(--border)"><span class="eyebrow">01 — Escada de custo × capacidade</span></div>
+          <div style="padding:16px;display:flex;gap:12px;align-items:stretch">
+            <sc-for list="{{ ladder }}" as="s" hint-placeholder-count="4">
+              <div class="step" style="margin-top:{{ s.offset }}">
+                <div class="eyebrow" style="font-size:9px">{{ s.tier }}</div>
+                <div class="title" style="font-size:15px">{{ s.name }}</div>
+                <div class="mono" style="font-size:10px;color:var(--text3)">{{ s.cost }}</div>
+                <div style="height:1px;background:var(--border);margin:4px 0"></div>
+                <sc-for list="{{ s.models }}" as="m" hint-placeholder-count="2"><span class="mono" style="font-size:10.5px;color:var(--text2)">{{ m }}</span></sc-for>
+              </div>
+            </sc-for>
+          </div>
+          <div class="mono" style="padding:0 16px 14px;font-size:10px;color:var(--text3)">→ sobe de degrau só quando reprova; free primeiro, topo (verificador) por último.</div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1.3fr 1fr;gap:18px;align-items:start">
+          <!-- presets -->
+          <div class="card">
+            <div style="padding:12px 14px;border-bottom:1px solid var(--border)"><span class="eyebrow">02 — Presets de catálogo</span></div>
+            <div style="padding:4px 14px 10px">
+              <sc-for list="{{ presets }}" as="p" hint-placeholder-count="5">
+                <div style="padding:11px 0;border-bottom:1px solid var(--border)">
+                  <div style="display:flex;align-items:center;justify-content:space-between"><span class="mono" style="font-size:12px;color:var(--accent)">{{ p.name }}</span><span class="mono" style="font-size:10px;color:var(--text3)">{{ p.use }}</span></div>
+                  <div class="mono" style="font-size:10.5px;color:var(--text2);margin-top:4px;line-height:1.5">{{ p.map }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <!-- providers -->
+          <div class="card">
+            <div style="padding:12px 14px;border-bottom:1px solid var(--border)"><span class="eyebrow">03 — Status por provedor</span></div>
+            <div style="padding:4px 14px 10px">
+              <sc-for list="{{ providers }}" as="p" hint-placeholder-count="4">
+                <div style="padding:11px 0;border-bottom:1px solid var(--border)">
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <span class="provdot" style="background:{{ p.color }}"></span>
+                    <span class="mono" style="font-size:12px;color:var(--text)">{{ p.name }}</span>
+                    <span class="mono" style="font-size:10px;color:{{ p.color }};margin-left:auto">{{ p.status }}</span>
+                  </div>
+                  <div class="mono" style="font-size:10px;color:var(--text3);margin-top:4px">credencial: {{ p.cred }} · {{ p.note }}</div>
+                </div>
+              </sc-for>
+              <div class="mono" style="font-size:9.5px;color:var(--text3);line-height:1.5;padding-top:10px">A UI nunca exibe a chave — apenas se a credencial está configurada.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- routing -->
+        <div class="card">
+          <div style="padding:12px 14px;border-bottom:1px solid var(--border)"><span class="eyebrow">04 — Roteamento papel → tier → modelo (+ fallback por esgotamento)</span></div>
+          <div class="row" style="padding:8px 14px;border-bottom:1px solid var(--border)">
+            <span class="eyebrow" style="flex:1">Papel</span><span class="eyebrow" style="width:110px">Tier</span><span class="eyebrow" style="width:180px">Modelo</span><span class="eyebrow" style="width:180px">Fallback (429/esgotado)</span>
+          </div>
+          <sc-for list="{{ routing }}" as="r" hint-placeholder-count="5">
+            <div style="display:flex;align-items:center;padding:8px 14px;border-bottom:1px solid var(--border)">
+              <span class="mono" style="font-size:11.5px;color:var(--text);flex:1">{{ r.role }}</span>
+              <span class="mono" style="font-size:11px;color:var(--text2);width:110px">{{ r.tier }}</span>
+              <span class="mono" style="font-size:11px;color:var(--text);width:180px">{{ r.model }}</span>
+              <span class="mono" style="font-size:11px;color:var(--text3);width:180px">{{ r.fallback }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      </sc-if>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;100%&quot;,&quot;height&quot;:&quot;100%&quot;}}">
+class Component extends DCLogic {
+  state = { theme: 'paperclip', view: 'gallery', selected: null };
+
+  agentData() {
+    return {
+      llama: {
+        name: 'Órion', model: 'llama-3.3-70b', short: 'Órion', provider: 'NVIDIA · free', emblem: 'NV', hv: '',
+        ring: 'rblue', sh: 'sh blue', activity: 'pesquisando', role: 'pesquisador', tierLabel: 'tier simples',
+        cert: 'ok', certShort: 'CERT', certLong: 'CERTIFICADO', certcls: 'cert-ok',
+        certNote: 'Aprovado pelo Curador para papéis de pesquisa em tier simples.',
+        rung: 'Free', rungNote: 'degrau de entrada · NVIDIA NIM',
+        hf: 'meta-llama/Llama-3.3-70B ↗', cred: 'configurada', credColor: 'var(--green)',
+        finetune: '1 em andamento', sample: 'n=214',
+        doing: [{ sh: 'sh blue', node: 'pesquisa-alfa', where: 'csv→json · ao vivo' }, { sh: 'sh green', node: 'pesquisa-beta', where: 'pesquisa-receita · concluído' }],
+        chatMsg: 'Estou varrendo o CSV de origem — 3 colunas com encoding inconsistente. Sigo normalizando?',
+        metrics: [
+          { label: 'aprov. 1ª tent.', val: '61%', color: 'var(--text)', sub: 'média' },
+          { label: 'lat. mediana', val: '1.8s', color: 'var(--text)', sub: 'rápido' },
+          { label: 'lat. p90', val: '5.2s', color: 'var(--text)', sub: '' },
+          { label: 'taxa erro', val: '9%', color: 'var(--amber)', sub: '' },
+          { label: 'converg. escal.', val: '88%', color: 'var(--green)', sub: 'pós-escalada' },
+        ],
+        reasons: [{ pct: '41%', text: 'raciocínio insuficiente em casos-limite; entrega parcial quando o input é ambíguo.' }, { pct: '22%', text: 'formato de saída fora da rubrica (JSON não-estrito).' }],
+      },
+      qwen: {
+        name: 'Vesta', model: 'qwen-2.5-72b', short: 'Vesta', provider: 'NVIDIA · free', emblem: 'NV', hv: 'hv1',
+        ring: 'rblue', sh: 'sh blue', activity: 'redigindo', role: 'redator', tierLabel: 'tier simples',
+        cert: 'ok', certShort: 'CERT', certLong: 'CERTIFICADO', certcls: 'cert-ok',
+        certNote: 'Sólido em redação e transformação de texto em tier simples.',
+        rung: 'Free', rungNote: 'degrau de entrada · NVIDIA NIM',
+        hf: 'Qwen/Qwen2.5-72B ↗', cred: 'configurada', credColor: 'var(--green)',
+        finetune: 'nenhum', sample: 'n=178',
+        doing: [{ sh: 'sh blue', node: 'redator', where: 'pesquisa-receita · ao vivo' }],
+        chatMsg: 'Rascunho da seção de metodologia pronto. Quer tom mais técnico ou mais direto?',
+        metrics: [
+          { label: 'aprov. 1ª tent.', val: '68%', color: 'var(--text)', sub: 'média' },
+          { label: 'lat. mediana', val: '2.1s', color: 'var(--text)', sub: '' },
+          { label: 'lat. p90', val: '6.0s', color: 'var(--text)', sub: '' },
+          { label: 'taxa erro', val: '5%', color: 'var(--text)', sub: '' },
+          { label: 'converg. escal.', val: '90%', color: 'var(--green)', sub: '' },
+        ],
+        reasons: [{ pct: '33%', text: 'perde nuance em textos longos; repete estrutura.' }, { pct: '18%', text: 'citações imprecisas quando a fonte é densa.' }],
+      },
+      deepseek: {
+        name: 'Ceres', model: 'deepseek-v3', short: 'Ceres', provider: 'NVIDIA · free', emblem: 'NV', hv: 'hv2',
+        ring: 'rgreen', sh: 'sh green', activity: 'concluído', role: 'transformador', tierLabel: 'tier média',
+        cert: 'ok', certShort: 'CERT', certLong: 'CERTIFICADO', certcls: 'cert-ok',
+        certNote: 'Forte em transformação estruturada de dados.',
+        rung: 'Free', rungNote: 'degrau de entrada · NVIDIA NIM',
+        hf: 'deepseek-ai/DeepSeek-V3 ↗', cred: 'configurada', credColor: 'var(--green)',
+        finetune: 'nenhum', sample: 'n=142',
+        doing: [{ sh: 'sh green', node: 'transformador', where: 'csv→json · concluído há 2min' }],
+        chatMsg: 'Transformação CSV→JSON fechada, 312 registros. Todos passaram na validação de schema.',
+        metrics: [
+          { label: 'aprov. 1ª tent.', val: '74%', color: 'var(--text)', sub: 'boa' },
+          { label: 'lat. mediana', val: '2.6s', color: 'var(--text)', sub: '' },
+          { label: 'lat. p90', val: '7.4s', color: 'var(--text)', sub: '' },
+          { label: 'taxa erro', val: '4%', color: 'var(--text)', sub: '' },
+          { label: 'converg. escal.', val: '92%', color: 'var(--green)', sub: '' },
+        ],
+        reasons: [{ pct: '28%', text: 'falha em schemas aninhados profundos.' }],
+      },
+      kimi: {
+        name: 'Pallas', model: 'kimi-k2', short: 'Pallas', provider: 'Moonshot · free', emblem: 'MS', hv: 'hv1',
+        ring: 'ridle', sh: 'sh idle', activity: '429 · aguardando cota', role: 'arquiteto', tierLabel: 'tier média',
+        cert: 'shadow', certShort: 'SOMBRA', certLong: 'EM SOMBRA', certcls: 'cert-shadow',
+        certNote: 'Em avaliação: o Curador ainda acumula evidência antes de certificar ou reprovar.',
+        rung: 'Free+', rungNote: 'candidato a tier média',
+        hf: 'moonshotai/Kimi-K2 ↗', cred: 'configurada', credColor: 'var(--green)',
+        finetune: 'nenhum', sample: 'n=38 (baixa)',
+        doing: [{ sh: 'sh idle', node: '— sem nó ativo', where: 'provedor em 429' }],
+        chatMsg: 'Estou throttled pelo provedor (429). O motor me reroteou para DeepSeek nesta rodada.',
+        metrics: [
+          { label: 'aprov. 1ª tent.', val: '71%', color: 'var(--text2)', sub: 'amostra baixa' },
+          { label: 'lat. mediana', val: '3.4s', color: 'var(--text2)', sub: '' },
+          { label: 'lat. p90', val: '9.9s', color: 'var(--text2)', sub: '' },
+          { label: 'taxa erro', val: '12%', color: 'var(--amber)', sub: 'ruído de dado' },
+          { label: 'converg. escal.', val: 'n/d', color: 'var(--text3)', sub: 'sem amostra' },
+        ],
+        reasons: [{ pct: '—', text: 'amostra insuficiente para agregar motivos com confiança (n=38).' }],
+      },
+      codex: {
+        name: 'Hefesto', model: 'codex-mini', short: 'Hefesto', provider: 'OpenAI · pago', emblem: 'OAI', hv: '',
+        ring: 'ramber', sh: 'sh amber', activity: 'aguardando decisão', role: 'qa_engineer · verifier', tierLabel: 'tier complexa',
+        cert: 'ok', certShort: 'CERT', certLong: 'CERTIFICADO', certcls: 'cert-ok',
+        certNote: 'Certificado como verificador; sua saída atual está num gate humano.',
+        rung: 'Média', rungNote: 'degrau pago · escalada a partir do free',
+        hf: 'n/d (proprietário)', cred: 'configurada', credColor: 'var(--green)',
+        finetune: 'nenhum', sample: 'n=96',
+        doing: [{ sh: 'sh amber', node: 'verifier:pesquisa-beta', where: 'gate cobertura → fundador' }],
+        chatMsg: 'Reprovei o ciclo 1 da pesquisa-beta por cobertura. A tentativa 2 passou — aguardando você no gate.',
+        metrics: [
+          { label: 'aprov. 1ª tent.', val: '82%', color: 'var(--green)', sub: 'alta' },
+          { label: 'lat. mediana', val: '4.2s', color: 'var(--text)', sub: '' },
+          { label: 'lat. p90', val: '11.8s', color: 'var(--text)', sub: '' },
+          { label: 'taxa erro', val: '6%', color: 'var(--text)', sub: '' },
+          { label: 'converg. escal.', val: '94%', color: 'var(--green)', sub: '' },
+        ],
+        reasons: [{ pct: '19%', text: 'rigor excessivo: reprova por detalhes de estilo fora da rubrica.' }],
+      },
+      claude: {
+        name: 'Atena', model: 'claude-sonnet-4', short: 'Atena', provider: 'Anthropic · pago', emblem: 'ANT', hv: 'hv2',
+        ring: 'ridle', sh: 'sh idle', activity: 'sem credencial', role: 'evaluator · verifier', tierLabel: 'tier complexa',
+        cert: 'ok', certShort: 'CERT', certLong: 'CERTIFICADO', certcls: 'cert-ok',
+        certNote: 'Certificado no topo, mas indisponível: falta a credencial do provedor.',
+        rung: 'Topo', rungNote: 'verificador final · maior capacidade',
+        hf: 'n/d (proprietário)', cred: 'NÃO configurada', credColor: 'var(--red)',
+        finetune: 'nenhum', sample: 'n=61',
+        doing: [{ sh: 'sh idle', node: '— indisponível', where: 'sem credencial · motor cai para Codex' }],
+        chatMsg: 'Estou fora: o provedor não tem credencial configurada. O motor está usando Hefesto como verificador.',
+        metrics: [
+          { label: 'aprov. 1ª tent.', val: '91%', color: 'var(--green)', sub: 'topo' },
+          { label: 'lat. mediana', val: '6.1s', color: 'var(--text)', sub: '' },
+          { label: 'lat. p90', val: '14.0s', color: 'var(--text)', sub: '' },
+          { label: 'taxa erro', val: '3%', color: 'var(--green)', sub: '' },
+          { label: 'converg. escal.', val: '97%', color: 'var(--green)', sub: '' },
+        ],
+        reasons: [{ pct: '8%', text: 'raro; discordâncias de julgamento em rubricas subjetivas.' }],
+      },
+    };
+  }
+
+  renderVals() {
+    const s = this.state;
+    const D = this.agentData();
+    const order = ['llama', 'qwen', 'deepseek', 'kimi', 'codex', 'claude'];
+    const agents = order.map(k => ({ ...D[k], open: () => this.setState({ view: 'page', selected: k }) }));
+    const ag = s.selected ? D[s.selected] : agents[0];
+
+    const ladder = [
+      { tier: 'tier simples', name: 'Free · NVIDIA', cost: '$0 / 1k', offset: '54px', models: ['llama-3.3-70b', 'qwen-2.5-72b', 'deepseek-v3'] },
+      { tier: 'tier média (cand.)', name: 'Free+ · Moonshot', cost: '$0 / 1k · 429', offset: '36px', models: ['kimi-k2 (sombra)'] },
+      { tier: 'tier complexa', name: 'Codex · OpenAI', cost: '$0.30 / 1k', offset: '18px', models: ['codex-mini'] },
+      { tier: 'topo · verificador', name: 'Claude · Anthropic', cost: '$0.90 / 1k', offset: '0px', models: ['claude-sonnet-4'] },
+    ];
+
+    const presets = [
+      { name: 'free-escalada', use: 'padrão / barato', map: 'tudo em free (NVIDIA); escala p/ Codex ao reprovar; verificador = Codex.' },
+      { name: 'codex', use: 'código médio', map: 'executores free; qa_engineer + verifier = Codex.' },
+      { name: 'claude', use: 'crítico / topo', map: 'verifier + evaluator = Claude; executores free ou Codex.' },
+      { name: 'construcao', use: 'rota construção', map: 'arquiteto = Kimi/Codex; transformador = DeepSeek; verifier = Codex.' },
+      { name: 'pesquisa-sintese', use: 'rota pesquisa', map: 'pesquisadores free em paralelo; synthesizer = Codex; gate cobertura humano.' },
+    ];
+
+    const providers = [
+      { name: 'NVIDIA NIM', status: 'disponível', color: 'var(--green)', cred: 'sim', note: 'llama · qwen · deepseek' },
+      { name: 'Moonshot (Kimi)', status: 'throttled · 429', color: 'var(--amber)', cred: 'sim', note: 'cota estourada; reroteando' },
+      { name: 'OpenAI (Codex)', status: 'disponível', color: 'var(--green)', cred: 'sim', note: 'tier pago médio' },
+      { name: 'Anthropic (Claude)', status: 'sem-chave', color: 'var(--red)', cred: 'não', note: 'verificador de topo indisponível' },
+    ];
+
+    const routing = [
+      { role: 'planner', tier: 'simples', model: 'llama-3.3-70b', fallback: '→ qwen-2.5-72b' },
+      { role: 'pesquisador', tier: 'simples', model: 'llama-3.3-70b', fallback: '→ deepseek-v3' },
+      { role: 'transformador', tier: 'média', model: 'deepseek-v3', fallback: '→ codex-mini' },
+      { role: 'arquiteto', tier: 'média', model: 'kimi-k2', fallback: '→ codex-mini (429)' },
+      { role: 'verifier / evaluator', tier: 'complexa', model: 'claude-sonnet-4', fallback: '→ codex-mini (sem-chave)' },
+    ];
+
+    return {
+      theme: s.theme, themeLabel: s.theme === 'paperclip' ? 'ESCURO' : 'CLARO',
+      toggleTheme: () => this.setState({ theme: s.theme === 'paperclip' ? 'stark' : 'paperclip' }),
+      isGallery: s.view === 'gallery', onPage: s.view === 'page', isLadder: s.view === 'ladder',
+      tabGal: 'pill' + (s.view === 'gallery' || s.view === 'page' ? ' on' : ''), tabLad: 'pill' + (s.view === 'ladder' ? ' on' : ''),
+      setGal: () => this.setState({ view: 'gallery' }), setLad: () => this.setState({ view: 'ladder' }),
+      backToGallery: () => this.setState({ view: 'gallery', selected: null }),
+      headTitle: s.view === 'page' ? ag.name : (s.view === 'ladder' ? 'Escada & Rotas' : 'Agentes'),
+      agents, ag,
+      ladder, presets, providers, routing,
+    };
+  }
+}
+</script>
+</body>
+</html>

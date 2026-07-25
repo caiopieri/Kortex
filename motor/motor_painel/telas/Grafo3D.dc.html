@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<script src="mf-themes.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+<script src="https://unpkg.com/3d-force-graph@1.73.4/dist/3d-force-graph.min.js"></script>
+<style>
+  body{margin:0;background:#060708;overflow:hidden}
+  .mf-root{
+    --bg:#060708;--surface:#121417;--surface2:#17191D;--border:#26292E;--focus:#3E434A;
+    --text:#E8E6E1;--text2:#8A8F98;--text3:#5A5F66;--accent:#E8A33D;
+    --red:#E5484D;--amber:#E8A33D;--green:#30A46C;--blue:#3E63DD;--inv-bg:#E8E6E1;--inv-text:#0B0C0E;
+    position:fixed;inset:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif;display:flex;flex-direction:column;
+  }
+  .eyebrow{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3)}
+  .mono{font-family:'IBM Plex Mono',monospace}
+  .title{font-family:'Space Grotesk',system-ui;font-weight:600;letter-spacing:.2px}
+  .pill{display:inline-flex;align-items:center;gap:6px;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.9px;text-transform:uppercase;padding:5px 9px;border:1px solid var(--border);border-radius:2px;color:var(--text2);background:rgba(11,12,14,.72);cursor:pointer;backdrop-filter:blur(4px)}
+  .pill.on{color:var(--text);border-color:var(--focus);background:rgba(23,25,29,.85)}
+  .pill.amber{color:var(--amber);border-color:var(--amber)}
+  .lg{display:inline-flex;align-items:center;gap:6px;font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.5px;text-transform:uppercase;color:var(--text2)}
+  .lg .d{width:8px;height:8px;border-radius:50%;flex:none}
+  .bk{position:absolute;width:14px;height:14px;border-color:var(--focus);border-style:solid;border-width:0;z-index:4;pointer-events:none}
+  .hud{position:absolute;left:0;right:0;display:flex;align-items:center;gap:14px;padding:12px 22px;z-index:3;pointer-events:none}
+  .hud > *{pointer-events:auto}
+  .card{position:absolute;right:20px;top:64px;width:260px;background:rgba(18,20,23,.92);border:1px solid var(--border);border-radius:2px;padding:13px;z-index:4;backdrop-filter:blur(6px);display:flex;flex-direction:column;gap:7px}
+  input[type=range]{-webkit-appearance:none;width:110px;height:2px;background:var(--border);outline:none}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:10px;height:10px;border-radius:50%;background:var(--amber);cursor:pointer}
+</style>
+</helmet>
+
+<div class="mf-root">
+  <div class="bk" style="left:12px;top:12px;border-left-width:1px;border-top-width:1px"></div>
+  <div class="bk" style="right:12px;top:12px;border-right-width:1px;border-top-width:1px"></div>
+  <div class="bk" style="left:12px;bottom:12px;border-left-width:1px;border-bottom-width:1px"></div>
+  <div class="bk" style="right:12px;bottom:12px;border-right-width:1px;border-bottom-width:1px"></div>
+
+  <!-- top HUD -->
+  <div class="hud" style="top:0">
+    <a href="MapaGeral.dc.html" style="text-decoration:none"><span class="pill">← 2D</span></a>
+    <div style="display:flex;flex-direction:column;gap:2px">
+      <span class="eyebrow" style="color:var(--text2)">MAPA GERAL · 3D · AO VIVO</span>
+      <span class="title" style="font-size:14px">{{ resumo }}</span>
+    </div>
+    <div style="flex:1"></div>
+    <span class="lg"><span class="d" style="background:#E8E6E1"></span>projeto</span>
+    <span class="lg"><span class="d" style="background:#3E63DD"></span>workflow</span>
+    <span class="lg"><span class="d" style="background:#30A46C"></span>entidade de dados</span>
+    <span class="lg"><span class="d" style="background:#E8A33D"></span>precisa de você</span>
+    <span class="lg"><span class="d" style="background:#5A5F66"></span>ocioso</span>
+  </div>
+
+  <!-- 3D stage -->
+  <div ref="{{ stageRef }}" style="position:absolute;inset:0"></div>
+  <!-- vinheta radial reforça profundidade sobre o palco 3D -->
+  <div style="position:absolute;inset:0;pointer-events:none;z-index:1;background:radial-gradient(120% 90% at 50% 42%, transparent 40%, rgba(4,5,6,.55) 82%, rgba(2,2,3,.9) 100%)"></div>
+
+  <!-- node card -->
+  <sc-if value="{{ hasSel }}" hint-placeholder-val="{{ false }}">
+    <div class="card">
+      <span class="eyebrow" style="color:var(--text3)">{{ sel.tipo }}</span>
+      <span class="title" style="font-size:16px">{{ sel.nome }}</span>
+      <span class="mono" style="font-size:10.5px;color:var(--text2);line-height:1.5">{{ sel.info }}</span>
+      <span class="mono" style="font-size:10px;color:{{ sel.stColor }}">{{ sel.status }}</span>
+      <span class="pill" onClick="{{ clearSel }}" style="align-self:flex-start;margin-top:4px">fechar</span>
+    </div>
+  </sc-if>
+
+  <!-- bottom HUD -->
+  <div class="hud" style="bottom:0">
+    <span class="eyebrow">camada</span>
+    <span class="{{ clsMacro }}" onClick="{{ setMacro }}">macro</span>
+    <span class="{{ clsFull }}" onClick="{{ setFull }}">completo</span>
+    <div style="width:1px;height:16px;background:var(--border)"></div>
+    <span class="{{ clsPause }}" onClick="{{ togglePause }}">{{ pauseLabel }}</span>
+    <span class="{{ clsFlow }}" onClick="{{ toggleFlow }}">⚡ fluxo</span>
+    <div style="width:1px;height:16px;background:var(--border)"></div>
+    <span class="eyebrow">arestas</span>
+    <input type="range" min="0.05" max="0.6" step="0.05" value="{{ linkOp }}" onChange="{{ setLinkOp }}"/>
+    <div style="flex:1"></div>
+    <span class="mono" style="font-size:10px;color:var(--text2)">nós <b style="color:var(--text)">{{ nNodes }}</b> · arestas <b style="color:var(--text)">{{ nLinks }}</b> · fluxo só onde há run ativo</span>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;100%&quot;,&quot;height&quot;:&quot;100%&quot;}}">
+class Component extends DCLogic {
+  state = { sel: null, paused: false, flow: true, layer: 'full', linkOp: 0.35 };
+
+  data() {
+    const N = (id, nome, tipo, info, status, stColor, group, val, hot) => ({ id, nome, tipo, info, status, stColor, group, val, hot });
+    const nodes = [
+      N('motor', 'motor', 'núcleo', 'orquestrador v0.5 · 3 runs ativos', 'executando', 'var(--blue)', 'core', 22, 'live'),
+      // projetos
+      N('p-logisti', 'Logisti-Kit', 'projeto', '2 runs ativos · US$ 0.52/dia', 'executando', 'var(--blue)', 'proj', 14, 'live'),
+      N('p-pesquisa', 'Pesquisa', 'projeto', '1 run pausado no gate humano', 'precisa de você', 'var(--amber)', 'proj', 14, 'gate'),
+      N('p-conteudo', 'Conteúdo', 'projeto', 'anuncio-3d concluído há 6h', 'ocioso', 'var(--text3)', 'proj', 12, ''),
+      N('p-meta', 'Meta-fábrica', 'projeto', 'curador em análise contínua', 'observando', 'var(--text3)', 'proj', 12, ''),
+      // workflows
+      N('w-csv', 'csv → json v3', 'workflow', 'fan-out · 28 runs · 86% 1ª aprovação', 'executando', 'var(--blue)', 'wf', 7, 'live'),
+      N('w-fatia', 'logisti-fatia v4', 'workflow', 'dependências · onda 2 de 3', 'executando', 'var(--blue)', 'wf', 7, 'live'),
+      N('w-receita', 'pesquisa-receita v2', 'workflow', 'gate cobertura reprovou · escalado', 'pausado no gate', 'var(--amber)', 'wf', 7, 'gate'),
+      N('w-anuncio', 'anuncio-3d v2', 'workflow', 'último digest aprovado', 'concluído', 'var(--green)', 'wf', 6, ''),
+      N('w-spec', 'spec-writer v1', 'workflow', 'rascunho · não certificado', 'ocioso', 'var(--text3)', 'wf', 5, ''),
+      // entidades de dados
+      N('d-clientes', 'clientes.db', 'entidade · ponte', 'lida por 2 projetos — entidade-ponte', 'leitura ativa', 'var(--green)', 'data', 6, 'live'),
+      N('d-receitas', 'receitas-benchmark', 'dataset · HF', 'rag.consultado · 6 chunks no run atual', 'consultado', 'var(--green)', 'data', 6, 'live'),
+      N('d-catalogo', 'catalogo.db', 'entidade', 'escrita pelo csv→json', 'escrita ativa', 'var(--green)', 'data', 5, 'live'),
+      N('d-notas', 'notas-md', 'entidade', 'notas do projeto meta', 'ocioso', 'var(--text3)', 'data', 4, ''),
+    ];
+    const L = (s, t, live) => ({ source: s, target: t, live: !!live });
+    const links = [
+      L('motor', 'p-logisti', 1), L('motor', 'p-pesquisa', 1), L('motor', 'p-conteudo'), L('motor', 'p-meta'),
+      L('p-logisti', 'w-csv', 1), L('p-logisti', 'w-fatia', 1), L('p-pesquisa', 'w-receita', 1),
+      L('p-conteudo', 'w-anuncio'), L('p-meta', 'w-spec'),
+      L('w-csv', 'd-catalogo', 1), L('w-csv', 'd-clientes', 1), L('w-fatia', 'd-clientes', 1),
+      L('w-receita', 'd-receitas', 1), L('p-meta', 'd-notas'), L('p-pesquisa', 'd-clientes'),
+    ];
+    return { nodes, links };
+  }
+
+  // nó nítido: disco sólido + anel hairline (sem gradiente borrado)
+  crispSprite(hex, size, hot) {
+    const S = 256, c = document.createElement('canvas'); c.width = c.height = S;
+    const x = c.getContext('2d'), cx = S / 2;
+    // disco central sólido, borda dura
+    x.fillStyle = hex; x.beginPath(); x.arc(cx, cx, 26, 0, Math.PI * 2); x.fill();
+    // anel hairline de registro
+    x.strokeStyle = hex; x.globalAlpha = hot ? 0.9 : 0.5; x.lineWidth = 3;
+    x.beginPath(); x.arc(cx, cx, hot ? 62 : 44, 0, Math.PI * 2); x.stroke();
+    // ticks de instrumento nos nós quentes
+    if (hot) {
+      x.globalAlpha = 0.9; x.lineWidth = 4;
+      for (let i = 0; i < 4; i++) {
+        const a = i * Math.PI / 2 + Math.PI / 4;
+        x.beginPath();
+        x.moveTo(cx + Math.cos(a) * 72, cx + Math.sin(a) * 72);
+        x.lineTo(cx + Math.cos(a) * 84, cx + Math.sin(a) * 84);
+        x.stroke();
+      }
+    }
+    x.globalAlpha = 1;
+    const tex = new THREE.CanvasTexture(c); tex.anisotropy = 8;
+    const m = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false });
+    const s = new THREE.Sprite(m); s.scale.set(size, size, 1);
+    return s;
+  }
+
+  labelSprite(text, hex) {
+    const px = 22, pad = 10;
+    const mc = document.createElement('canvas'); const mx = mc.getContext('2d');
+    mx.font = `600 ${px}px "IBM Plex Mono", monospace`;
+    const w = Math.ceil(mx.measureText(text.toUpperCase()).width) + pad * 2, h = px + pad * 2;
+    mc.width = w * 2; mc.height = h * 2; mx.scale(2, 2);
+    mx.font = `600 ${px}px "IBM Plex Mono", monospace`;
+    mx.fillStyle = 'rgba(6,7,8,.72)'; mx.fillRect(0, 0, w, h);
+    mx.strokeStyle = 'rgba(62,67,74,.9)'; mx.lineWidth = 1; mx.strokeRect(0.5, 0.5, w - 1, h - 1);
+    mx.fillStyle = hex; mx.textBaseline = 'middle';
+    mx.fillText(text.toUpperCase(), pad, h / 2 + 1);
+    const tex = new THREE.CanvasTexture(mc); tex.anisotropy = 8;
+    const m = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false });
+    const s = new THREE.Sprite(m);
+    const k = 0.10; s.scale.set(w * k, h * k, 1);
+    return s;
+  }
+
+  colorOf(n) {
+    if (n.hot === 'gate') return '#E8A33D';
+    if (n.group === 'core') return '#3E63DD';
+    if (n.group === 'proj') return '#E8E6E1';
+    if (n.group === 'wf') return n.hot ? '#3E63DD' : '#5A5F66';
+    return n.hot ? '#30A46C' : '#5A5F66';
+  }
+
+  stageRef = (el) => {
+    if (!el || this._g || typeof ForceGraph3D === 'undefined') return;
+    const full = this.data();
+    this._g = ForceGraph3D()(el)
+      .width(window.innerWidth).height(window.innerHeight)
+      .backgroundColor('#060708')
+      .showNavInfo(false)
+      .nodeLabel(n => `<div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.5px;color:#E8E6E1;background:rgba(11,12,14,.85);border:1px solid #3E434A;padding:3px 7px;border-radius:2px">${n.nome} · ${n.tipo}</div>`)
+      .nodeThreeObject(n => {
+        const grp = new THREE.Group();
+        const col = this.colorOf(n);
+        const r = Math.cbrt(n.val) * (n.hot ? 2.2 : 1.7);
+        // esfera sombreada de verdade: material físico + luzes da cena
+        const core = new THREE.Mesh(
+          new THREE.SphereGeometry(r, 64, 64),
+          new THREE.MeshStandardMaterial({ color: col, roughness: 0.35, metalness: 0.15 })
+        );
+        grp.add(core);
+        const lb = this.labelSprite(n.nome, n.hot ? col : '#8A8F98');
+        lb.position.set(0, -r - 2.6, 0);
+        grp.add(lb);
+        return grp;
+      })
+      .linkColor(l => l.live ? '#5B7FE8' : '#3A3F46')
+      .linkOpacity(this.state.linkOp)
+      .linkWidth(0)
+      .linkDirectionalParticles(l => l.live && this.state.flow ? 3 : 0)
+      .linkDirectionalParticleSpeed(0.004)
+      .linkDirectionalParticleWidth(1.4)
+      .linkDirectionalParticleColor(() => '#E8A33D')
+      .onNodeClick(n => this.setState({ sel: n.id }))
+      .onBackgroundClick(() => this.setState({ sel: null }))
+      .graphData(full);
+    this._g.d3Force('charge').strength(-160);
+    this._g.renderer().setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    // iluminação para dar volume/sombra às esferas
+    const sc = this._g.scene();
+    const key = new THREE.DirectionalLight(0xffffff, 1.4); key.position.set(120, 180, 160); sc.add(key);
+    const fill = new THREE.DirectionalLight(0x8899cc, 0.35); fill.position.set(-140, -80, -120); sc.add(fill);
+    sc.add(new THREE.AmbientLight(0xffffff, 0.28));
+    // profundidade: névoa que dissolve o que está longe no fundo
+    sc.fog = new THREE.FogExp2(0x060708, 0.0016);
+    // poeira estelar distante — dá parallax e camadas de profundidade
+    const N = 900, pos = new Float32Array(N * 3);
+    for (let i = 0; i < N; i++) {
+      const r = 700 + Math.random() * 1500, t = Math.random() * Math.PI * 2, p = Math.acos(2 * Math.random() - 1);
+      pos[i * 3] = r * Math.sin(p) * Math.cos(t);
+      pos[i * 3 + 1] = r * Math.sin(p) * Math.sin(t);
+      pos[i * 3 + 2] = r * Math.cos(p);
+    }
+    const pg = new THREE.BufferGeometry();
+    pg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const dust = new THREE.Points(pg, new THREE.PointsMaterial({ color: 0x5A6070, size: 1.6, sizeAttenuation: true, transparent: true, opacity: 0.5, depthWrite: false }));
+    sc.add(dust);
+    this._onResize = () => this._g.width(window.innerWidth).height(window.innerHeight);
+    window.addEventListener('resize', this._onResize);
+    this._full = full;
+  };
+
+  componentWillUnmount() {
+    if (this._onResize) window.removeEventListener('resize', this._onResize);
+    if (this._g) { this._g.pauseAnimation(); this._g = null; }
+  }
+
+  applyLayer(layer) {
+    if (!this._g) return;
+    if (layer === 'macro') {
+      const keep = new Set(this._full.nodes.filter(n => n.group === 'core' || n.group === 'proj').map(n => n.id));
+      this._g.graphData({
+        nodes: this._full.nodes.filter(n => keep.has(n.id)),
+        links: this._full.links.filter(l => keep.has(l.source.id ?? l.source) && keep.has(l.target.id ?? l.target)),
+      });
+    } else this._g.graphData(this._full);
+  }
+
+  renderVals() {
+    const st = this.state;
+    const full = this._full || this.data();
+    const sel = st.sel ? full.nodes.find(n => n.id === st.sel) : null;
+    return {
+      stageRef: this.stageRef,
+      resumo: '4 projetos · 5 workflows · 4 entidades de dados · 3 runs ativos',
+      nNodes: st.layer === 'macro' ? 5 : full.nodes.length,
+      nLinks: st.layer === 'macro' ? 4 : full.links.length,
+      hasSel: !!sel,
+      sel: sel || { nome: '', tipo: '', info: '', status: '', stColor: '' },
+      clearSel: () => this.setState({ sel: null }),
+      clsMacro: st.layer === 'macro' ? 'pill on' : 'pill',
+      clsFull: st.layer === 'full' ? 'pill on' : 'pill',
+      setMacro: () => { this.setState({ layer: 'macro' }); this.applyLayer('macro'); },
+      setFull: () => { this.setState({ layer: 'full' }); this.applyLayer('full'); },
+      clsPause: st.paused ? 'pill amber' : 'pill',
+      pauseLabel: st.paused ? '▶ retomar' : '⏸ pausar física',
+      togglePause: () => {
+        const p = !st.paused; this.setState({ paused: p });
+        if (this._g) p ? this._g.pauseAnimation() : this._g.resumeAnimation();
+      },
+      clsFlow: st.flow ? 'pill on' : 'pill',
+      toggleFlow: () => {
+        const f = !st.flow; this.setState({ flow: f });
+        if (this._g) this._g.linkDirectionalParticles(l => l.live && f ? 3 : 0);
+      },
+      linkOp: st.linkOp,
+      setLinkOp: (e) => {
+        const v = parseFloat(e.target.value); this.setState({ linkOp: v });
+        if (this._g) this._g.linkOpacity(v);
+      },
+    };
+  }
+}
+</script>
+</body>
+</html>

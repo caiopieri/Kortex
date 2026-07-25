@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<script src="mf-themes.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  body{margin:0;background:#0B0C0E}
+  .mf-root{
+    --bg:#0B0C0E;--surface:#121417;--surface2:#17191D;--border:#26292E;--focus:#3E434A;
+    --text:#E8E6E1;--text2:#8A8F98;--text3:#5A5F66;--accent:#E8A33D;
+    --red:#E5484D;--amber:#E8A33D;--green:#30A46C;--blue:#3E63DD;
+    --inv-bg:#E8E6E1;--inv-text:#0B0C0E;
+    min-height:100vh;background:var(--bg);color:var(--text);
+    font-family:Inter,system-ui,sans-serif;font-size:14px;display:flex;flex-direction:column;
+  }
+  .mf-root[data-theme="stark"]{
+    --bg:#F4F3F0;--surface:#FFFFFF;--surface2:#EDEBE6;--border:#D8D6D0;--focus:#A9A69E;
+    --text:#111213;--text2:#5D6167;--text3:#8B8E93;--accent:#B87514;
+    --red:#C62A30;--amber:#B87514;--green:#1E7F50;--blue:#2F4FC4;
+    --inv-bg:#111213;--inv-text:#F4F3F0;
+  }
+  .mf-root, .mf-top, .mf-side, .card, .ni, .pill, .btn, .kpi{transition:background-color .32s ease, border-color .32s ease, color .32s ease}
+  .eyebrow{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3)}
+  .num{font-family:'IBM Plex Mono',monospace;font-size:10.5px;font-weight:600;letter-spacing:1.4px;color:var(--text2);text-transform:uppercase}
+  .mono{font-family:'IBM Plex Mono',monospace}
+  .title{font-family:'Space Grotesk',system-ui;font-weight:600;letter-spacing:.2px}
+  .mf-top{display:flex;align-items:center;gap:12px;height:52px;padding:0 18px;border-bottom:1px solid var(--border);background:var(--surface);flex:none;position:relative;z-index:5}
+  .mf-body{display:flex;flex:1;min-height:0}
+  .mf-side{width:238px;flex:none;border-right:1px solid var(--border);background:var(--surface);overflow:auto;padding:8px 0}
+  .mf-main{flex:1;min-width:0;overflow:auto;padding:22px 24px 60px;display:flex;flex-direction:column;gap:26px;background:var(--bg);position:relative}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:2px}
+  .card.hov{cursor:pointer}
+  .card.hov:hover{border-color:var(--focus)}
+  .pill{display:inline-flex;align-items:center;gap:6px;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.9px;text-transform:uppercase;padding:5px 9px;border:1px solid var(--border);border-radius:2px;color:var(--text2);background:transparent;cursor:pointer}
+  .pill.on{color:var(--text);border-color:var(--focus);background:var(--surface2)}
+  .btn{display:inline-flex;align-items:center;gap:7px;font-family:Inter;font-weight:600;font-size:12px;padding:8px 13px;border-radius:2px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer}
+  .btn:hover{border-color:var(--focus)}
+  .btn-primary{background:var(--inv-bg);color:var(--inv-text);border-color:var(--inv-bg)}
+  .btn-primary:hover{border-color:var(--inv-bg);opacity:.9}
+  .btn-sm{padding:5px 10px;font-size:11px}
+  .zt{display:flex;justify-content:space-between;align-items:center;padding:15px 18px 6px;font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:600;letter-spacing:1.6px;text-transform:uppercase;color:var(--text3);cursor:pointer;user-select:none}
+  .zt.fixed{cursor:default;color:var(--accent)}
+  .ni{display:flex;align-items:center;gap:9px;padding:7px 18px;font-size:13px;color:var(--text2);cursor:pointer;border-left:2px solid transparent}
+  .ni:hover{color:var(--text);background:var(--surface2)}
+  .ni.on{color:var(--text);background:var(--surface2);border-left-color:var(--accent);font-weight:600}
+  .ni.sub{padding-left:36px;font-size:12.5px}
+  .badge{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;background:var(--accent);color:#0B0C0E;border-radius:2px;padding:1px 6px;line-height:1.5}
+  .badge.mla{margin-left:auto}
+  .sh{flex:none;position:relative}
+  .sh.blue{width:9px;height:9px;border-radius:50%;background:var(--blue)}
+  .sh.green{width:9px;height:9px;border-radius:50%;background:var(--green)}
+  .sh.amber{width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:11px solid var(--amber)}
+  .sh.red{width:11px;height:11px;background:var(--red);clip-path:polygon(30% 0,70% 0,100% 30%,100% 70%,70% 100%,30% 100%,0 70%,0 30%)}
+  .sh.blue.pulse::after{content:"";position:absolute;left:50%;top:50%;width:9px;height:9px;margin:-4.5px 0 0 -4.5px;border-radius:50%;background:var(--blue);animation:mfpulse 2.1s ease-out infinite}
+  @keyframes mfpulse{0%{opacity:.65;transform:scale(1)}100%{opacity:0;transform:scale(3)}}
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+  .kpi{padding:14px 15px;background:var(--surface);border:1px solid var(--border);border-radius:2px}
+  .hero{position:relative}
+  .bk{position:absolute;width:11px;height:11px;border:1.5px solid var(--focus);opacity:.7;pointer-events:none}
+  .bk.tl{top:-1px;left:-1px;border-right:0;border-bottom:0}
+  .bk.tr{top:-1px;right:-1px;border-left:0;border-bottom:0}
+  .bk.bl{bottom:-1px;left:-1px;border-right:0;border-top:0}
+  .bk.br{bottom:-1px;right:-1px;border-left:0;border-top:0}
+  .theatre{background:#0A0B0D;border:1px solid #202327;border-radius:2px;position:relative;overflow:hidden}
+  .flow{stroke:#3E63DD;stroke-width:1.4;fill:none;stroke-dasharray:3 6;animation:mfflow 1.5s linear infinite}
+  @keyframes mfflow{to{stroke-dashoffset:-18}}
+  .npulse{transform-origin:center;transform-box:fill-box;animation:mfnode 2.3s ease-in-out infinite}
+  @keyframes mfnode{0%,100%{opacity:.9}50%{opacity:.4}}
+  .halo{transform-origin:center;transform-box:fill-box;animation:mfhalo 2.3s ease-out infinite}
+  @keyframes mfhalo{0%{opacity:.5;transform:scale(.6)}100%{opacity:0;transform:scale(2.4)}}
+  .avatar{width:52px;height:52px;border-radius:50%;background:var(--surface2);border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text2);flex:none}
+  .avatar.ring-blue{border-color:var(--blue)} .avatar.ring-amber{border-color:var(--amber)} .avatar.ring-green{border-color:var(--green)} .avatar.ring-red{border-color:var(--red)}
+  .mf-root[data-anim="off"] .flow, .mf-root[data-anim="off"] .npulse, .mf-root[data-anim="off"] .halo, .mf-root[data-anim="off"] .sh.pulse::after{animation:none}
+  .mf-root[data-density="compacto"] .kpi{padding:9px 11px}
+  .mf-root[data-density="compacto"] .ni{padding:5px 18px}
+  .mf-root[data-density="compacto"] .mf-main{gap:18px}
+  .arrow{color:var(--text3)}
+  .lnk{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.6px;text-transform:uppercase;color:var(--text2);cursor:pointer;text-decoration:none}
+  .lnk:hover{color:var(--text)}
+  .toast{position:fixed;right:26px;bottom:26px;z-index:40;max-width:360px;background:var(--surface);border:1px solid var(--red);border-left:3px solid var(--red);border-radius:2px;padding:12px 14px;box-shadow:0 8px 30px rgba(0,0,0,.4)}
+</style>
+</helmet>
+
+<div class="mf-root" data-theme="{{ theme }}" data-anim="{{ anim }}" data-density="{{ density }}">
+
+  <!-- ===================== TOPBAR ===================== -->
+  <div class="mf-top">
+    <div style="width:19px;height:19px;border:1.5px solid var(--text);border-radius:2px;position:relative">
+      <div style="position:absolute;inset:4px;border:1.5px solid var(--accent)"></div>
+    </div>
+    <span class="title" style="font-size:13px;letter-spacing:1px">META-FÁBRICA</span>
+    <span class="pill on" style="margin-left:4px">Projeto: Todos ▾</span>
+    <div style="flex:1"></div>
+    <span class="eyebrow" style="opacity:.8">estado · demo</span>
+    <span class="{{ scHClass }}" onClick="{{ goHealthy }}">Saudável</span>
+    <span class="{{ scPClass }}" onClick="{{ goPending }}">Pendências</span>
+    <span class="{{ scEClass }}" onClick="{{ goError }}">Erro</span>
+    <span class="{{ scVClass }}" onClick="{{ goEmpty }}">Vazio</span>
+    <div style="width:1px;height:22px;background:var(--border);margin:0 4px"></div>
+    <span class="pill" onClick="{{ toggleTheme }}" title="Alternar tema (§8.15)">◐ {{ themeLabel }}</span>
+    <span class="btn btn-primary btn-sm" style="margin-left:2px">+ Nova missão</span>
+    <span class="pill" style="position:relative;padding:5px 8px" title="Caixa do Fundador">
+      <span style="font-size:13px">🔔</span>
+      <sc-if value="{{ hasPend }}" hint-placeholder-val="{{ true }}"><span class="badge">{{ pendCount }}</span></sc-if>
+    </span>
+  </div>
+
+  <div class="mf-body">
+    <!-- ===================== SIDEBAR ===================== -->
+    <div class="mf-side">
+      <div class="zt fixed"><span>Fixas</span></div>
+      <div class="ni on">Home</div>
+      <div class="ni">Caixa do Fundador
+        <sc-if value="{{ hasPend }}" hint-placeholder-val="{{ true }}"><span class="badge mla">{{ pendCount }}</span></sc-if>
+      </div>
+      <div class="ni">Mapa geral</div>
+
+      <div class="zt" onClick="{{ togP }}"><span>Projeto: Todos</span><span>{{ chevP }}</span></div>
+      <sc-if value="{{ gP }}" hint-placeholder-val="{{ true }}">
+        <div>
+          <div class="ni">Dashboard</div>
+          <div class="ni">Grafos ▾</div>
+          <div class="ni sub">Workflows</div>
+          <div class="ni sub">Datahouse</div>
+          <div class="ni">Runs &amp; Histórico</div>
+        </div>
+      </sc-if>
+
+      <div class="zt" onClick="{{ togB }}"><span>Biblioteca</span><span>{{ chevB }}</span></div>
+      <sc-if value="{{ gB }}" hint-placeholder-val="{{ true }}">
+        <div>
+          <div class="ni">Agentes</div>
+          <div class="ni">Skills</div>
+          <div class="ni">Curador</div>
+          <div class="ni">Logs</div>
+          <div class="ni">Custos</div>
+        </div>
+      </sc-if>
+
+      <div class="zt" onClick="{{ togS }}"><span>Sistema</span><span>{{ chevS }}</span></div>
+      <sc-if value="{{ gS }}" hint-placeholder-val="{{ true }}">
+        <div>
+          <div class="ni">Conexões</div>
+          <div class="ni">Configurações</div>
+        </div>
+      </sc-if>
+    </div>
+
+    <!-- ===================== MAIN ===================== -->
+    <div class="mf-main">
+
+      <!-- degraded banner -->
+      <sc-if value="{{ hasDegraded }}" hint-placeholder-val="{{ false }}">
+        <div class="card" style="border-color:var(--amber);border-left:3px solid var(--amber);padding:12px 15px;display:flex;align-items:center;gap:12px">
+          <span class="sh amber"></span>
+          <div style="flex:1">
+            <span class="eyebrow" style="color:var(--amber)">Degradado · {{ degraded.evt }}</span>
+            <div class="mono" style="font-size:12.5px;color:var(--text);margin-top:3px">{{ degraded.text }}</div>
+          </div>
+          <span class="lnk">ver conexões →</span>
+        </div>
+      </sc-if>
+
+      <!-- ============ NOT EMPTY: the 6 blocks ============ -->
+      <sc-if value="{{ notEmpty }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;flex-direction:column;gap:26px">
+
+          <!-- 01 CUSTOS -->
+          <div>
+            <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px">
+              <span class="num">01 — Custos</span><span class="lnk">abrir custos →</span>
+            </div>
+            <div class="kpis">
+              <div class="kpi"><div class="eyebrow">Hoje</div><div class="mono" style="font-size:20px;font-weight:600;margin-top:6px">{{ costs.hoje }}</div><div class="mono" style="font-size:11px;color:var(--text3);margin-top:4px">{{ costs.hojeD }}</div></div>
+              <div class="kpi"><div class="eyebrow">Mês</div><div class="mono" style="font-size:20px;font-weight:600;margin-top:6px">{{ costs.mes }}</div><div class="mono" style="font-size:11px;color:var(--text3);margin-top:4px">{{ costs.mesD }}</div></div>
+              <div class="kpi"><div class="eyebrow">Por provedor</div><div class="mono" style="font-size:13px;margin-top:10px;color:var(--text2)">{{ costs.prov }}</div></div>
+              <div class="kpi"><div class="eyebrow">Projeção do mês</div><div class="mono" style="font-size:20px;font-weight:600;margin-top:6px">{{ costs.proj }}</div></div>
+            </div>
+          </div>
+
+          <!-- 02 FILA DE DECISÃO (condicional) -->
+          <sc-if value="{{ showPend }}" hint-placeholder-val="{{ true }}">
+            <div>
+              <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px">
+                <span class="num" style="color:var(--accent)">02 — Fila de decisão · {{ pendCount }}</span><span class="lnk">ver todas na Caixa do Fundador →</span>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:10px">
+                <sc-for list="{{ pend }}" as="p" hint-placeholder-count="2">
+                  <div class="card" style="border-left:2px solid var(--accent);padding:14px 15px;display:flex;flex-direction:column;gap:9px">
+                    <div style="display:flex;align-items:center;gap:9px">
+                      <span class="{{ p.shape }}"></span>
+                      <span class="eyebrow" style="color:var(--accent)">{{ p.origin }}</span>
+                      <span class="mono" style="font-size:11px;color:var(--text3)">{{ p.project }} · {{ p.node }}</span>
+                    </div>
+                    <div class="title" style="font-size:14.5px">{{ p.q }}</div>
+                    <div class="mono" style="font-size:11.5px;color:var(--text2)">motivo — "{{ p.motivo }}"</div>
+                    <div style="display:flex;gap:8px;margin-top:2px">
+                      <span class="btn btn-primary btn-sm" onClick="{{ p.onAct1 }}">{{ p.act1 }}</span>
+                      <span class="btn btn-sm" onClick="{{ p.onAct2 }}">{{ p.act2 }}</span>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+
+          <!-- 03 MAPA GERAL VIVO -->
+          <div>
+            <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px">
+              <span class="num">03 — Mapa geral vivo</span>
+              <span class="lnk" style="display:flex;align-items:center;gap:6px"><span class="{{ liveShape }}"></span>{{ live }} · expandir →</span>
+            </div>
+            <div class="theatre hero" style="height:230px">
+              <span class="bk tl" style="border-color:#3a3d42"></span><span class="bk tr" style="border-color:#3a3d42"></span><span class="bk bl" style="border-color:#3a3d42"></span><span class="bk br" style="border-color:#3a3d42"></span>
+              <div style="position:absolute;left:14px;top:12px" class="eyebrow">Teatro de operações · escopo Todos</div>
+              <svg viewBox="0 0 900 230" preserveAspectRatio="xMidYMid slice" style="position:absolute;inset:0;width:100%;height:100%">
+                <g stroke-linecap="round">
+                  <path d="M150,120 C260,120 260,70 380,70" stroke="#2b2f35" stroke-width="1.2" fill="none"/>
+                  <path d="M150,120 C260,120 260,170 380,170" stroke="#2b2f35" stroke-width="1.2" fill="none"/>
+                  <path class="flow" d="M380,70 C500,70 500,120 620,120"/>
+                  <path d="M380,170 C500,170 500,120 620,120" stroke="#2b2f35" stroke-width="1.2" fill="none"/>
+                  <path class="flow" d="M620,120 C720,120 720,90 800,90"/>
+                  <path d="M620,120 C720,120 720,160 800,160" stroke="#2b2f35" stroke-width="1.2" fill="none"/>
+                  <path d="M150,120 C90,120 90,60 60,50" stroke="#2b2f35" stroke-width="1" fill="none"/>
+                </g>
+                <circle class="halo" cx="380" cy="70" r="9" fill="#3E63DD"/>
+                <circle class="npulse" cx="380" cy="70" r="6" fill="#3E63DD"/>
+                <circle cx="150" cy="120" r="7" fill="#8A8F98"/>
+                <circle cx="380" cy="170" r="6" fill="#30A46C"/>
+                <circle class="npulse" cx="620" cy="120" r="6" fill="#3E63DD"/>
+                <circle cx="800" cy="90" r="5" fill="#8A8F98"/>
+                <circle cx="800" cy="160" r="5" fill="#E8A33D"/>
+                <circle cx="60" cy="50" r="4" fill="#5A5F66"/>
+                <text x="150" y="145" fill="#5A5F66" font-family="IBM Plex Mono" font-size="10">planner</text>
+                <text x="360" y="55" fill="#8A8F98" font-family="IBM Plex Mono" font-size="10">pesquisa-alfa</text>
+                <text x="360" y="192" fill="#8A8F98" font-family="IBM Plex Mono" font-size="10">pesquisa-beta</text>
+                <text x="600" y="145" fill="#8A8F98" font-family="IBM Plex Mono" font-size="10">global_evaluator</text>
+              </svg>
+            </div>
+          </div>
+
+          <!-- 04 PROJETOS -->
+          <div>
+            <div style="margin-bottom:10px"><span class="num">04 — Projetos</span></div>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
+              <sc-for list="{{ projects }}" as="pr" hint-placeholder-count="4">
+                <div class="card hov" style="padding:14px;position:relative;overflow:hidden;min-height:120px;display:flex;flex-direction:column">
+                  <svg viewBox="0 0 200 120" style="position:absolute;inset:0;width:100%;height:100%;opacity:.09">
+                    <path d="M20,90 C70,90 70,30 130,30 C170,30 170,80 190,60" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                    <circle cx="20" cy="90" r="4" fill="currentColor"/><circle cx="130" cy="30" r="4" fill="currentColor"/><circle cx="190" cy="60" r="3" fill="currentColor"/>
+                  </svg>
+                  <div style="position:relative;flex:1">
+                    <div class="title" style="font-size:14px">{{ pr.name }}</div>
+                    <div class="mono" style="font-size:11px;color:var(--text2);margin-top:5px">{{ pr.a }}</div>
+                    <div class="mono" style="font-size:11px;color:var(--text3);margin-top:2px">{{ pr.b }}</div>
+                  </div>
+                  <div style="position:relative;display:flex;align-items:center;gap:8px;padding-top:10px;margin-top:8px;border-top:1px solid var(--border)">
+                    <span class="{{ pr.shape }}"></span>
+                    <span class="mono" style="font-size:10.5px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ pr.ev }}</span>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <!-- 05 ORQUESTRADOR -->
+          <div>
+            <div style="margin-bottom:10px"><span class="num">05 — Orquestrador</span></div>
+            <div class="card hero" style="display:grid;grid-template-columns:1.1fr 1.3fr .8fr;gap:0;min-height:200px;overflow:hidden">
+              <span class="bk tl"></span><span class="bk tr"></span><span class="bk bl"></span><span class="bk br"></span>
+              <!-- chat -->
+              <div style="padding:16px;border-right:1px solid var(--border);display:flex;flex-direction:column">
+                <div class="eyebrow">Chat · dispara missão em linguagem natural</div>
+                <div style="flex:1;margin:12px 0;display:flex;flex-direction:column;gap:8px;justify-content:flex-end">
+                  <div class="mono" style="font-size:11.5px;color:var(--text2);align-self:flex-start;background:var(--surface2);border:1px solid var(--border);padding:8px 10px;border-radius:2px;max-width:90%">Como estão os runs de hoje?</div>
+                  <div class="mono" style="font-size:11.5px;color:var(--text);align-self:flex-end;max-width:92%;line-height:1.5">3 ativos · 1 aguarda você no gate de cobertura. Custo hoje {{ costs.hoje }}.</div>
+                </div>
+                <div class="card" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg)">
+                  <span class="mono" style="font-size:11.5px;color:var(--text3);flex:1">Peça um status ou descreva uma missão…</span>
+                  <span class="arrow">↑</span>
+                </div>
+              </div>
+              <!-- feed -->
+              <div style="padding:16px;border-right:1px solid var(--border);display:flex;flex-direction:column">
+                <div class="eyebrow">Feed de processos · tempo real</div>
+                <div style="margin-top:12px;display:flex;flex-direction:column">
+                  <sc-for list="{{ feed }}" as="f" hint-placeholder-count="4">
+                    <div style="display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--border)">
+                      <span class="mono" style="font-size:11.5px;color:var(--text2);flex:1">{{ f.txt }}</span>
+                      <sc-if value="{{ f.hasBtn }}" hint-placeholder-val="{{ false }}"><span class="btn btn-sm" style="padding:3px 9px;font-size:10.5px">{{ f.btn }}</span></sc-if>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+              <!-- avatar -->
+              <div style="padding:16px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;background:var(--surface2)">
+                <div class="eyebrow" style="align-self:flex-start">Presença</div>
+                <div style="flex:1;display:flex;align-items:flex-end">
+                  <div style="width:96px;height:130px;background:linear-gradient(180deg,var(--surface) 0%,var(--surface2) 100%);border:1px solid var(--border);border-radius:48px 48px 4px 4px;position:relative;display:flex;align-items:flex-start;justify-content:center">
+                    <div style="width:44px;height:44px;border-radius:50%;background:var(--bg);border:1.5px solid var(--focus);margin-top:16px;position:relative">
+                      <div style="position:absolute;left:12px;right:12px;top:19px;height:3px;background:var(--accent);border-radius:2px;box-shadow:0 0 8px var(--accent)"></div>
+                    </div>
+                  </div>
+                </div>
+                <div class="mono" style="font-size:10px;color:var(--text3);margin-top:8px">avatar · slot P1</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 06 AGENTES -->
+          <div>
+            <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px">
+              <span class="num">06 — Agentes</span><span class="lnk">ver todos →</span>
+            </div>
+            <div style="display:flex;gap:22px;align-items:flex-start;flex-wrap:wrap">
+              <sc-for list="{{ agents }}" as="a" hint-placeholder-count="6">
+                <div style="display:flex;flex-direction:column;align-items:center;gap:7px;width:78px" title="{{ a.now }}">
+                  <div class="{{ a.avatarClass }}">{{ a.mono }}</div>
+                  <div class="mono" style="font-size:10px;color:var(--text2);text-align:center;line-height:1.3">{{ a.role }}</div>
+                  <div class="mono" style="font-size:9px;color:var(--text3)">{{ a.now }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+        </div>
+      </sc-if>
+
+      <!-- ============ EMPTY STATE ============ -->
+      <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:22px">
+          <div>
+            <div style="margin-bottom:10px"><span class="num">01 — Custos</span></div>
+            <div class="kpis">
+              <div class="kpi"><div class="eyebrow">Hoje</div><div class="mono" style="font-size:20px;font-weight:600;margin-top:6px;color:var(--text3)">US$ 0.00</div></div>
+              <div class="kpi"><div class="eyebrow">Mês</div><div class="mono" style="font-size:20px;font-weight:600;margin-top:6px;color:var(--text3)">US$ 0.00</div></div>
+              <div class="kpi"><div class="eyebrow">Por provedor</div><div class="mono" style="font-size:13px;margin-top:10px;color:var(--text3)">—</div></div>
+              <div class="kpi"><div class="eyebrow">Projeção</div><div class="mono" style="font-size:20px;font-weight:600;margin-top:6px;color:var(--text3)">—</div></div>
+            </div>
+          </div>
+          <div class="theatre hero" style="height:280px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px">
+            <span class="bk tl" style="border-color:#3a3d42"></span><span class="bk tr" style="border-color:#3a3d42"></span><span class="bk bl" style="border-color:#3a3d42"></span><span class="bk br" style="border-color:#3a3d42"></span>
+            <div style="width:38px;height:38px;border:1.5px dashed #4a4e54;border-radius:2px"></div>
+            <div class="title" style="font-size:17px;color:#c9ccd1">Nenhuma missão ainda</div>
+            <div class="mono" style="font-size:12px;color:#7c828a;max-width:380px;text-align:center;line-height:1.6">A fábrica está ociosa. Dispare a primeira missão — pelo botão <b style="color:#c9ccd1">+ Nova missão</b> ou pedindo ao Orquestrador — e este teatro passa a pulsar com a execução ao vivo.</div>
+            <span class="btn btn-primary" style="background:#E8E6E1;color:#0B0C0E;border-color:#E8E6E1">+ Nova missão</span>
+          </div>
+        </div>
+      </sc-if>
+
+    </div>
+  </div>
+
+  <!-- ===================== TOAST (só vermelho) ===================== -->
+  <sc-if value="{{ hasToast }}" hint-placeholder-val="{{ false }}">
+    <div class="toast">
+      <div style="display:flex;align-items:center;gap:8px"><span class="sh red"></span><span class="eyebrow" style="color:var(--red)">Erro</span></div>
+      <div class="mono" style="font-size:12px;color:var(--text);margin-top:6px">{{ toast.text }}</div>
+    </div>
+  </sc-if>
+
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;100%&quot;,&quot;height&quot;:&quot;100%&quot;},&quot;animacoes&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Comportamento&quot;},&quot;densidade&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;normal&quot;,&quot;compacto&quot;],&quot;default&quot;:&quot;normal&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Comportamento&quot;}}">
+class Component extends DCLogic {
+  state = { theme: 'paperclip', scenario: 'pending', resolved: [], gP: true, gB: true, gS: true };
+
+  scenarios() {
+    return {
+      healthy: {
+        live: 'AO VIVO', liveShape: 'sh blue pulse',
+        costs: { hoje: 'US$ 1.98', hojeD: '▼ 6% vs ontem', mes: 'US$ 34.10', mesD: '▼ 9% vs mês ant.', proj: 'US$ 52', prov: 'nvidia · codex' },
+        pendencias: [],
+        projects: [
+          { name: 'csv→json', a: '2 runs ativos', b: 'US$ 1.02/dia', shape: 'sh blue pulse', ev: 'executor.chamado · qa_engineer' },
+          { name: 'pesquisa-receita', a: '1 run ativo', b: 'US$ 0.44/dia', shape: 'sh blue pulse', ev: 'portao.aprovado · verifier' },
+          { name: 'logisti-fatia2', a: '1 run ativo', b: 'US$ 0.52/dia', shape: 'sh blue pulse', ev: 'paralelo.iniciado · 3 subagentes' },
+          { name: 'anuncio-3d', a: '0 ativos', b: '—', shape: 'sh green', ev: 'tarefa.concluida · 3h' },
+        ],
+        feed: [
+          { txt: 'portao.aprovado · verifier:pesquisa-alfa · ciclo 1' },
+          { txt: 'executor.respondeu · qa-engineer-02 · tent.1' },
+          { txt: 'paralelo.iniciado · 3 subagentes' },
+          { txt: 'modelo.roteado_tier · redator → media' },
+        ],
+        degraded: null, toast: null,
+      },
+      pending: {
+        live: 'AO VIVO', liveShape: 'sh blue pulse',
+        costs: { hoje: 'US$ 2.41', hojeD: '▲ 12% vs ontem', mes: 'US$ 38.90', mesD: '▼ 4% vs mês ant.', proj: 'US$ 61', prov: 'nvidia · codex · claude' },
+        pendencias: [
+          { id: 'p1', shape: 'sh amber', origin: 'Gate humano', project: 'pesquisa-receita', node: 'global_evaluator', q: 'Gate de cobertura reprovou (ciclo 2). Prosseguir mesmo assim?', motivo: 'canal beta sem evidência quantitativa de ticket médio', act1: 'Prosseguir', act2: 'Revisar' },
+          { id: 'p2', shape: 'sh amber', origin: 'Curador', project: 'catálogo', node: 'papel código-médio', q: 'Promover Kimi-k2.6 a certificado em código-médio?', motivo: 'aprovação de 1ª tentativa 82% em 14 runs, acima do piso', act1: 'Promover', act2: 'Reprovar' },
+          { id: 'p3', shape: 'sh amber', origin: 'Orquestrador', project: 'logisti-fatia2', node: 'run em curso', q: 'Trocar preset para free-escalada neste run?', motivo: '2 subtarefas difíceis reprovando no tier simples', act1: 'Trocar', act2: 'Manter' },
+        ],
+        projects: [
+          { name: 'csv→json', a: '2 runs ativos', b: 'US$ 1.20/dia', shape: 'sh blue pulse', ev: 'executor.chamado · qa_engineer' },
+          { name: 'pesquisa-receita', a: '1 run · 1 pendência', b: 'US$ 0.68/dia', shape: 'sh amber', ev: 'escalado → fundador' },
+          { name: 'logisti-fatia2', a: '1 run ativo', b: 'US$ 0.53/dia', shape: 'sh blue pulse', ev: 'executor.chamado · synthesizer' },
+          { name: 'anuncio-3d', a: '0 ativos', b: '—', shape: 'sh green', ev: 'tarefa.concluida · 14h' },
+        ],
+        feed: [
+          { txt: 'escalado → fundador · gate cobertura', hasBtn: true, btn: 'Ver mais' },
+          { txt: 'Curador propõe: promover Kimi em código-médio', hasBtn: true, btn: 'Aprovar' },
+          { txt: 'paralelo.iniciado · 2 subagentes' },
+          { txt: 'portao.aprovado · verifier:pesquisa-alfa' },
+        ],
+        degraded: null, toast: null,
+      },
+      error: {
+        live: 'DEGRADADO', liveShape: 'sh amber',
+        costs: { hoje: 'US$ 4.87', hojeD: '▲ 61% vs ontem', mes: 'US$ 44.20', mesD: '▲ 8% vs mês ant.', proj: 'US$ 78', prov: 'codex · nvidia esgotado' },
+        pendencias: [
+          { id: 'e1', shape: 'sh amber', origin: 'Gate humano', project: 'pesquisa-receita', node: 'global_evaluator', q: 'Gate de cobertura reprovou (ciclo 2). Prosseguir mesmo assim?', motivo: 'canal beta sem evidência quantitativa de ticket médio', act1: 'Prosseguir', act2: 'Revisar' },
+        ],
+        projects: [
+          { name: 'csv→json', a: '1 run · fallback', b: 'US$ 2.90/dia', shape: 'sh red', ev: 'provedor.esgotado · nvidia' },
+          { name: 'impressao-3d', a: 'run abortado', b: 'US$ 1.10', shape: 'sh red', ev: 'run-real…FALHOU-burst' },
+          { name: 'pesquisa-receita', a: '1 pendência', b: 'US$ 0.68/dia', shape: 'sh amber', ev: 'escalado → fundador' },
+          { name: 'logisti-fatia2', a: '1 run ativo', b: 'US$ 0.53/dia', shape: 'sh blue pulse', ev: 'modelo.fallback · kimi→codex' },
+        ],
+        feed: [
+          { txt: 'provedor.auto_esgotado · nvidia', hasBtn: true, btn: 'Ver mais' },
+          { txt: 'modelo.reroteado_esgotado · kimi → codex' },
+          { txt: 'executor.erro · pesquisa-beta · timeout' },
+          { txt: 'escalado → fundador · gate cobertura' },
+        ],
+        degraded: { evt: 'provedor.auto_esgotado', text: 'Provedor NVIDIA esgotado (429). Sem o Kimi-k2.6, o motor caiu para codex/gpt-5.4 no verifier.' },
+        toast: { text: 'executor.erro · pesquisa-beta · timeout no tier simples (tent.1)' },
+      },
+      empty: {
+        live: 'ENCERRADO', liveShape: 'sh green',
+        costs: { hoje: 'US$ 0.00', hojeD: '—', mes: 'US$ 0.00', mesD: '—', proj: '—', prov: '—' },
+        pendencias: [], projects: [], feed: [], degraded: null, toast: null,
+      },
+    };
+  }
+
+  agents() {
+    return [
+      { mono: 'αlf', role: 'pesquisador', now: 'pesquisando', avatarClass: 'avatar ring-blue' },
+      { mono: 'βet', role: 'pesquisador', now: 'aguardando', avatarClass: 'avatar ring-amber' },
+      { mono: 'pln', role: 'planner', now: 'planejando', avatarClass: 'avatar ring-blue' },
+      { mono: 'qae', role: 'qa_engineer', now: 'verificando', avatarClass: 'avatar ring-blue' },
+      { mono: 'syn', role: 'synthesizer', now: 'ocioso', avatarClass: 'avatar ring-green' },
+      { mono: 'arq', role: 'arquiteto', now: 'ocioso', avatarClass: 'avatar ring-green' },
+    ];
+  }
+
+  renderVals() {
+    const anim = (this.props.animacoes ?? true) ? 'on' : 'off';
+    const density = this.props.densidade ?? 'normal';
+    const sc = this.state.scenario;
+    const s = this.scenarios()[sc];
+    const pend = (s.pendencias || []).filter(p => !this.state.resolved.includes(p.id)).map(p => ({
+      ...p,
+      onAct1: () => this.setState({ resolved: [...this.state.resolved, p.id] }),
+      onAct2: () => this.setState({ resolved: [...this.state.resolved, p.id] }),
+    }));
+    const cls = (x) => sc === x ? 'pill on' : 'pill';
+    return {
+      theme: this.state.theme, themeLabel: this.state.theme === 'paperclip' ? 'ESCURO' : 'CLARO',
+      anim, density,
+      scenario: sc, notEmpty: sc !== 'empty', isEmpty: sc === 'empty',
+      live: s.live, liveShape: s.liveShape,
+      costs: s.costs, projects: s.projects, feed: s.feed, agents: this.agents(),
+      pend, pendCount: pend.length, hasPend: pend.length > 0,
+      showPend: pend.length > 0 && sc !== 'empty',
+      hasDegraded: !!s.degraded, degraded: s.degraded || {},
+      hasToast: !!s.toast, toast: s.toast || {},
+      gP: this.state.gP, gB: this.state.gB, gS: this.state.gS,
+      chevP: this.state.gP ? '▾' : '▸', chevB: this.state.gB ? '▾' : '▸', chevS: this.state.gS ? '▾' : '▸',
+      scHClass: cls('healthy'), scPClass: cls('pending'), scEClass: cls('error'), scVClass: cls('empty'),
+      goHealthy: () => this.setState({ scenario: 'healthy', resolved: [] }),
+      goPending: () => this.setState({ scenario: 'pending', resolved: [] }),
+      goError: () => this.setState({ scenario: 'error', resolved: [] }),
+      goEmpty: () => this.setState({ scenario: 'empty', resolved: [] }),
+      toggleTheme: () => this.setState({ theme: this.state.theme === 'paperclip' ? 'stark' : 'paperclip' }),
+      togP: () => this.setState({ gP: !this.state.gP }),
+      togB: () => this.setState({ gB: !this.state.gB }),
+      togS: () => this.setState({ gS: !this.state.gS }),
+    };
+  }
+}
+</script>
+</body>
+</html>
