@@ -179,7 +179,7 @@ export default function Board() {
       <style>{`
         .bcard{background:var(--surface);border:1px solid var(--border);border-radius:2px;padding:11px 12px;display:flex;flex-direction:column;gap:8px}
         .bcard.drag{border-left:2px solid var(--focus)}
-        .bcard.amber{border-left:2px solid var(--amber);box-shadow:0 0 22px rgba(232,163,61,.14)}
+        .bcard.amber{border-left:2px solid var(--amber);box-shadow:0 0 22px color-mix(in srgb, var(--amber) 14%, transparent)}
         .bcard.done{opacity:.86}
         .btop{display:flex;align-items:center;gap:7px}
         .handle{cursor:grab;color:var(--text3);font-size:13px;letter-spacing:-2px}
