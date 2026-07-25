@@ -28,7 +28,7 @@ function NodeCard({ data, selected }) {
     background: 'var(--surface)',
     border: data.kind === 'ds' ? '1px dashed var(--focus)' : '1px solid ' + (data.paused ? 'var(--amber)' : selected ? 'var(--accent)' : 'var(--border)'),
     borderLeft: data.kind === 'valid' ? '3px solid var(--green)' : undefined,
-    boxShadow: data.paused ? '0 0 0 1px var(--amber),0 0 26px rgba(232,163,61,.22)' : (selected ? '0 0 0 1px var(--accent)' : 'none'),
+    boxShadow: data.paused ? '0 0 0 1px var(--amber),0 0 26px color-mix(in srgb, var(--amber) 22%, transparent)' : (selected ? '0 0 0 1px var(--accent)' : 'none'),
     borderRadius: 2,
     padding: 11,
     display: 'flex',

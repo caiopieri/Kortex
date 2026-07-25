@@ -8,7 +8,7 @@ const STYLES = `
     font-size: 10px;
     font-weight: 600;
     background: var(--accent);
-    color: #0B0C0E;
+    color: var(--inv-text);
     border-radius: 2px;
     padding: 1px 6px;
   }
@@ -173,7 +173,7 @@ const STYLES = `
   }
   .cert-ok {
     color: var(--green);
-    border-color: rgba(48, 164, 108, 0.4);
+    border-color: color-mix(in srgb, var(--green) 40%, transparent);
   }
   .cert-shadow {
     color: var(--text2);
@@ -181,7 +181,7 @@ const STYLES = `
   }
   .cert-bad {
     color: var(--red);
-    border-color: rgba(229, 72, 77, 0.4);
+    border-color: color-mix(in srgb, var(--red) 40%, transparent);
   }
   .row {
     display: flex;

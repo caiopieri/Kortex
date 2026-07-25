@@ -24,7 +24,7 @@ const STYLE_TAG = `
   .avatar.ring-red { border-color: var(--red); }
   .lnk { font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: .6px; text-transform: uppercase; color: var(--text2); cursor: pointer; text-decoration: none; }
   .lnk:hover { color: var(--text); }
-  .toast { position: fixed; right: 26px; bottom: 26px; z-index: 40; max-width: 360px; background: var(--surface); border: 1px solid var(--red); border-left: 3px solid var(--red); border-radius: 2px; padding: 12px 14px; box-shadow: 0 8px 30px rgba(0,0,0,.4); }
+  .toast { position: fixed; right: 26px; bottom: 26px; z-index: 40; max-width: 360px; background: var(--surface); border: 1px solid var(--red); border-left: 3px solid var(--red); border-radius: 2px; padding: 12px 14px; box-shadow: var(--card-shadow, 0 8px 30px rgba(0,0,0,.4)); }
 `;
 
 export default function Home() {
