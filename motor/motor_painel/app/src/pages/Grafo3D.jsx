@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { usePoll, fetchDados, fetchRuns } from '../api.js';
+import { usePoll, fetchDados, fetchRuns, getMissaoAtiva } from '../api.js';
 
 /* Lê um token de cor do tema ativo (theme.js injeta as vars em :root/.mf-root). */
 const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
@@ -30,6 +30,7 @@ const colorOf = (n) => {
 export default function Grafo3D() {
   const { data: runs } = usePoll(fetchRuns);
   const { data: fullData } = usePoll(fetchDados);
+  const { data: missaoAtiva } = usePoll(getMissaoAtiva);
 
   const stageRef = useRef(null);
   const graphRef = useRef(null); // Armazena a instância 3D estável
@@ -433,7 +434,9 @@ export default function Grafo3D() {
       <div style={{ position: 'absolute', top: 0, left: 0, right: 0, display: 'flex', alignItems: 'center', gap: 14, padding: '12px 22px', zIndex: 3, pointerEvents: 'none' }}>
         <span className="pill" style={{ pointerEvents: 'auto' }} onClick={() => { window.location.hash = '/grafo'; }}>← 2D</span>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <span className="eyebrow" style={{ color: 'var(--text2)' }}>MAPA GERAL · 3D · AO VIVO</span>
+          <span className="eyebrow" style={{ color: 'var(--text2)' }}>
+            MAPA GERAL · 3D · {missaoAtiva?.ativa ? 'AO VIVO' : 'OCIOSO'}
+          </span>
           <span className="title" style={{ fontSize: 14 }}>
             {runs ? `${runs.length} runs catalogados` : 'resumo orbital carregando...'}
           </span>

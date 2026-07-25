@@ -1,12 +1,5 @@
 import { useMemo } from 'react';
-import { usePoll, fetchRuns, fetchDados, getAgents, getCosts } from '../api.js';
-
-/* ── Helpers ── */
-function fmtTime(t) {
-  if (!t) return '—';
-  const d = new Date(t * 1000);
-  return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-}
+import { usePoll, fetchRuns, fetchDados, getAgents, getMissaoAtiva } from '../api.js';
 
 function shapeFor(estado) {
   if (estado === 'ativa')     return 'sh blue pulse';
@@ -19,7 +12,7 @@ export default function MapaGeral() {
   const { data: runs, error: e1 } = usePoll(fetchRuns);
   const { data: fullData } = usePoll(fetchDados);
   const { data: agents } = usePoll(getAgents);
-  const { data: costs } = usePoll(getCosts);
+  const { data: missaoAtiva } = usePoll(getMissaoAtiva);
 
   const error = e1;
   const isLoading = !runs || !fullData;
@@ -34,7 +27,6 @@ export default function MapaGeral() {
       grouped[key].runs.push(r);
       grouped[key].totalCost += r.custo || 0;
     });
-    const eventos = fullData?.eventos || [];
     Object.values(grouped).forEach(g => {
       g.eventos = g.runs.reduce((acc, r) => acc + (r.n_eventos || 0), 0);
       g.estado = g.runs.some(r => r.estado === 'ativa') ? 'ativa'
@@ -85,7 +77,8 @@ export default function MapaGeral() {
         <span className="eyebrow" style={{ borderLeft: '1px solid var(--border)', paddingLeft: 12 }}>visão orbital · todos os projetos</span>
         <div style={{ flex: 1 }}></div>
         <span className="mono" style={{ fontSize: 10, color: 'var(--text2)', display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span className="sh blue pulse"></span>AO VIVO
+          <span className={missaoAtiva?.ativa ? 'sh blue pulse' : 'sh idle'}></span>
+          {missaoAtiva?.ativa ? 'AO VIVO' : 'OCIOSO'}
         </span>
       </div>
 

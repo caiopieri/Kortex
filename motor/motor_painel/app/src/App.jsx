@@ -45,10 +45,16 @@ function App() {
     applyTheme(themeId, mode);
   }, [themeId, mode]);
 
-  /* Configuracoes troca o tema chamando applyTheme direto; sem isto o themeId
-     daqui fica velho e o toggle ◐ reverteria para o tema anterior. */
+  /* Configuracoes troca tema E modo chamando applyTheme direto. Sem sincronizar
+     os dois: o themeId fica velho e o toggle ◐ reverte para o tema anterior; e
+     o mode fica velho, entao o data-theme do .mf-root nao acompanha — theme.js
+     clareia o body enquanto .mf-root segue com as vars escuras e a tela fica
+     metade clara, metade escura. */
   useEffect(() => {
-    const sincronizar = (e) => setThemeId(e.detail.id);
+    const sincronizar = (e) => {
+      setThemeId(e.detail.id);
+      if (e.detail.modo) setMode(e.detail.modo);
+    };
     document.addEventListener('mf-theme-applied', sincronizar);
     return () => document.removeEventListener('mf-theme-applied', sincronizar);
   }, []);

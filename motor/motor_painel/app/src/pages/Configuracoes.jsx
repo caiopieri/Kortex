@@ -135,10 +135,8 @@ export default function Configuracoes() {
             <span className="mono" style={{ fontSize: 10, color: 'var(--text3)' }}>versão do painel</span>
             <span className="mono" style={{ fontSize: 10, color: 'var(--text2)' }}>v0.5</span>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
-            <span className="mono" style={{ fontSize: 10, color: 'var(--text3)' }}>motor</span>
-            <span className="mono" style={{ fontSize: 10, color: 'var(--text2)' }}>meta-fábrica v0.5</span>
-          </div>
+          {/* A linha 'motor: meta-fabrica v0.5' saiu daqui: o painel nunca
+              pergunta a versao ao motor, entao era afirmacao sem fonte. */}
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}>
             <span className="mono" style={{ fontSize: 10, color: 'var(--text3)' }}>API base</span>
             <span className="mono" style={{ fontSize: 10, color: 'var(--text2)' }}>/dados</span>

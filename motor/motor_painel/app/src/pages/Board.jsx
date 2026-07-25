@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { usePoll, fetchRuns, getGates, fetchDados } from '../api.js';
+import { usePoll, fetchRuns, getGates, fetchDados, getMissaoAtiva } from '../api.js';
 
 /* ── helpers ── */
 const COL_DEFS = [
@@ -71,6 +71,7 @@ export default function Board() {
   const { data: runs, error: e1 } = usePoll(fetchRuns);
   const { data: gates, error: e2 } = usePoll(getGates);
   const { data: fullData } = usePoll(fetchDados);
+  const { data: missaoAtiva } = usePoll(getMissaoAtiva);
   const [ideas, setIdeas] = useState([
     { id: '_i1', title: 'Nota fiscal PDF → JSON', note: 'extrair itens + validar schema · rota forja', ev: 'candidato · sem run', col: 'ideias' },
     { id: '_i2', title: 'Landing de produto', note: 'rota construção · 1 página estática', ev: 'candidato · sem run', col: 'ideias' },
@@ -143,8 +144,11 @@ export default function Board() {
         <span className="title" style={{ fontSize: 20 }}>Board de missões</span>
         <span className="eyebrow" style={{ borderLeft: '1px solid var(--border)', paddingLeft: 12 }}>ciclo de vida da missão</span>
         <div style={{ flex: 1 }}></div>
+        {/* Antes isto dizia AO VIVO com a bolinha pulsando sempre, mesmo com o
+            motor parado. /dados/missoes/ativa sabe a verdade. */}
         <span className="mono" style={{ fontSize: 10, color: 'var(--text2)', display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span className="sh blue pulse"></span>AO VIVO · MOTOR
+          <span className={missaoAtiva?.ativa ? 'sh blue pulse' : 'sh idle'}></span>
+          {missaoAtiva?.ativa ? 'AO VIVO · MOTOR' : 'MOTOR OCIOSO'}
         </span>
       </div>
 

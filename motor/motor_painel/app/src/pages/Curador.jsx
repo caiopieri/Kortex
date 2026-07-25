@@ -1,9 +1,8 @@
 import { useMemo } from 'react';
-import { usePoll, getAgents, getCosts, fetchDados } from '../api.js';
+import { usePoll, getAgents, fetchDados } from '../api.js';
 
 export default function Curador() {
   const { data: agents, error: e1 } = usePoll(getAgents);
-  const { data: costs } = usePoll(getCosts);
   const { data: fullData } = usePoll(fetchDados);
 
   const error = e1;

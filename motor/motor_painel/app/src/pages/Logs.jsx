@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { usePoll, fetchDados } from '../api.js';
+import { usePoll, fetchDados, getMissaoAtiva } from '../api.js';
 
 /* ── Classificação de eventos ── */
 const ERR_EVENTS = new Set([
@@ -69,6 +69,7 @@ function LogCol({ title, count, countColor, subLabel, accentClass, rows }) {
 
 export default function Logs() {
   const { data, error } = usePoll(fetchDados);
+  const { data: missaoAtiva } = usePoll(getMissaoAtiva);
   const [query, setQuery] = useState('');
   const [projFilter, setProjFilter] = useState('todos');
 
@@ -148,7 +149,8 @@ export default function Logs() {
         ))}
         <div style={{ flex: 1 }}></div>
         <span className="mono" style={{ fontSize: 10, color: 'var(--text2)', display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span className="sh blue"></span>AO VIVO · MOTOR v0.5
+          <span className={missaoAtiva?.ativa ? 'sh blue pulse' : 'sh idle'}></span>
+          {missaoAtiva?.ativa ? 'AO VIVO · MOTOR' : 'MOTOR OCIOSO'}
         </span>
       </div>
 

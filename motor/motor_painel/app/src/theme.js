@@ -236,8 +236,10 @@ export function applyTheme(themeId, mode) {
   localStorage.setItem(THEME_KEY, themeId);
   localStorage.setItem(MODE_KEY, mode);
 
-  // Dispatch event for other parts of the application to listen to
-  document.dispatchEvent(new CustomEvent('mf-theme-applied', { detail: theme }));
+  /* O modo vai junto no detail. Sem ele o App nao tem como saber que alguem
+     trocou de modo por fora e o atributo data-theme do .mf-root fica velho —
+     o body clareia e o conteudo continua escuro. */
+  document.dispatchEvent(new CustomEvent('mf-theme-applied', { detail: { ...theme, modo: mode } }));
 }
 
 export { BUILTINS };
