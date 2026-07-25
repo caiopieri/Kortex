@@ -102,6 +102,58 @@ const BUILTINS = [
     },
     claro: LIGHT_AZUL,
   },
+  {
+    /* Portado de landing/styles.css (branch landing-page) — monocromatico de
+       precisao, dark-first com claro espelhado. A landing reserva cor
+       cromatica para telemetria e nunca para UI, por isso o accent aqui e o
+       proprio off-white e nao uma cor de marca.
+       Ressalva: a landing nao define ambar nem azul. Esses dois tokens sao os
+       do metafabrica, porque as 4 formas de status do painel exigem os quatro.
+       Nao inventei cor de marca para preencher. */
+    id: 'kortex',
+    nome: 'Kortex (landing)',
+    escuro: {
+      '--bg': '#0B0C0E',
+      '--surface': '#111318',
+      '--surface2': '#161920',
+      '--border': 'rgba(235,236,240,.09)',
+      '--focus': 'rgba(235,236,240,.18)',
+      '--text': '#F2F1ED',
+      '--text2': '#A7AAB2',
+      '--text3': '#6C7077',
+      '--accent': '#F2F1ED',
+      '--red': '#E05B4E',
+      '--amber': '#E8A33D',
+      '--green': '#3DC97E',
+      '--blue': '#3E63DD',
+      '--inv-bg': '#F2F1ED',
+      '--inv-text': '#0B0C0E',
+      '--grap1': '#1E2128',
+      '--grap2': '#2A2E37',
+      '--rim': '#6C707700',
+    },
+    claro: {
+      '--bg': '#F4F3EF',
+      '--surface': '#FFFFFF',
+      '--surface2': '#F8F7F3',
+      '--border': 'rgba(23,24,26,.10)',
+      '--focus': 'rgba(23,24,26,.22)',
+      '--text': '#141518',
+      '--text2': '#4C4F54',
+      '--text3': '#8B8E93',
+      '--accent': '#141518',
+      '--red': '#E05B4E',
+      '--amber': '#9A6A1A',
+      '--green': '#3DC97E',
+      '--blue': '#3F62A8',
+      '--inv-bg': '#141518',
+      '--inv-text': '#F4F3EF',
+      '--grap1': '#EDECE6',
+      '--grap2': '#DAD8D0',
+      '--rim': '#8B8E93',
+      '--card-shadow': '0 1px 2px rgba(23,24,26,.06), 0 4px 14px rgba(23,24,26,.07)',
+    },
+  },
 ];
 
 const THEME_KEY = 'mf-theme-active';
