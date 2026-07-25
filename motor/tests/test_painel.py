@@ -490,3 +490,56 @@ def test_post_dados_gates_decisao_invalida(tmp_path):
         "/dados/gates/cobertura", {"decisao": "invalidar"}, log, db
     )
     assert status == 400
+
+
+# ---------------------------------------------------------------------------
+# inventario / conexoes — projeções do registry (disco), não do log
+# ---------------------------------------------------------------------------
+
+def test_inventario_lista_entidades_do_registry():
+    inventario = painel.obter_inventario()
+    assert inventario, "o registry de exemplos tem entidades"
+    for item in inventario:
+        assert set(item) == {"id", "tipo", "papel", "origem"}
+        assert isinstance(item["papel"], list)
+    tipos = {item["tipo"] for item in inventario}
+    assert {"modelo-executor", "rota"} <= tipos
+
+
+def test_conexoes_expoem_fato_de_credencial_e_nunca_o_segredo():
+    conexoes = painel.obter_conexoes()
+    assert conexoes, "ha ao menos um modelo-executor no registry de exemplos"
+    for conexao in conexoes:
+        assert set(conexao) == {"id", "nome", "tipo", "tem_credencial", "origem"}
+        # o contrato é um fato booleano (ou None quando o transporte é desconhecido)
+        assert conexao["tem_credencial"] in (True, False, None)
+    # nenhum valor serializado pode parecer um segredo
+    bruto = json.dumps(conexoes)
+    assert "sk-" not in bruto and "API_KEY" not in bruto
+
+
+def test_conexoes_so_traz_modelo_executor(monkeypatch):
+    """Rotas não são conexões — só entidades que falam com provedor."""
+    conexoes = painel.obter_conexoes()
+    inventario = painel.obter_inventario()
+    executores = {i["id"] for i in inventario if i["tipo"] == "modelo-executor"}
+    assert {c["id"] for c in conexoes} == executores
+
+
+def test_inventario_e_conexoes_vazios_sem_registry(monkeypatch, tmp_path):
+    """Sem registry, estado vazio honesto — nunca dado inventado."""
+    monkeypatch.setattr(painel, "_pasta_registro", lambda: None)
+    assert painel.obter_inventario() == []
+    assert painel.obter_conexoes() == []
+
+
+def test_transporte_desconhecido_responde_none_em_vez_de_mentir(tmp_path, monkeypatch):
+    entidade = tmp_path / "exotico.md"
+    entidade.write_text(
+        "---\ntipo: modelo-executor\ntransporte: transporte-que-nao-existe\n---\ncorpo\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(painel, "_pasta_registro", lambda: tmp_path)
+    monkeypatch.setattr(painel, "BASE", type(painel.BASE)(tmp_path / "x"))
+    (conexao,) = painel.obter_conexoes()
+    assert conexao["tem_credencial"] is None

@@ -5,6 +5,7 @@ Uso: python3 motor_painel/painel.py  →  http://localhost:8378
 """
 import json
 import os
+import shutil
 import subprocess
 import sys
 import http.server
@@ -279,6 +280,114 @@ def obter_gates_pendentes(eventos: list[dict]) -> list[dict]:
         gates_pendentes.extend(active_gates.values())
         
     return gates_pendentes
+
+
+def _pasta_registro() -> Path | None:
+    """Localiza a pasta do registry, ou None se não houver."""
+    for p in (BASE.parent / "Registry", BASE.parent / "registro",
+              BASE.parent / "registry", BASE.parent / "exemplos" / "registro"):
+        if p.exists() and p.is_dir():
+            return p
+    return None
+
+
+def _frontmatter_registro(caminho: Path) -> dict | None:
+    """Lê o frontmatter YAML-ish de uma entidade do registry."""
+    try:
+        linhas = caminho.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+    if not linhas or linhas[0].strip() != "---":
+        return None
+    fim = next((i for i, linha in enumerate(linhas[1:], start=1)
+                if linha.strip() == "---"), None)
+    if fim is None:
+        return None
+    dados: dict[str, str] = {}
+    for linha in linhas[1:fim]:
+        chave, sep, valor = linha.strip().partition(":")
+        if not sep:
+            continue
+        val = valor.strip()
+        if len(val) >= 2 and val[0] == val[-1] and val[0] in {"'", '"'}:
+            val = val[1:-1]
+        dados[chave.strip()] = val
+    return dados
+
+
+def _lista_frontmatter(valor: str | None) -> list[str]:
+    if not valor:
+        return []
+    bruto = valor.strip()
+    if bruto.startswith("[") and bruto.endswith("]"):
+        bruto = bruto[1:-1]
+    return [item.strip().strip("'\"") for item in bruto.split(",") if item.strip()]
+
+
+def obter_inventario() -> list[dict]:
+    """Entidades do registry — a fonte é o disco, não o log.
+
+    Retorna [] quando não há registry: estado vazio honesto, sem inventar.
+    """
+    pasta = _pasta_registro()
+    if pasta is None:
+        return []
+    inventario = []
+    for caminho in sorted(pasta.glob("*.md"), key=lambda x: x.name):
+        dados = _frontmatter_registro(caminho)
+        if not dados:
+            continue
+        inventario.append({
+            "id": dados.get("nome", caminho.stem),
+            "tipo": dados.get("tipo", "desconhecido"),
+            "papel": _lista_frontmatter(dados.get("papeis")),
+            "origem": str(caminho.relative_to(BASE.parent)),
+        })
+    return inventario
+
+
+# Como cada transporte comprova credencial. CLI = a própria auth da ferramenta
+# (basta o executável existir); chave = variável de ambiente definida.
+_CREDENCIAL_POR_TRANSPORTE: dict[str, tuple[str, str]] = {
+    "claude-cli": ("cli", "claude"),
+    "codex": ("cli", "codex"),
+    "opencode": ("cli", "opencode"),
+    "openai-compat": ("env", "OPENAI_API_KEY"),
+}
+
+
+def obter_conexoes() -> list[dict]:
+    """Conexões da fábrica com provedores de modelo, do registry.
+
+    NUNCA expõe o segredo — só o fato `tem_credencial`. Para transporte por CLI
+    a prova é o executável estar no PATH; para chave, a variável estar definida.
+    Transporte desconhecido responde `None`: não sabemos, e mentir "sim" ou
+    "não" seria pior.
+    """
+    pasta = _pasta_registro()
+    if pasta is None:
+        return []
+    conexoes = []
+    for caminho in sorted(pasta.glob("*.md"), key=lambda x: x.name):
+        dados = _frontmatter_registro(caminho)
+        if not dados or dados.get("tipo") != "modelo-executor":
+            continue
+        transporte = dados.get("transporte", "")
+        regra = _CREDENCIAL_POR_TRANSPORTE.get(transporte)
+        if regra is None:
+            tem_credencial = None
+        elif regra[0] == "cli":
+            tem_credencial = shutil.which(regra[1]) is not None
+        else:
+            tem_credencial = bool(os.environ.get(regra[1]))
+        conexoes.append({
+            "id": caminho.stem,
+            "nome": dados.get("nome", caminho.stem),
+            "tipo": transporte or "desconhecido",
+            "tem_credencial": tem_credencial,
+            "origem": str(caminho.relative_to(BASE.parent)),
+        })
+    return conexoes
 
 
 def obter_catalogo() -> list[dict]:
@@ -596,6 +705,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path == "/dados/catalogo":
             catalogo = obter_catalogo()
             return self._json(catalogo)
+
+        if path == "/dados/inventario":
+            return self._json(obter_inventario())
+
+        if path == "/dados/conexoes":
+            return self._json(obter_conexoes())
 
         if path == "/dados/missoes/ativa":
             pid = _ler_pid_lock(self.despachos_dir / ".lock")
