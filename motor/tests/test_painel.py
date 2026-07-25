@@ -543,3 +543,32 @@ def test_transporte_desconhecido_responde_none_em_vez_de_mentir(tmp_path, monkey
     monkeypatch.setattr(painel, "BASE", type(painel.BASE)(tmp_path / "x"))
     (conexao,) = painel.obter_conexoes()
     assert conexao["tem_credencial"] is None
+
+
+def test_rota_de_dados_desconhecida_responde_404_e_nao_html(tmp_path):
+    """Contrato: /dados/* que o processo nao conhece e 404, nunca index.html.
+
+    Antes caía no fallback estático e devolvia HTML com 200. A tela via
+    `res.ok` passar e o `res.json()` estourava parseando HTML — erro que não
+    apontava para a causa real (painel no ar mais velho que o código).
+    """
+    log = tmp_path / "log.jsonl"
+    log.write_text(
+        json.dumps({"t": 0.0, "evento": "spec.recebida", "missao": "x", "subagentes": 1}) + "\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(urllib.error.HTTPError) as excinfo:
+        _http_get("/dados/rota-que-nao-existe", log)
+    assert excinfo.value.code == 404
+    assert b"<html" not in excinfo.value.read().lower()
+
+
+def test_rota_de_dados_conhecida_continua_json(tmp_path):
+    log = tmp_path / "log.jsonl"
+    log.write_text(
+        json.dumps({"t": 0.0, "evento": "spec.recebida", "missao": "x", "subagentes": 1}) + "\n",
+        encoding="utf-8",
+    )
+    status, content_type, _ = _http_get("/dados/conexoes", log)
+    assert status == 200
+    assert "application/json" in content_type

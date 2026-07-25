@@ -133,10 +133,6 @@ class RotaTentativaCusteada:
             raise ErroOrcamento("identidade de rota custeada invalida")
 
 
-class PublicadorEventoOrcamento(Protocol):
-    def __call__(self, event_id: str, tipo: str, payload: dict[str, object], /) -> None: ...
-
-
 @dataclass(frozen=True)
 class IdentidadeTentativaCusteada:
     reservation_id: str

@@ -719,7 +719,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
             
         if path == "/healthz":
             return self._json({"ok": True})
-            
+
+        # Rota de dados desconhecida NÃO cai no fallback estático. Antes ela
+        # devolvia index.html com 200 text/html: a tela via `res.ok` passar e o
+        # `res.json()` estourava parseando HTML, com erro que não dizia nada
+        # sobre a causa real (normalmente um painel no ar mais velho que o
+        # código). 404 faz o sintoma apontar para o problema.
+        if path == "/dados" or path.startswith("/dados/"):
+            return self._erro(404, b"rota de dados desconhecida")
+
         # 2. Servir a interface (React app ou painel.html original de fallback)
         if path == "/grafo3d":
             return self._html(GRAFO3D_HTML_PATH.read_bytes())
