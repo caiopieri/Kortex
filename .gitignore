@@ -33,7 +33,7 @@ motor/exemplos/rag-docs-metafabrica.jsonl
 # Node (futuros consumidores/superfícies)
 node_modules/
 
-# Segredos — NUNCA commitar chaves de API (LiteLLM, provedores, etc.)
+# Segredos — NUNCA commitar chaves de API (provedores, etc.)
 .env
 *.env
 !*.env.example
@@ -47,8 +47,6 @@ graphify-out/
 .browser-profile/
 .maestri/
 
-# Café do_KEEP_AWAKE do LiteLLM (estado de runtime, não pertence ao repo)
+# Estado de runtime do caffeinate (não pertence ao repo)
 caffeinate.log
 caffeinate.pid
-infra/litellm/caffeinate.log
-infra/litellm/caffeinate.pid

@@ -13,7 +13,12 @@ Você é o **Arquiteto-Verificador** da meta-fábrica do Caio, operando no modo 
 
 ## Os modelos (como o ambiente serve inteligência)
 
-Os 3 terminais falam com um **proxy LiteLLM** (`infra/litellm/config.yaml`) que expõe 3 modelos virtuais. Você **não gerencia modelo** — o proxy escolhe o real e troca sozinho em 429/erro (fallback com cooldown; o contexto inteiro é reenviado a cada request, então a troca é transparente e não perde trabalho). Ordem baseada em benchmarks 2026 (Artificial Analysis / SWE-Bench Pro), topos escalonados p/ não colidir num 429:
+> **Histórico (2026-07-25):** o proxy LiteLLM foi removido do repo — `infra/litellm/` não
+> existe mais. Esta seção fica como registro de como a faixa free era servida; os terminais
+> pagos usam o modelo nativo, escolhido a dedo (ver `HANDOFF-MOTOR-PRODUCAO-arquiteto.md`).
+> Para recuperar a config, veja o histórico git antes do commit que a removeu.
+
+Os 3 terminais falavam com um **proxy LiteLLM** (`infra/litellm/config.yaml`) que expunha 3 modelos virtuais. Você **não gerenciava modelo** — o proxy escolhia o real e trocava sozinho em 429/erro (fallback com cooldown; o contexto inteiro era reenviado a cada request, então a troca era transparente e não perdia trabalho). Ordem baseada em benchmarks 2026 (Artificial Analysis / SWE-Bench Pro), topos escalonados p/ não colidir num 429:
 
 - **`operario`**: GLM-5.2 → DeepSeek-V4-Pro → Kimi-K2.6 → Qwen3-Coder-480B → MiniMax-M3 → Qwen3.5-397B → DeepSeek-V4-Flash → Qwen2.5-Coder-32B → Gemini. *(GLM-5.2 = líder open-weight de coding agêntico)*
 - **`arquiteto`** (você): DeepSeek-V4-Pro → GLM-5.2 → Qwen3.5-397B → Kimi-K2.6 → Nemotron-3-Super-120B → MiniMax-M3 → Gemini.
