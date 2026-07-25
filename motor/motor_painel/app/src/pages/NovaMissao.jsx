@@ -66,7 +66,6 @@ export default function NovaMissao() {
   const [reconciliacao, setReconciliacao] = useState(true);
   const [gateCobertura, setGateCobertura] = useState(true);
   const [teto, setTeto] = useState(3);
-  const [arquivo, setArquivo] = useState('');
   const [aceite, setAceite] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState(null);
@@ -184,14 +183,13 @@ export default function NovaMissao() {
           <div className="nm-field">
             <span className="eyebrow">Insumos</span>
             <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
-              <input className="nm-inp" style={{ flex: 1 }} placeholder="caminho, arquivo ou spec — ex.: exemplos/missao-pesquisa.json" />
-              <label className="btn" style={{ flex: 'none', cursor: 'pointer', whiteSpace: 'nowrap', padding: '9px 14px', fontSize: 12 }}>
+              <input className="nm-inp" style={{ flex: 1 }} disabled placeholder="caminho, arquivo ou spec — ex.: exemplos/missao-pesquisa.json" />
+              <span className="btn" style={{ flex: 'none', whiteSpace: 'nowrap', padding: '9px 14px', fontSize: 12, opacity: 0.5, cursor: 'not-allowed' }}>
                 ⬆ Anexar arquivo
-                <input type="file" onChange={e => { const f = e.target.files?.[0]; setArquivo(f ? f.name : ''); }} style={{ display: 'none' }} />
-              </label>
+              </span>
             </div>
-            <span className="mono" style={{ fontSize: 10, color: arquivo ? 'var(--green)' : 'var(--text3)' }}>
-              {arquivo ? `arquivo anexado · ${arquivo}` : 'arraste um arquivo ou cole um caminho · opcional'}
+            <span className="mono" style={{ fontSize: 10, color: 'var(--text3)' }}>
+              Insumos ainda não entram na spec despachada — montarSpec() só leva descrição, rota, preset e teto. Passe o insumo pelo comando de despacho manual abaixo.
             </span>
           </div>
 

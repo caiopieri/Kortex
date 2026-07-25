@@ -44,6 +44,14 @@ function App() {
     applyTheme(themeId, mode);
   }, [themeId, mode]);
 
+  /* Configuracoes troca o tema chamando applyTheme direto; sem isto o themeId
+     daqui fica velho e o toggle ◐ reverteria para o tema anterior. */
+  useEffect(() => {
+    const sincronizar = (e) => setThemeId(e.detail.id);
+    document.addEventListener('mf-theme-applied', sincronizar);
+    return () => document.removeEventListener('mf-theme-applied', sincronizar);
+  }, []);
+
   /* Reaplica preferências persistidas (densidade/animações) em qualquer rota */
   useEffect(() => {
     document.documentElement.setAttribute('data-density', localStorage.getItem('mf-density') || 'normal');
