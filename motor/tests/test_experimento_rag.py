@@ -1,8 +1,11 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from motor.modelos import ClienteStub
 from motor.spec import WorkflowSpec
+import scripts.experimento_rag as experimento_rag
 from scripts.docs_para_rag import gerar_registros
 from scripts.experimento_rag import (
     ClienteDumpPrompts,
@@ -11,6 +14,12 @@ from scripts.experimento_rag import (
     rodar_condicao_unica,
     rodar_experimento,
 )
+from tests.helpers_grafo import construir_grafo_teste
+
+
+@pytest.fixture(autouse=True)
+def _grafo_experimental_offline(monkeypatch):
+    monkeypatch.setattr(experimento_rag, "construir_grafo", construir_grafo_teste)
 
 
 def _spec_experimento() -> dict:

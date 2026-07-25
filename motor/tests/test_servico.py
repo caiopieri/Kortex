@@ -1,14 +1,23 @@
 import time
 import json
+import sqlite3
 import threading
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
-from motor.eventos import LogEventos
+import motor.servico as servico_modulo
 from motor.caixa import LedgerCaixa
 from motor.modelos import ClienteStub
-from motor.servico import GerenciadorJobs
+from motor.eventos import LogEventos
+from motor.composicao_orcamento import RotaOrcadaCertificada
+from motor.orcamento import ErroOrcamento, RepositorioOrcamento
+from motor.servico import GerenciadorJobs as GerenciadorJobsProducao
+from tests.helpers_grafo import (
+    GerenciadorJobsTeste as GerenciadorJobs,
+    dependencias_servico_stub,
+)
 from tests.test_grafo import SPEC, faz_roteador
 
 
@@ -21,6 +30,62 @@ def aguardar_estado(gerenciador: GerenciadorJobs, job_id: str, estado: str, time
             return ultimo
         time.sleep(0.02)
     raise AssertionError(f"estado {estado!r} não alcançado; último={ultimo!r}")
+
+
+@pytest.mark.parametrize("topologia", [
+    None,
+    (RotaOrcadaCertificada(
+        "stub:unica", "stub-provider-unico", frozenset({"executor", "verifier"}),
+    ),),
+])
+def test_servico_preflight_bloqueia_antes_de_registrar_job(tmp_path, topologia):
+    cliente = ClienteStub(faz_roteador())
+    deps = dependencias_servico_stub(cliente, tmp_path / "orcamento-preflight")
+    deps["rotas_certificadas"] = topologia
+    jobs = GerenciadorJobsProducao(
+        db_path=tmp_path / "preflight.db", cliente=cliente, **deps,
+    )
+    try:
+        with pytest.raises(ErroOrcamento, match="catalogo|dois providers"):
+            jobs.iniciar(spec=SPEC, thread_id="preflight-bloqueado")
+        assert jobs._jobs == {}
+        assert jobs._threads == set()
+    finally:
+        jobs.fechar()
+
+
+def test_servico_preflight_exige_teto_bootstrap_antes_de_registrar_job(tmp_path):
+    cliente = ClienteStub(faz_roteador())
+    deps = dependencias_servico_stub(cliente, tmp_path / "orcamento-sem-teto")
+    deps["teto_bootstrap"] = None
+    jobs = GerenciadorJobsProducao(
+        db_path=tmp_path / "preflight-sem-teto.db", cliente=cliente, **deps,
+    )
+    try:
+        with pytest.raises(ErroOrcamento, match="teto bootstrap"):
+            jobs.iniciar(spec=SPEC, thread_id="preflight-sem-teto")
+        assert jobs._jobs == {}
+        assert jobs._threads == set()
+    finally:
+        jobs.fechar()
+
+
+def test_servico_sem_topologia_bloqueia_resume_e_recovery_antes_de_estado(tmp_path):
+    jobs = GerenciadorJobsProducao(
+        db_path=tmp_path / "passivo.db",
+        cliente=ClienteStub(faz_roteador()),
+        repositorio_orcamento=RepositorioOrcamento(tmp_path / "orcamento-passivo"),
+        fabrica_tentativas_orcadas=lambda *_args: [],
+    )
+    try:
+        with pytest.raises(ErroOrcamento, match="catalogo"):
+            jobs.responder_gate("job-passivo", "prosseguir")
+        with pytest.raises(ErroOrcamento, match="catalogo"):
+            jobs._recuperar_outbox("job-passivo")
+        assert jobs._jobs == {}
+        assert jobs._threads == set()
+    finally:
+        jobs.fechar()
 
 
 def test_iniciar_retorna_imediato_e_chega_a_gate_pendente(tmp_path):
@@ -36,6 +101,119 @@ def test_iniciar_retorna_imediato_e_chega_a_gate_pendente(tmp_path):
     status = aguardar_estado(gerenciador, "t1", "gate_pendente")
     assert status["gate"]["portao"] == "plano"
     assert {"pergunta", "opcoes"} <= set(status["gate"])
+
+
+def test_servico_certificado_injeta_orcamento_e_identidade_estavel(tmp_path):
+    cliente = ClienteStub(faz_roteador())
+    deps = dependencias_servico_stub(cliente, tmp_path / "orcamento")
+    gerenciador = GerenciadorJobs(
+        db_path=tmp_path / "motor-orcado.db",
+        workspace_base=tmp_path / "runs-orcadas",
+        cliente=cliente,
+        **deps,
+    )
+    try:
+        gerenciador.iniciar(spec=SPEC, thread_id="servico-orcado")
+        aguardar_estado(gerenciador, "servico-orcado", "gate_pendente")
+        gerenciador.responder_gate("servico-orcado", "prosseguir")
+        assert aguardar_estado(gerenciador, "servico-orcado", "concluido")["estado"] == "concluido"
+        ledger = tmp_path / "orcamento" / "servico-orcado" / "orcamento.sqlite3"
+        assert ledger.is_file()
+        with sqlite3.connect(f"file:{ledger}?mode=ro", uri=True) as con:
+            assert con.execute(
+                "SELECT run_id,thread_id,teto,status FROM budget_session"
+            ).fetchall() == [("servico-orcado", "servico-orcado", "2", "ACTIVE")]
+            assert con.execute("SELECT COUNT(*) FROM budget_outbox").fetchone()[0] > 0
+            assert con.execute(
+                "SELECT DISTINCT estado FROM budget_outbox_claim"
+            ).fetchall() == [("ACKED",)]
+        eventos = [
+            json.loads(linha)
+            for linha in (tmp_path / "runs-orcadas" / "servico-orcado" / "log.jsonl")
+            .read_text(encoding="utf-8").splitlines()
+        ]
+        assert {evento["evento"] for evento in eventos} >= {
+            "custo.reservado", "custo.reconciliado",
+        }
+    finally:
+        gerenciador.fechar()
+
+
+def test_servico_rejeita_identidade_incompativel_com_ledger(tmp_path):
+    gerenciador = GerenciadorJobs(
+        db_path=tmp_path / "motor-id.db", cliente=ClienteStub(faz_roteador()),
+    )
+    try:
+        with pytest.raises(ValueError, match="job_id inválido"):
+            gerenciador.iniciar(spec=SPEC, thread_id="parte..parte")
+    finally:
+        gerenciador.fechar()
+
+
+def test_servico_rejeita_cliente_sem_deps_antes_de_efeito(tmp_path):
+    efeitos: list[str] = []
+    cliente = ClienteStub(lambda papel, _prompt: efeitos.append(papel) or "INDEVIDO")
+    with pytest.raises(ValueError, match="cliente injetado exige"):
+        GerenciadorJobsProducao(
+            db_path=tmp_path / "nao-criar.db", cliente=cliente,
+        )
+    assert efeitos == []
+    assert not (tmp_path / "nao-criar.db").exists()
+
+
+def test_falha_do_sink_monetario_recupera_so_apos_lease(tmp_path, monkeypatch):
+    class LogFalho(LogEventos):
+        def publicar_orcamento(self, *_args):
+            raise RuntimeError("sink indisponivel")
+
+    cliente = ClienteStub(faz_roteador())
+    deps = dependencias_servico_stub(cliente, tmp_path / "orcamento-falho")
+    log = LogFalho(tmp_path / "log-falho.jsonl")
+    gerenciador = GerenciadorJobs(
+        db_path=tmp_path / "motor-falho.db",
+        workspace_base=tmp_path / "runs-falhos",
+        cliente=cliente,
+        log=log,
+        **deps,
+    )
+    try:
+        gerenciador.iniciar(spec=SPEC, thread_id="sink-falho")
+        aguardar_estado(gerenciador, "sink-falho", "gate_pendente")
+        gerenciador.responder_gate("sink-falho", "prosseguir")
+        status = aguardar_estado(gerenciador, "sink-falho", "erro")
+        assert status["erro"]["mensagem"] == "sink indisponivel"
+        ledger = tmp_path / "orcamento-falho" / "sink-falho" / "orcamento.sqlite3"
+        with sqlite3.connect(f"file:{ledger}?mode=ro", uri=True) as con:
+            estados = {linha[0] for linha in con.execute(
+                "SELECT estado FROM budget_outbox_claim"
+            )}
+        assert "ACKED" not in estados and estados <= {"PENDING", "CLAIMED"}
+    finally:
+        gerenciador.fechar()
+        log.fechar()
+
+    reiniciado = GerenciadorJobs(
+        db_path=tmp_path / "motor-falho.db",
+        workspace_base=tmp_path / "runs-falhos",
+        cliente=cliente,
+        **deps,
+    )
+    try:
+        assert reiniciado.status("sink-falho") == {"estado": "em_execucao"}
+        monkeypatch.setattr(servico_modulo.time, "time", lambda: 2**31)
+        assert reiniciado.status("sink-falho")["estado"] == "concluido"
+        with sqlite3.connect(f"file:{ledger}?mode=ro", uri=True) as con:
+            assert con.execute(
+                "SELECT DISTINCT estado FROM budget_outbox_claim"
+            ).fetchall() == [("ACKED",)]
+        eventos = [
+            json.loads(linha)
+            for linha in (tmp_path / "runs-falhos" / "sink-falho" / "log.jsonl")
+            .read_text(encoding="utf-8").splitlines()
+        ]
+        assert any(evento["evento"] == "custo.reconciliado" for evento in eventos)
+    finally:
+        reiniciado.fechar()
 
 
 def test_responder_gate_retoma_e_conclui(tmp_path):
@@ -154,6 +332,21 @@ def test_gate_so_fica_observavel_depois_que_writer_fecha(
         assert liberar_fechamento.wait(timeout=3)
         fechar_real(log)
 
+    interrupcao = SimpleNamespace(
+        id="decisao-handoff",
+        value={"portao": "plano", "pergunta": "Revisar?", "opcoes": "prosseguir"},
+    )
+
+    class GrafoControlado:
+        def invoke(self, entrada, _config):
+            if isinstance(entrada, dict):
+                return {"__interrupt__": [interrupcao]}
+            return {"resposta_final": "ok", "run_id": "handoff-writer", "resultados": []}
+
+        def get_state(self, _config):
+            return SimpleNamespace(interrupts=(interrupcao,), values={})
+
+    monkeypatch.setattr(servico_modulo, "construir_grafo", lambda *_a, **_kw: GrafoControlado())
     monkeypatch.setattr(LogEventos, "fechar", fechar_bloqueado)
     gerenciador = GerenciadorJobs(
         db_path=tmp_path / "motor.db",

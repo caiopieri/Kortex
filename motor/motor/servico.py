@@ -13,18 +13,27 @@ import threading
 import time
 import uuid
 from collections.abc import Callable
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, cast
 
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.types import Command
 
-from .__main__ import construir_cliente
 from .caixa import LedgerCaixa
+from .composicao_orcamento import (
+    RotaOrcadaCertificada,
+    compor_orcamento_openai,
+    validar_independencia_orcada,
+)
 from .eventos import LogEventos
 from .eventos_schema import SCHEMA_VERSAO
 from .grafo import construir_grafo
 from .modelos import ClienteModelo
+from .orcamento import (
+    ErroOrcamento, RepositorioOrcamento, RequisitosTentativaCusteada, RotaTentativaCusteada,
+    publicar_um_pendente,
+)
 from .politica import PoliticaGates
 from .registro import ferramentas_de_registro, ferramentas_permitidas_de_registro, rotas_de_registro
 
@@ -36,6 +45,7 @@ def _validar_job_id(job_id: str) -> None:
     if (
         not isinstance(job_id, str)
         or job_id in {".", ".."}
+        or ".." in job_id
         or not PADRAO_JOB_ID.fullmatch(job_id)
     ):
         raise ValueError("job_id inválido")
@@ -82,6 +92,13 @@ class GerenciadorJobs:
                  politica: PoliticaGates | None = None,
                  log: LogEventos | None = None,
                  cliente: ClienteModelo | None = None,
+                 repositorio_orcamento: RepositorioOrcamento | None = None,
+                 fabrica_tentativas_orcadas: Callable[
+                     [str, str, int, RequisitosTentativaCusteada],
+                     list[RotaTentativaCusteada],
+                 ] | None = None,
+                 rotas_certificadas: tuple[RotaOrcadaCertificada, ...] | None = None,
+                 teto_bootstrap: Decimal | None = None,
                  ferramentas: dict[str, dict[str, Any]] | None = None,
                  fault: Callable[[str], None] | None = None,
                  outbox_poll_s: float = 0.5,
@@ -90,11 +107,30 @@ class GerenciadorJobs:
         self._outbox_lease_s = _segundos_positivos("outbox_lease_s", outbox_lease_s)
         self.db_path = Path(db_path)
         self.workspace_base = Path(workspace_base)
+        if (repositorio_orcamento is None) != (fabrica_tentativas_orcadas is None):
+            raise ValueError("repo e fabrica orcados devem ser fornecidos juntos")
+        if (rotas_certificadas is not None or teto_bootstrap is not None) and repositorio_orcamento is None:
+            raise ValueError("topologia e teto orcados exigem repo e fabrica")
+        if cliente is None:
+            if repositorio_orcamento is not None:
+                raise ValueError("deps orcadas explicitas exigem cliente")
+            deps = compor_orcamento_openai(cfg_modelos or {}, self.workspace_base)
+            cliente = deps.cliente
+            repositorio_orcamento = deps.repositorio
+            fabrica_tentativas_orcadas = deps.fabrica
+            rotas_certificadas = deps.rotas_certificadas
+            teto_bootstrap = deps.teto_bootstrap
+        elif repositorio_orcamento is None:
+            raise ValueError("cliente injetado exige repo e fabrica orcados")
         self.cfg_modelos = cfg_modelos
         self.dir_registro = str(dir_registro) if dir_registro is not None else None
         self.politica = politica or PoliticaGates()
         self.log = log
         self._cliente = cliente
+        self._repositorio_orcamento = repositorio_orcamento
+        self._fabrica_tentativas_orcadas = fabrica_tentativas_orcadas
+        self._rotas_certificadas = rotas_certificadas
+        self._teto_bootstrap = teto_bootstrap
         self._fault = fault
         self.ferramentas = (ferramentas if ferramentas is not None else
                             ferramentas_de_registro(self.dir_registro) if self.dir_registro else {})
@@ -109,6 +145,7 @@ class GerenciadorJobs:
         self._fechado = False
         self._conn_fechada = False
         self._owner_reconciliador = f"reconciliador-{uuid.uuid4().hex}"
+        self._owner_orcamento = f"servico-orcamento-{uuid.uuid4().hex}"
         self._erro_reconciliador: Exception | None = None
 
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -140,12 +177,14 @@ class GerenciadorJobs:
         if not thread_id:
             raise ValueError("thread_id é obrigatório")
         _validar_job_id(thread_id)
+        self._exigir_topologia_orcada()
 
         cliente = self._obter_cliente()
         entrada: dict[str, Any] = (
             {"missao_texto": missao_texto} if missao_texto is not None else {"spec": spec}
         )
         entrada["run_id"] = thread_id
+        entrada["thread_id"] = thread_id
         with self._lock:
             self._exigir_aberto()
             self._jobs[thread_id] = {"estado": "em_execucao"}
@@ -170,6 +209,7 @@ class GerenciadorJobs:
         with self._lock:
             self._exigir_aberto()
         _validar_job_id(job_id)
+        self._exigir_topologia_orcada()
         if decision_id is not None and (
             not isinstance(decision_id, str)
             or not PADRAO_JOB_ID.fullmatch(decision_id)
@@ -315,6 +355,9 @@ class GerenciadorJobs:
                 ferramentas=self.ferramentas,
                 ferramentas_permitidas=self.ferramentas_permitidas,
                 rotas=self.rotas,
+                repositorio_orcamento=self._repositorio_orcamento,
+                fabrica_tentativas_orcadas=self._fabrica_tentativas_orcadas,
+                teto_bootstrap=self._teto_bootstrap_validado(),
             )
             snapshot = grafo.get_state(self._config(job_id))
             return self._gates(getattr(snapshot, "interrupts", ()))
@@ -356,12 +399,21 @@ class GerenciadorJobs:
         }
 
     def _obter_cliente(self) -> ClienteModelo:
-        if self._cliente is not None:
-            return self._cliente
-        return construir_cliente(self.cfg_modelos, self.dir_registro, log=self.log)
+        return self._cliente
+
+    def _exigir_topologia_orcada(self) -> None:
+        validar_independencia_orcada(self._rotas_certificadas)
+        self._teto_bootstrap_validado()
+
+    def _teto_bootstrap_validado(self) -> Decimal:
+        teto = self._teto_bootstrap
+        if (not isinstance(teto, Decimal) or not teto.is_finite() or teto <= 0):
+            raise ErroOrcamento("teto bootstrap ausente ou invalido")
+        return teto
 
     def _iniciar_thread(self, job_id: str, cliente: ClienteModelo, entrada: Any,
                         claim: dict[str, Any] | None = None) -> None:
+        self._exigir_topologia_orcada()
         def executar() -> None:
             try:
                 self._executar(job_id, cliente, entrada, claim)
@@ -387,6 +439,20 @@ class GerenciadorJobs:
                   claim: dict[str, Any] | None = None) -> None:
         log: LogEventos | None = None
         registro: dict[str, Any]
+
+        def finalizar_log() -> None:
+            nonlocal log
+            if log is None:
+                return
+            log_atual = log
+            try:
+                if not self._drenar_orcamento(job_id, log_atual):
+                    raise RuntimeError("relay monetario pendente")
+            finally:
+                if log_atual is not self.log:
+                    log_atual.fechar()
+                log = None
+
         try:
             log = self._log_do_job(job_id)
             grafo = construir_grafo(
@@ -398,18 +464,28 @@ class GerenciadorJobs:
                 ferramentas=self.ferramentas,
                 ferramentas_permitidas=self.ferramentas_permitidas,
                 rotas=self.rotas,
+                repositorio_orcamento=self._repositorio_orcamento,
+                fabrica_tentativas_orcadas=self._fabrica_tentativas_orcadas,
+                teto_bootstrap=self._teto_bootstrap_validado(),
             )
             if claim is None:
                 resultado = grafo.invoke(entrada, self._config(job_id))
             else:
                 ledger = LedgerCaixa(self.db_path)
                 try:
-                    resultado = ledger.consumir(
-                        claim,
-                        lambda payload: grafo.invoke(
+                    def aplicar(payload: dict[str, Any]) -> dict[str, Any]:
+                        resultado_claim = grafo.invoke(
                             Command(resume={payload["decisao_id"]: payload["decisao"]}),
                             self._config(job_id),
-                        ),
+                        )
+                        # O ACK libera o próximo interrupt do job; o writer precisa
+                        # ter sido entregue antes dessa transição durável.
+                        finalizar_log()
+                        return cast(dict[str, Any], resultado_claim)
+
+                    resultado = ledger.consumir(
+                        claim,
+                        aplicar,
                         fault=self._fault,
                         lease_s=self._outbox_lease_s,
                     )
@@ -421,9 +497,9 @@ class GerenciadorJobs:
                 "estado": "erro",
                 "erro": {"tipo": type(ex).__name__, "mensagem": str(ex)},
             }
-        if log is not None and log is not self.log:
+        if log is not None:
             try:
-                log.fechar()
+                finalizar_log()
             except Exception as ex:
                 registro = {
                     "estado": "erro",
@@ -432,7 +508,22 @@ class GerenciadorJobs:
         with self._lock:
             self._jobs[job_id] = registro
 
+    def _drenar_orcamento(self, job_id: str, log: LogEventos) -> bool:
+        if self._repositorio_orcamento is None:
+            return True
+        while publicar_um_pendente(
+            self._repositorio_orcamento,
+            job_id,
+            self._owner_orcamento,
+            int(time.time()),
+            max(1, math.ceil(self._outbox_lease_s)),
+            log.publicar_orcamento,
+        ):
+            pass
+        return self._repositorio_orcamento.listar_pendentes(job_id) == []
+
     def _recuperar_outbox(self, job_id: str) -> bool:
+        self._exigir_topologia_orcada()
         with self._lock:
             self._exigir_aberto()
         ledger = LedgerCaixa(self.db_path)
@@ -455,6 +546,7 @@ class GerenciadorJobs:
     def _reconciliar_outbox(self) -> None:
         while not self._stop_reconciliador.is_set():
             try:
+                self._exigir_topologia_orcada()
                 ledger = LedgerCaixa(self.db_path)
                 try:
                     claim = ledger.claim(
@@ -513,6 +605,17 @@ class GerenciadorJobs:
             raise RuntimeError("GerenciadorJobs fechado")
 
     def _status_duravel(self, job_id: str) -> dict:
+        if (
+            self._repositorio_orcamento is not None
+            and self._repositorio_orcamento.possui_ledger(job_id)
+        ):
+            log_relay = self.log or LogEventos(self._caminho_log(job_id), truncar=False)
+            try:
+                if not self._drenar_orcamento(job_id, log_relay):
+                    return {"estado": "em_execucao"}
+            finally:
+                if log_relay is not self.log:
+                    log_relay.fechar()
         log = self._log_do_job(job_id, truncar=False)
         grafo = construir_grafo(
             self._obter_cliente(),
@@ -523,6 +626,9 @@ class GerenciadorJobs:
             ferramentas=self.ferramentas,
             ferramentas_permitidas=self.ferramentas_permitidas,
             rotas=self.rotas,
+            repositorio_orcamento=self._repositorio_orcamento,
+            fabrica_tentativas_orcadas=self._fabrica_tentativas_orcadas,
+            teto_bootstrap=self._teto_bootstrap_validado(),
         )
         try:
             snapshot = grafo.get_state(self._config(job_id))

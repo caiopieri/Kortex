@@ -2,12 +2,12 @@
 
 Topologia (espelha a referência dynamic-workflow-harness, ver memória do projeto):
 
-    START → planner → revisar_plano → [fan-out: subagente × N] → avaliar → sintetizar → END
+    START → planner → revisar_plano → [fan-out: subagente × N] → avaliar → decidir → sintetizar
                           (attempt → verifier → commit, retry ≤ max_tentativas)
-                                              (cobertura reprovada → interrupt() ao fundador)
+                                  (preencher → reconciliar → avaliar; ou interrupt() ao fundador)
 
 Regras de fronteira (anti-lock-in):
-- nós são funções puras que só falam com `cliente.chamar(papel, prompt)`;
+- planner, executor, verifier, evaluator e synthesizer usam tentativas custeadas;
 - estado serializável; a spec é dado, não código;
 - todo passo emite evento JSONL próprio (painel/auditoria), além do checkpointer.
 """
@@ -18,8 +18,9 @@ import json
 import os
 import shlex
 from datetime import datetime
+from decimal import Decimal
 from pathlib import Path
-from typing import Annotated, Any, Optional, TypedDict, cast
+from typing import Annotated, Any, Callable, Optional, TypedDict, cast
 from uuid import uuid4
 
 from langgraph.graph import END, START, StateGraph
@@ -27,7 +28,16 @@ from langgraph.types import Send, interrupt
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from .eventos import LogEventos
-from .modelos import ClienteModelo, extrai_json
+from .modelos import ClienteModelo, ClienteStub, extrai_json
+from .orcamento import (
+    ErroOrcamento,
+    IdentidadeTentativaCusteada,
+    RequisitosTentativaCusteada,
+    RepositorioOrcamento,
+    RespostaTentativaCusteada,
+    RotaTentativaCusteada,
+    executar_tentativa_custeada,
+)
 from .politica import PoliticaGates
 from .rag import carregar_dataset, recuperar
 from .runner import (
@@ -59,9 +69,13 @@ class EstadoMotor(TypedDict, total=False):
     missao_texto: str
     spec: dict[str, Any]
     run_id: str
+    thread_id: str
     resultados: Annotated[list[dict[str, Any]], mesclar_resultados]
     avaliacao: dict[str, Any]
     resposta_final: str
+    rodada_reconciliacao: int
+    preenchimento_vazio: bool
+    decisao_cobertura: str
 
 
 class _VereditoVerifier(BaseModel):
@@ -325,34 +339,6 @@ def _validar_contem(saida: str, config: dict[str, Any]) -> tuple[bool, str, dict
     )
 
 
-def _escolher_rota(cliente: ClienteModelo, missao: str,
-                   rotas: dict[str, dict[str, Any]], log: LogEventos) -> str | None:
-    catalogo = [
-        {"nome": nome, "quando": rota.get("quando", "")}
-        for nome, rota in rotas.items()
-    ]
-    try:
-        resposta = cliente.chamar("planner", PROMPT_SELETOR_ROTA.format(
-            missao=missao,
-            catalogo=json.dumps(catalogo, ensure_ascii=False),
-        ))
-    except Exception:
-        resposta = None
-    bruto = extrai_json(resposta or "")
-    nome = str(bruto.get("rota") or "").strip() if isinstance(bruto, dict) else ""
-    fallback = nome not in rotas
-    if fallback:
-        nome = "pesquisa-sintese" if "pesquisa-sintese" in rotas else ""
-    rota_ativa = rotas.get(nome) or ROTA_DEFAULT
-    log.evento(
-        "rota.escolhida",
-        rota=nome or "pesquisa-sintese",
-        padrao=rota_ativa["padrao"],
-        fallback=fallback,
-    )
-    return nome or None
-
-
 def registrar_artefato(workspace: str | Path, nome: str, tipo: str, conteudo: str) -> dict[str, str]:
     """Escreve conteúdo textual no workspace e devolve só a referência serializável."""
     raiz = Path(workspace)
@@ -379,13 +365,22 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                     max_rodadas_reconciliacao: int = 1,
                     perfil_execucao: str = "certificado",
                     ferramentas_permitidas: list[str] | None = None,
-                    command_runner: CommandRunner | None = None):
+                    command_runner: CommandRunner | None = None,
+                    repositorio_orcamento: RepositorioOrcamento | None = None,
+                    fabrica_tentativas_orcadas: Callable[
+                        [str, str, int, RequisitosTentativaCusteada],
+                        list[RotaTentativaCusteada],
+                    ] | None = None,
+                    teto_bootstrap: Decimal = Decimal("2.0")):
     """Compila o grafo. `cliente` e `log` são injetados — o grafo não conhece backends.
     `politica` decide quais gates pausam (manual) ou resolvem sozinhos (auto-mode);
     ausente = tudo manual (comportamento default).
     `max_rodadas_reconciliacao` limita quantas rodadas de preenchimento de cobertura
     podem rodar antes de seguir parcial."""
     politica = politica or PoliticaGates()
+    if (not isinstance(teto_bootstrap, Decimal) or not teto_bootstrap.is_finite()
+            or teto_bootstrap <= 0):
+        raise ErroOrcamento("teto bootstrap invalido")
     workspace_base = Path(workspace_base)
     ferramentas = ferramentas or {}
     command_runner = command_runner if command_runner is not None else DenyCommandRunner()
@@ -404,6 +399,73 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
 
     def run_id_de(state: EstadoMotor) -> str:
         return state.get("run_id") or f"{datetime.now():%Y%m%d-%H%M%S}-{uuid4().hex[:6]}"
+
+    def chamar_planner_orcado(
+        state: EstadoMotor, run_id: str, prompt: str, tentativa: int,
+        fase: str = "spec",
+    ) -> str | None:
+        thread_id = state.get("thread_id") or (run_id if isinstance(cliente, ClienteStub) else None)
+        resposta = chamar_orcado(
+            run_id, thread_id, teto_bootstrap, "planner", fase, "planner", prompt, tentativa,
+        )
+        return resposta.texto if resposta is not None else None
+
+    def chamar_orcado(
+        run_id: object,
+        thread_id: object,
+        teto: object,
+        papel: str,
+        fase: str,
+        no_id: str,
+        prompt: str,
+        tentativa: int,
+        requisitos: RequisitosTentativaCusteada | None = None,
+        ciclo: int = 0,
+    ) -> RespostaTentativaCusteada | None:
+        if repositorio_orcamento is None:
+            raise ErroOrcamento("repositorio de orcamento ausente")
+        if fabrica_tentativas_orcadas is None:
+            raise ErroOrcamento("fabrica de adaptadores custeados ausente")
+        if isinstance(run_id, str) and not isinstance(thread_id, str) and isinstance(cliente, ClienteStub):
+            thread_id = run_id
+        if not isinstance(run_id, str) or not isinstance(thread_id, str):
+            raise ErroOrcamento("identidade da execucao ausente")
+        try:
+            teto_decimal = Decimal(str(teto))
+        except Exception as erro:
+            raise ErroOrcamento("teto de orcamento invalido") from erro
+        sessao = repositorio_orcamento.sessao(run_id, thread_id, teto_decimal)
+        cadeia = fabrica_tentativas_orcadas(
+            papel, prompt, tentativa, requisitos or RequisitosTentativaCusteada()
+        )
+        if not isinstance(cadeia, list) or not cadeia:
+            raise ErroOrcamento("adaptador custeado ausente")
+        for indice, item in enumerate(cadeia, start=1):
+            if not isinstance(item, RotaTentativaCusteada):
+                raise ErroOrcamento("adaptador custeado invalido")
+            route_id, provider_id, adaptador = item.route_id, item.provider_id, item.adaptador
+            if requisitos is not None and provider_id == requisitos.evitar_provedor:
+                continue
+            prompt_id = hashlib.sha256(prompt.encode()).hexdigest()[:16]
+            call_base = f"{run_id}:{thread_id}:{fase}:{no_id}:{ciclo}:{tentativa}:{prompt_id}"
+            call_id = (
+                f"planner-{fase}-{tentativa}" if papel == "planner"
+                else f"{fase}-{hashlib.sha256(call_base.encode()).hexdigest()[:32]}"
+            )
+            base = f"{run_id}:{thread_id}:{call_id}:{route_id}:{indice}"
+            prefixo = "planner" if papel == "planner" else fase
+            identidade = IdentidadeTentativaCusteada(
+                reservation_id=f"{prefixo}-{hashlib.sha256(base.encode()).hexdigest()[:32]}",
+                call_id=call_id,
+                route_id=route_id,
+                attempt=indice,
+            )
+            resultado = executar_tentativa_custeada(
+                repositorio_orcamento, sessao, identidade, adaptador,
+            )
+            if resultado is not None and resultado.texto:
+                return RespostaTentativaCusteada(resultado.texto, route_id, provider_id)
+        return None
 
     def workspace_de(state: EstadoMotor) -> Path:
         return workspace_base / state["run_id"] / "artefatos"
@@ -438,21 +500,44 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
             return {"spec": spec.model_dump(), "run_id": run_id}
         rota_ativa = rota
         if rota_ativa is None and rotas:
-            nome_rota = _escolher_rota(cliente, state["missao_texto"], rotas, log)
+            catalogo = [
+                {"nome": nome, "quando": item.get("quando", "")}
+                for nome, item in rotas.items()
+            ]
+            resposta_rota = chamar_planner_orcado(
+                state, run_id, PROMPT_SELETOR_ROTA.format(
+                    missao=state["missao_texto"],
+                    catalogo=json.dumps(catalogo, ensure_ascii=False),
+                ), 1, fase="rota",
+            )
+            bruto_rota = extrai_json(resposta_rota or "")
+            nome_rota = (
+                str(bruto_rota.get("rota") or "").strip()
+                if isinstance(bruto_rota, dict) else ""
+            )
+            fallback = nome_rota not in rotas
+            if fallback:
+                nome_rota = "pesquisa-sintese" if "pesquisa-sintese" in rotas else ""
+            escolhida = rotas.get(nome_rota) or ROTA_DEFAULT
+            log.evento("rota.escolhida", rota=nome_rota or "pesquisa-sintese",
+                       padrao=escolhida["padrao"], fallback=fallback)
             rota_ativa = rotas.get(nome_rota) if nome_rota is not None else ROTA_DEFAULT
             rota_ativa = rota_ativa or ROTA_DEFAULT
         erro = ""
         for tentativa in (1, 2, 3):
             log.evento("executor.chamado", executor="planner", tentativa=tentativa,
                        modelo=_descricao_modelo("planner"))
-            resp = cliente.chamar("planner", montar_prompt_planner(
+            prompt = montar_prompt_planner(
                 missao=state["missao_texto"],
                 schema=json.dumps(WorkflowSpec.model_json_schema(), ensure_ascii=False),
-                max_sub=10, erro=erro, rota=rota_ativa))
+                max_sub=10, erro=erro, rota=rota_ativa)
+            resp = chamar_planner_orcado(state, run_id, prompt, tentativa)
             bruto = extrai_json(resp or "")
             if bruto is not None:
                 try:
                     spec = WorkflowSpec.model_validate(bruto)
+                    if Decimal(str(spec.restricoes.teto_custo)) > teto_bootstrap:
+                        raise ValueError("spec gerada nao pode elevar teto bootstrap")
                     log.evento("spec.criada", missao=spec.missao.id, subagentes=len(spec.subagentes))
                     return {"spec": spec.model_dump(), "run_id": run_id}
                 except Exception as ex:  # validação pydantic reprovada → reinjeta o erro
@@ -525,7 +610,10 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         spec = state["spec"]
         log.evento("paralelo.iniciado", subagentes=[s["id"] for s in spec["subagentes"]])
         workspace = workspace_de(state)
-        return [Send("subagente", {"sub": s, "spec": spec, "workspace": workspace}) for s in spec["subagentes"]]
+        return [Send("subagente", {
+            "sub": s, "spec": spec, "workspace": workspace,
+            "run_id": state.get("run_id"), "thread_id": state.get("thread_id"),
+        }) for s in spec["subagentes"]]
 
     def rota_pos_plano(state: EstadoMotor):
         if state.get("avaliacao", {}).get("abortada"):
@@ -559,13 +647,10 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                 "aprovado": False, "motivo": motivo,
             }]}
 
-        # Guard de independência: o verifier deve evitar o provedor DO executor desta
-        # tarefa (cross-model anti-auto-aprovação). Só quando o cliente sabe rotear.
-        prov_exec = (cliente.provedor_de(sub["papel"], sub.get("tier"), sub.get("ferramentas"),
-                                         capacidades=sub.get("capacidades_requeridas"))
-                     if hasattr(cliente, "provedor_de") else None)
-        kw_verifier = {"evitar": prov_exec} if prov_exec else {}
         tier_atual = sub.get("tier")
+        capacidades_tupla = (
+            tuple(capacidades) if isinstance(capacidades, list) else None
+        )
         rubrica_txt = "\n".join(f"- {c}" for c in sub["rubrica"])
         feedback, ultima = payload.get("feedback", ""), payload.get("rascunho_anterior")
         contexto_rag = ""
@@ -615,13 +700,18 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                 feedback=bloco_feedback,
             )
             try:
-                ultima = cliente.chamar(
-                    sub["papel"],
-                    prompt_subagente,
-                    ferramentas=sub.get("ferramentas"),
-                    tier=tier_atual,
-                    capacidades=sub.get("capacidades_requeridas"),
+                resposta_executor = chamar_orcado(
+                    payload.get("run_id"), payload.get("thread_id"),
+                    spec["restricoes"]["teto_custo"], sub["papel"], "executor",
+                    sub["id"], prompt_subagente, tentativa,
+                    RequisitosTentativaCusteada(
+                        tier=tier_atual,
+                        ferramentas=sub.get("ferramentas"),
+                        capacidades=capacidades_tupla,
+                    ),
+                    int(payload.get("ciclo_reconciliacao", 0)),
                 )
+                ultima = resposta_executor.texto if resposta_executor is not None else None
             except Exception:
                 feedback = "falha externa do executor"
                 log.evento(
@@ -637,15 +727,27 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                 continue
             log.evento("executor.respondeu", executor=sub["id"], tentativa=tentativa)
             try:
-                resposta_verifier = cliente.chamar(
-                    "verifier",
+                resposta_verifier_orcada = chamar_orcado(
+                    payload.get("run_id"), payload.get("thread_id"),
+                    spec["restricoes"]["teto_custo"], "verifier", "verifier",
+                    sub["id"],
                     PROMPT_VERIFIER.format(
                         id=sub["id"],
                         objetivo=sub["objetivo"],
                         rubrica="\n".join(f"- {c}" for c in sub["rubrica"]),
                         saida=ultima,
                     ),
-                    **kw_verifier,
+                    tentativa,
+                    RequisitosTentativaCusteada(
+                        evitar_provedor=(
+                            resposta_executor.provider_id if resposta_executor is not None else None
+                        ),
+                    ),
+                    int(payload.get("ciclo_reconciliacao", 0)),
+                )
+                resposta_verifier = (
+                    resposta_verifier_orcada.texto
+                    if resposta_verifier_orcada is not None else None
                 )
             except Exception:
                 feedback = "falha externa do verifier"
@@ -977,7 +1079,10 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                     }
                     deps = {d: texto_dependencia(concluidos[d]) for d in dependencias}
                     retorno = subagente(
-                        {"sub": sub, "spec": spec, "deps": deps, "workspace": workspace}
+                        {
+                            "sub": sub, "spec": spec, "deps": deps, "workspace": workspace,
+                            "run_id": state.get("run_id"), "thread_id": state.get("thread_id"),
+                        }
                     )
                     resultado = retorno["resultados"][0]
                 concluidos[sid] = resultado
@@ -1008,7 +1113,10 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
             return [resolver_refs_artefato(item, concluidos) for item in valor]
         return valor
 
-    def avaliar_cobertura(spec: dict[str, Any], resultados: list[dict[str, Any]]) -> dict[str, Any]:
+    def avaliar_cobertura(
+        state: EstadoMotor, resultados: list[dict[str, Any]], ordinal: int,
+    ) -> dict[str, Any]:
+        spec = state["spec"]
         reprovados = [r["id"] for r in resultados if not r["aprovado"]]
         refazer_reprovados = [
             str(r.get("refazer") or r["id"])
@@ -1018,11 +1126,19 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         log.evento("executor.chamado", executor="global_evaluator",
                    modelo=_descricao_modelo("evaluator"),
                    **_template_evento(spec))
-        bruto_veredito = extrai_json(cliente.chamar("evaluator", PROMPT_EVALUATOR.format(
-            missao_objetivo=spec["missao"]["objetivo"],
-            criterios="\n".join(f"- {c}" for c in spec["missao"]["criterios_cobertura"]),
-            resultados=json.dumps(resultados, ensure_ascii=False),
-        )) or "")
+        resposta = chamar_orcado(
+            state.get("run_id"), state.get("thread_id"), spec["restricoes"]["teto_custo"],
+            "evaluator", "evaluator", "global_evaluator",
+            PROMPT_EVALUATOR.format(
+                missao_objetivo=spec["missao"]["objetivo"],
+                criterios="\n".join(f"- {c}" for c in spec["missao"]["criterios_cobertura"]),
+                resultados=json.dumps(resultados, ensure_ascii=False),
+            ),
+            ordinal,
+        )
+        if resposta is None:
+            raise ErroOrcamento("evaluator orcado indisponivel")
+        bruto_veredito = extrai_json(resposta.texto)
         try:
             tipado = _VereditoEvaluator.model_validate(bruto_veredito)
         except ValidationError:
@@ -1062,7 +1178,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         log.evento("decisao.fundador", portao="cobertura", decisao=str(decisao))
         return decisao
 
-    def preencher_lacunas(spec: dict[str, Any], resultados: list[dict[str, Any]],
+    def preencher_lacunas(state: EstadoMotor, spec: dict[str, Any], resultados: list[dict[str, Any]],
                           workspace: Path,
                           veredito: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         por_id = {s["id"]: s for s in spec["subagentes"]}
@@ -1122,6 +1238,9 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                         "feedback": feedback,
                         "rascunho_anterior": por_id_resultado.get(sid, {}).get("saida"),
                         "workspace": workspace,
+                        "run_id": state.get("run_id"),
+                        "thread_id": state.get("thread_id"),
+                        "ciclo_reconciliacao": state.get("rodada_reconciliacao", 0) + 1,
                     })
                     resultado = retorno["resultados"][0]
                     log.evento("lacuna.preenchida", subagente=sid)
@@ -1139,50 +1258,100 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         return {**veredito, "abortada": True}
 
     def avaliar(state: EstadoMotor) -> dict:
-        spec, resultados = state["spec"], state["resultados"]
-        log.evento("paralelo.concluido", commitados=len(resultados))
-        veredito = avaliar_cobertura(spec, resultados)
-        acumulados: list[dict[str, Any]] = []
-        rodada = 0
-
-        while veredito["aprovado"] is False:
-            log.evento("portao.reprovado", portao="cobertura", lacunas=veredito.get("lacunas", []))
-            permitir = rodada < max_rodadas_reconciliacao
-            if not permitir:
-                log.evento("reconciliacao.esgotada", rodadas=rodada)
-            decisao = decidir_cobertura(veredito, permitir_preencher=permitir)
-            if not (permitir and _decisao_texto(decisao) == "preencher"):
-                base = {"resultados": acumulados} if acumulados else {}
-                return {**base, "avaliacao": finalizar_cobertura(veredito, decisao)}
-
-            resultados, novos = preencher_lacunas(spec, resultados, workspace_de(state), veredito)
-            if not novos:
-                decisao = decidir_cobertura(veredito, permitir_preencher=False)
-                base = {"resultados": acumulados} if acumulados else {}
-                return {**base, "avaliacao": finalizar_cobertura(veredito, decisao)}
-
-            acumulados = mesclar_resultados(acumulados, novos)
-            rodada += 1
-            veredito = avaliar_cobertura(spec, resultados)
-
-        log.evento("portao.aprovado", portao="cobertura")
-        if acumulados:
-            return {"resultados": acumulados, "avaliacao": veredito}
-        return {"avaliacao": veredito}
+        resultados = state["resultados"]
+        rodada = state.get("rodada_reconciliacao", 0)
+        if rodada == 0:
+            log.evento("paralelo.concluido", commitados=len(resultados))
+        try:
+            veredito = avaliar_cobertura(state, resultados, rodada + 1)
+        except ErroOrcamento:
+            log.evento(
+                "executor.erro", executor="global_evaluator",
+                motivo="orcamento indisponivel", tentativa=rodada + 1,
+            )
+            log.evento("tarefa.abortada", motivo="evaluator orcado indisponivel")
+            return {"avaliacao": {
+                "aprovado": False, "abortada": True,
+                "lacunas": ["evaluator orcado indisponivel"], "nos_a_refazer": [],
+            }}
+        if veredito["aprovado"]:
+            log.evento("portao.aprovado", portao="cobertura")
+        return {"avaliacao": veredito, "preenchimento_vazio": False}
 
     def rota_pos_avaliacao(state: EstadoMotor):
+        if state["avaliacao"].get("abortada"):
+            return END
+        return "sintetizar" if state["avaliacao"].get("aprovado") else "decidir_cobertura"
+
+    def decidir_cobertura_node(state: EstadoMotor) -> dict[str, Any]:
+        veredito = state["avaliacao"]
+        rodada = state.get("rodada_reconciliacao", 0)
+        log.evento("portao.reprovado", portao="cobertura", lacunas=veredito.get("lacunas", []))
+        limite_esgotado = rodada >= max_rodadas_reconciliacao
+        permitir = not limite_esgotado and not state.get("preenchimento_vazio", False)
+        if limite_esgotado:
+            log.evento("reconciliacao.esgotada", rodadas=rodada)
+        decisao = decidir_cobertura(veredito, permitir_preencher=permitir)
+        texto = _decisao_texto(decisao) or "abortar"
+        if permitir and texto == "preencher":
+            return {"decisao_cobertura": texto}
+        return {
+            "decisao_cobertura": texto,
+            "avaliacao": finalizar_cobertura(veredito, decisao),
+        }
+
+    def rota_pos_decisao(state: EstadoMotor):
+        if state.get("decisao_cobertura") == "preencher":
+            return "preencher_lacunas"
         return END if state["avaliacao"].get("abortada") else "sintetizar"
+
+    def preencher_lacunas_node(state: EstadoMotor) -> dict[str, Any]:
+        _resultados, novos = preencher_lacunas(
+            state, state["spec"], state["resultados"], workspace_de(state), state["avaliacao"],
+        )
+        if not novos:
+            return {"preenchimento_vazio": True, "decisao_cobertura": ""}
+        return {
+            "resultados": novos,
+            "rodada_reconciliacao": state.get("rodada_reconciliacao", 0) + 1,
+            "preenchimento_vazio": False,
+            "decisao_cobertura": "",
+        }
+
+    def rota_pos_preenchimento(state: EstadoMotor):
+        return "decidir_cobertura" if state.get("preenchimento_vazio") else "avaliar"
 
     def sintetizar(state: EstadoMotor) -> dict:
         spec = state["spec"]
         log.evento("executor.chamado", executor="synthesizer",
                    modelo=_descricao_modelo("synthesizer"),
                    **_template_evento(spec))
-        resposta = cliente.chamar("synthesizer", PROMPT_SYNTHESIZER.format(
-            missao_objetivo=spec["missao"]["objetivo"],
-            instrucao=spec["sintese"]["instrucao"], formato=spec["sintese"]["formato"],
-            resultados=json.dumps([r for r in state["resultados"] if r["aprovado"]], ensure_ascii=False),
-        )) or "(synthesizer não respondeu)"
+        try:
+            resposta_orcada = chamar_orcado(
+                state.get("run_id"), state.get("thread_id"), spec["restricoes"]["teto_custo"],
+                "synthesizer", "synthesizer", "synthesizer",
+                PROMPT_SYNTHESIZER.format(
+                    missao_objetivo=spec["missao"]["objetivo"],
+                    instrucao=spec["sintese"]["instrucao"], formato=spec["sintese"]["formato"],
+                    resultados=json.dumps(
+                        [r for r in state["resultados"] if r["aprovado"]], ensure_ascii=False,
+                    ),
+                ),
+                1,
+            )
+        except ErroOrcamento:
+            resposta_orcada = None
+        if resposta_orcada is None:
+            log.evento(
+                "executor.erro", executor="synthesizer",
+                motivo="orcamento indisponivel", tentativa=1,
+            )
+            log.evento("tarefa.abortada", motivo="synthesizer orcado indisponivel")
+            return {"avaliacao": {
+                **state.get("avaliacao", {}), "aprovado": False, "abortada": True,
+                "motivo": "synthesizer orcado indisponivel",
+            }}
+        resposta = resposta_orcada.texto
         log.evento("tarefa.concluida", missao=spec["missao"]["id"])
         return {"resposta_final": resposta}
 
@@ -1192,12 +1361,20 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
     g.add_node("subagente", subagente)  # type: ignore[arg-type]
     g.add_node("executar_grafo_dep", executar_grafo_dep)
     g.add_node("avaliar", avaliar)
+    g.add_node("decidir_cobertura", decidir_cobertura_node)
+    g.add_node("preencher_lacunas", preencher_lacunas_node)
     g.add_node("sintetizar", sintetizar)
     g.add_edge(START, "planner")
     g.add_edge("planner", "revisar_plano")
     g.add_conditional_edges("revisar_plano", rota_pos_plano, ["subagente", "executar_grafo_dep", END])
     g.add_edge("subagente", "avaliar")
     g.add_edge("executar_grafo_dep", "avaliar")
-    g.add_conditional_edges("avaliar", rota_pos_avaliacao, ["sintetizar", END])
+    g.add_conditional_edges("avaliar", rota_pos_avaliacao, ["decidir_cobertura", "sintetizar", END])
+    g.add_conditional_edges(
+        "decidir_cobertura", rota_pos_decisao, ["preencher_lacunas", "sintetizar", END],
+    )
+    g.add_conditional_edges(
+        "preencher_lacunas", rota_pos_preenchimento, ["decidir_cobertura", "avaliar"],
+    )
     g.add_edge("sintetizar", END)
     return g.compile(checkpointer=checkpointer)

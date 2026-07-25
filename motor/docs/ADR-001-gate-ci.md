@@ -76,7 +76,7 @@ Estenderemos a `WorkflowSpec v0.1` e a lógica de execução no `grafo.py` para 
   * *CI Flaky/Lento:* Para o repositório, o tempo total do CI deve ser medido para garantir que rode em `< 5 min`. Usaremos cache de dependências no GitHub Actions.
   * *Falsa certificação por `cwd`:* tempdir não isola filesystem, ambiente, rede ou árvore de
     processos. C2/C3 só podem ser habilitados por adapter, policy, imagem por digest e job de
-    conformidade descritos em `../specs/001-hardening-producao/verification-h05b.md`.
+    conformidade descritos em `../specs/001-hardening-producao/sandbox-conformance.md`.
 
 ## Plano de Handoffs (Fatiamento)
 Fatiamos a entrega para o Operário nos seguintes commits atômicos:

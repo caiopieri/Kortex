@@ -12,7 +12,7 @@ SCHEMA_VERSAO = 2
 EVENTOS_MONETARIOS = frozenset({
     "custo.reservado", "custo.reconciliado", "custo.bloqueado", "custo.contrato_violado",
 })
-_CAMPOS_ORCAMENTO = ["run_id", "thread_id", "call_id", "rota", "tentativa", "moeda", "teto", "gasto", "reservado"]
+_CAMPOS_ORCAMENTO = ["run_id", "thread_id", "call_id", "rota", "tentativa", "moeda", "teto", "gasto", "reservado", "event_id"]
 _MAX_DECIMAL_CHARS = 128
 _PRECISAO_DECIMAL = 2 * _MAX_DECIMAL_CHARS + 1
 _DECIMAL_TEXTO = re.compile(r"(?:0|[1-9][0-9]*)(?:\.[0-9]+)?\Z")
@@ -341,6 +341,7 @@ TIPOS_CAMPO: dict[str, Any] = {
     "delta_liberado": str,
     "edicoes": DICT_OU_NULO,
     "estimado": BOOL_OU_NULO,
+    "event_id": str,
     "evitar": str,
     "executor": str,
     "fallback": bool,
@@ -413,6 +414,7 @@ TIPOS_POR_EVENTO: dict[str, dict[str, Any]] = {
 }
 
 CAMPOS_OPCIONAIS: dict[str, set[str]] = {
+    **{tipo: {"event_id"} for tipo in EVENTOS_MONETARIOS},
     "custo.tick": {"estimado"},
     "decisao.plano": {"decisao", "edicoes"},
     "executor.chamado": {
@@ -480,6 +482,8 @@ def _dominio_monetario_valido(tipo: str, evento: dict[str, Any]) -> bool:
 
     ids = ("run_id", "thread_id", "call_id", "rota")
     if not all(_identificador_valido(evento[campo]) for campo in ids):
+        return False
+    if "event_id" in evento and re.fullmatch(r"[0-9a-f]{64}", evento["event_id"]) is None:
         return False
     for campo in ("reservation_id", "pricing_version"):
         if campo in evento and not _identificador_valido(evento[campo]):

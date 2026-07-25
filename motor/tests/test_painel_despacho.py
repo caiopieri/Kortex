@@ -69,6 +69,7 @@ def despachos(tmp_path, monkeypatch):
     monkeypatch.setattr(painel.Handler, "despachos_dir", d)
     monkeypatch.setattr(painel.Handler, "log_path", tmp_path / "log.jsonl")
     monkeypatch.setattr(painel.Handler, "db_path", tmp_path / "motor.db")
+    monkeypatch.delenv("MOTOR_MODELOS", raising=False)
     return d
 
 
@@ -134,6 +135,7 @@ def test_post_missao_valido_despacha(despachos, popen_espiao):
         sys.executable, "-m", "motor",
         "--spec", resp["spec"],
         "--caixa", "runs/caixa",
+        "--run-id", f"painel-{Path(resp['spec']).stem.removeprefix('spec-')}",
         "--auto", "--escalar",
     ]
     assert isinstance(argv, list)  # nunca string de shell
@@ -163,6 +165,23 @@ def test_post_missao_sem_opcoes_argv_base(despachos, popen_espiao):
         sys.executable, "-m", "motor",
         "--spec", resp["spec"],
         "--caixa", "runs/caixa",
+        "--run-id", f"painel-{Path(resp['spec']).stem.removeprefix('spec-')}",
+    ]
+
+
+def test_post_propaga_modelos_somente_do_env(despachos, popen_espiao, monkeypatch):
+    monkeypatch.setenv("MOTOR_MODELOS", "/config/modelos-orcados.json")
+    status, corpo = _post_missao({
+        "spec": SPEC_MINIMA,
+        "opcoes": {"modelos": "/tmp/hostil.json"},
+    })
+    assert status == 200
+    resp = json.loads(corpo)
+    assert popen_espiao[0]["argv"] == [
+        sys.executable, "-m", "motor", "--spec", resp["spec"],
+        "--caixa", "runs/caixa",
+        "--run-id", f"painel-{Path(resp['spec']).stem.removeprefix('spec-')}",
+        "--modelos", "/config/modelos-orcados.json",
     ]
 
 

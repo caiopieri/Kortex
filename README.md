@@ -15,7 +15,7 @@ A meta-fábrica é **autossuficiente** (motor + casas + **interface própria**).
 ela via MCP, mas ela **não depende de nenhum deles**.
 
 ```
-Consumidores externos (opcionais, via MCP):  Jarvis (assistente/porteiro) · Flint (app de notas) · …
+Consumidores externos opcionais via MCP (assistentes, painéis e aplicações)
    ▲  MCP (despachar / status / stream de eventos)
 ┌ META-FÁBRICA (este repositório) ───────────────────────────────────────────────┐
 │ Interface própria   ── a superfície de 1ª classe: VÊ a fábrica rodando e intercepta
@@ -27,20 +27,17 @@ Consumidores externos (opcionais, via MCP):  Jarvis (assistente/porteiro) · Fli
 
 **Regra pétrea:** o motor é *músculo, não autoridade* — fabrica e expõe estado; não decide permissão,
 risco ou dinheiro (isso é do porteiro). A fronteira entre camadas é **MCP**. Este repositório é o
-**núcleo** (motor + harnesses de domínio + interface própria + documentação). **Jarvis** e **Flint** são
-**projetos separados** (repos próprios) que *podem* consumir a meta-fábrica como clientes — ela funciona
-sozinha sem eles.
+**núcleo** (motor + harnesses de domínio + interface própria + documentação). Clientes externos vivem
+em projetos separados; a meta-fábrica funciona sem eles.
 
 ## Estrutura do repositório
 
 ```
-docs/                  visão, roadmap e specs do sistema (comece por docs/LEIA-PRIMEIRO.md)
-  design/              briefing da interface viva
+docs/                  arquitetura, roadmap, decisões e design system
 motor/                 o kernel (pacote Python autocontido)
   motor/ tests/ exemplos/ scripts/ motor_painel/
-  docs/                EVOLUCAO, ARQUITETURA-MCP, runbooks
-  handoffs/            histórico de handoffs de implementação (rationale)
-  specs/               especificações, matrizes e evidências do hardening T2
+  docs/                ADRs, invariantes, segurança e runbooks
+  specs/               contratos e verificação reproduzível
 dev-harness/           a softwarehouse: metodologia de engenharia (a 1ª casa)
 harness-hardware/      semente da vertical de hardware
 harness-mecanico/      semente da vertical mecânica
@@ -48,48 +45,63 @@ harness-mecanico/      semente da vertical mecânica
 
 ## Começar a entender
 
-1. **[docs/LEIA-PRIMEIRO.md](docs/LEIA-PRIMEIRO.md)** — a visão, as camadas, os princípios e o estado atual. **Leia primeiro.**
+1. **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — camadas, fluxo e fronteiras de confiança.
 2. [docs/ROADMAP.md](docs/ROADMAP.md) — o mapa operacional Now/Next/Later.
 3. [motor/README.md](motor/README.md) — como rodar e testar o motor.
 4. [motor/docs/EVOLUCAO.md](motor/docs/EVOLUCAO.md) e [motor/docs/ARQUITETURA-MCP.md](motor/docs/ARQUITETURA-MCP.md) — o norte e a fronteira do motor.
-5. [motor/specs/001-hardening-producao/](motor/specs/001-hardening-producao/) — spec, matriz de invariantes e evidências do hardening T2.
+5. [motor/specs/](motor/specs/) — contratos públicos e evidências reproduzíveis.
 
-## Rodar o motor (rápido)
+## Verificar o motor e exercitar a composição
 
 ```bash
 cd motor
 python -m pip install -e ".[dev]"
 pytest -q                                       # suíte sem rede; mesmo alvo funcional do CI
-python -m motor "pesquise oportunidades de aumento de receita"   # requer um provedor de modelo
+python -m motor --modelos /caminho/modelos-orcados.json "pesquise oportunidades de aumento de receita"  # fail-closed
 ```
+
+O último comando demonstra a composição e pode bloquear antes da rede: a configuração precisa conter
+`orcamento_openai`, credencial por variável de ambiente, snapshot FX fresco e
+`teto_bootstrap_brl` positivo. A rota OpenAI única ainda reprova o preflight de independência;
+configurações legadas não autorizam efeitos.
 
 ## Estado
 
 O motor v0.5 está em **hardening T2; ainda não está certificado para produção**. O programa H00–H13
-fechou a maior parte das falhas encontradas pela auditoria defensiva, e a extensão H12b já avançou até
-H12b2c1. O estado comprovado hoje é:
+fechou a maior parte das falhas encontradas pela auditoria defensiva, e a extensão H12b chegou à
+integração fail-closed dos callsites de modelo. O estado comprovado hoje é:
 
 - kernel/spec/grafo, reconciliação bounded e validação de capabilities hardened;
 - executor de comando com identidade e `argv` validados, mas **default-deny em produção**;
-- schema de eventos v2, ledger append-only/recovery, projeção read-only e superfície MCP hardened;
+- schema de eventos v2, ledger append-only/recovery, projeção read-only e superfície MCP tipada com
+  input e resposta serializada limitados, identidade de gate e orçamento fail-closed;
 - curador com sombra read-only, certificação anti-Goodhart e promoção apenas como intenção humana
   (ADR-003), nunca aplicação automática;
-- Caixa do Fundador e livro-razão de orçamento com transações, replay, reserva exclusiva, outbox e
-  protocolo de `claim/lease/ack` até H12b2c1.
+- Caixa do Fundador e livro-razão de orçamento com transações, replay, reserva exclusiva e relay
+  `claim/lease/ack` para o ledger JSONL, preservando `event_id` e deduplicação após reabertura;
+- planner, executor, verifier, evaluator, reconciliação e synthesizer reservam antes do efeito e
+  bloqueiam custo desconhecido; a composição OpenAI exige pricing/FX versionados e frescos.
 
-Duas fronteiras impedem declarar o gate global fechado:
+As fronteiras abaixo impedem declarar o gate global fechado:
 
 1. **H05b bloqueado externamente:** falta um backend real de sandbox, com imagem por digest e policy
    versionada, para provar isolamento de filesystem/rede/ambiente, limite de output e TERM/KILL da
    árvore de processos. Sem isso, C2/C3 permanecem indisponíveis.
-2. **H12b2c2 é o próximo landing:** o relay/publicador ainda precisa transportar `event_id` ao
-   consumidor. H12b2c1 não publica; portanto a janela entre publicação e `ack` ainda exige a semântica
-   at-least-once/deduplicação que será fechada nessa fatia.
+2. **Composição real ainda não é operacional:** uma única rota OpenAI não satisfaz a independência
+   entre executor e verifier. O teto bootstrap agora é governado por configuração e limita a spec
+   gerada, mas o deployment deve dimensioná-lo para a reserva conservadora. Studio e experimentos
+   reais falham fechados até receberem composição custeada durável.
+3. **Autoridade do curador é externa:** sem `RepositorioCertificacoes` autoritativo, promoção continua
+   indisponível; o motor produz no máximo uma intenção sujeita a gate humano.
 
-O snapshot consolidado e suas ressalvas estão em
-[verification-h13.md](motor/specs/001-hardening-producao/verification-h13.md); o progresso posterior de
-H12b está em [h12b1a-landings.md](motor/specs/001-hardening-producao/h12b1a-landings.md). O sequenciamento
-operacional continua em [docs/ROADMAP.md](docs/ROADMAP.md).
+O estado verificável e os bloqueios estão em
+[verification.md](motor/specs/001-hardening-producao/verification.md). O sequenciamento operacional
+continua em [docs/ROADMAP.md](docs/ROADMAP.md).
+
+## Contribuir e segurança
+
+Veja [CONTRIBUTING.md](CONTRIBUTING.md) para configurar o ambiente e executar os gates. Falhas de
+segurança devem seguir [SECURITY.md](SECURITY.md), sem exposição antecipada em issue pública.
 
 ## Licença
 

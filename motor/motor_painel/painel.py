@@ -15,6 +15,7 @@ import re
 import time
 import sqlite3
 from typing import Any, NoReturn, Optional, cast
+from uuid import uuid4
 
 from motor.eventos_schema import valido
 
@@ -696,12 +697,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if pid_lock is not None and _pid_vivo(pid_lock):
             return self._erro(409, b"ja existe despacho em curso")
 
-        ts = time.strftime("%Y%m%d-%H%M%S")
+        ts = f"{time.strftime('%Y%m%d-%H%M%S')}-{uuid4().hex[:8]}"
         spec_path = despachos / f"spec-{ts}.json"
         spec_path.write_text(json.dumps(spec, ensure_ascii=False, indent=2), encoding="utf-8")
         run_log = despachos / f"run-{ts}.log"
 
-        argv = [sys.executable, "-m", "motor", "--spec", str(spec_path), "--caixa", "runs/caixa"]
+        argv = [
+            sys.executable, "-m", "motor", "--spec", str(spec_path),
+            "--caixa", "runs/caixa", "--run-id", f"painel-{ts}",
+        ]
+        modelos = os.environ.get("MOTOR_MODELOS")
+        if modelos:
+            argv.extend(["--modelos", modelos])
         if opcoes.get("auto") is True:
             argv.append("--auto")
         if opcoes.get("escalar") is True:

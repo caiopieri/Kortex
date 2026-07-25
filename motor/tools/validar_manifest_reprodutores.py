@@ -17,7 +17,7 @@ MOTOR = Path(__file__).resolve().parents[1]
 SPEC = MOTOR / "specs/001-hardening-producao"
 MANIFEST = SPEC / "reproducer-manifest.jsonl"
 MATRIX = SPEC / "invariant-matrix.jsonl"
-CORPUS = SPEC / "reproducer-corpus-00bbc07deca063f5.tar"
+CORPUS = SPEC / "reproducer-corpus-0bdbb677dd281edc.tar"
 REQUIRED = {
     "nodeid", "file_sha256", "corpus_member", "origin", "baseline", "invariant",
     "cause", "owner", "disposition", "disposition_by", "disposition_reason", "landing",
@@ -66,7 +66,7 @@ def validar() -> list[str]:
             erros.append(f"invariante invalido: {row.get('nodeid')}")
         if str(row.get("nodeid", "")).split("::", 1)[0] != row.get("corpus_member"):
             erros.append(f"nodeid nao pertence ao membro: {row.get('nodeid')}")
-        if row.get("origin") == "codex-preexisting" and "Caio Amaral de Pieri" not in str(row.get("disposition_by")):
+        if row.get("origin") == "codex-preexisting" and "mantenedor humano" not in str(row.get("disposition_by")):
             erros.append(f"disposicao Codex sem aprovador humano: {row.get('nodeid')}")
         par_disposicao = (row.get("disposition"), row.get("landing"))
         if par_disposicao not in DISPOSITION_LANDING:

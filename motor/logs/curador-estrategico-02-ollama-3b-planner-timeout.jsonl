@@ -1,5 +1,0 @@
-{"t": 0.027, "evento": "executor.chamado", "executor": "planner", "tentativa": 1, "modelo": "ollama-3b/qwen2.5:3b-instruct"}
-{"t": 0.031, "evento": "modelo.pin", "papel": "planner", "tier": null}
-{"t": 104.797, "evento": "executor.erro", "executor": "planner", "motivo": "spec inválida ou sem JSON", "tentativa": 1}
-{"t": 104.797, "evento": "executor.chamado", "executor": "planner", "tentativa": 2, "modelo": "ollama-3b/qwen2.5:3b-instruct"}
-{"t": 104.801, "evento": "modelo.pin", "papel": "planner", "tier": null}

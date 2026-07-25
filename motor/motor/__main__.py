@@ -1,24 +1,18 @@
 """CLI mínima do motor v0.5.
 
-  python -m motor "sua missão aqui"            # planner cria a WorkflowSpec
-  python -m motor --spec exemplos/missao.json  # missão dirigida por spec pronta
+  python -m motor --modelos cfg-orcada.json "sua missão aqui"
+  python -m motor --modelos cfg-orcada.json --spec exemplos/missao.json
   python -m motor ... --caixa "<dir>"          # gate via nota no vault + resume durável
-  python -m motor ... --modelos exemplos/modelos-nvidia.json  # papéis baratos → DeepSeek/Kimi
-                                               # (exige env var da chave, ex. NVIDIA_API_KEY)
-  python -m motor ... --modelos cfg.json --esgotado claude     # claude indisponível →
-                                               # reroteia pro fallback (Corte B). Repetível.
   python -m motor ... --auto                   # auto-mode: gates resolvem sozinhos (Corte C)
   python -m motor ... --auto --gate cobertura=manual  # tudo auto, MENOS o gate de cobertura
   python -m motor ... --escalar                # verifier reprovou → retry sobe um tier
-  python -m motor ... --modelos cfg.json --pin synthesizer=oc/openai/gpt-5.5  # fixa modelo
-                                               # numa chave (papel|tier|"*"), precedência máxima.
-                                               # Pins globais (todos os projetos): ~/.motor/pins.json
   python -m motor ... --registro "4. Registry/Modelos"  # catálogo via entidades .md
   python -m motor ... --registro Registry --rota construcao  # estratégia explícita do planner
   python -m motor ... --workspace runs  # base dos artefatos por execução
 
-Requer `claude` CLI no PATH (Mac do Caio). Gate do fundador: sem `--caixa`, a
-decisão é via input() e o checkpointer é em memória (volátil). Com `--caixa
+A execução de modelo exige composição `orcamento_openai` válida; configurações
+legadas falham antes do efeito. Gate do fundador: sem `--caixa`, a decisão é via
+input() e o checkpointer é em memória (volátil). Com `--caixa
 <dir>`, a decisão vai para uma nota na Caixa do fundador (T3) e o estado do
 grafo é persistido em `motor.db` na raiz do repo — religar o processo retoma do
 gate pendente.
@@ -26,9 +20,12 @@ gate pendente.
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 import sys
+import time
 from pathlib import Path
+from uuid import uuid4
 
 from langgraph.types import Command
 
@@ -40,9 +37,11 @@ except ImportError:  # nome antigo
 from langgraph.checkpoint.sqlite import SqliteSaver
 
 from .caixa import CaixaFundador, rodar_com_caixa
+from .composicao_orcamento import compor_orcamento_openai, validar_independencia_orcada
 from .eventos import LogEventos
 from .grafo import construir_grafo
 from .modelos import ClienteClaudeCLI, ClienteModelo, ProvedorIndisponivel, cliente_de_config
+from .orcamento import ErroOrcamento, RepositorioOrcamento, publicar_um_pendente
 from .registro import (
     cliente_de_registro,
     ferramentas_de_registro,
@@ -68,6 +67,22 @@ def _lista_str(valor) -> list[str]:
     return [str(valor)]
 
 
+def _drenar_orcamento_cli(
+    repositorio: RepositorioOrcamento,
+    run_id: str,
+    log: LogEventos,
+    *,
+    agora: int | None = None,
+) -> bool:
+    instante = int(time.time()) if agora is None else agora
+    owner = f"cli-{uuid4().hex}"
+    while publicar_um_pendente(
+        repositorio, run_id, owner, instante, 30, log.publicar_orcamento,
+    ):
+        pass
+    return repositorio.listar_pendentes(run_id) == []
+
+
 def construir_cliente(cfg_modelos: dict | None, dir_registro: str | None,
                       log: LogEventos | None = None) -> ClienteModelo:
     """Monta o cliente de modelo para uso programático.
@@ -81,7 +96,7 @@ def construir_cliente(cfg_modelos: dict | None, dir_registro: str | None,
         return cliente_de_config(cfg_modelos, log=log)
     if not ClienteClaudeCLI.disponivel():
         raise ProvedorIndisponivel(
-            "`claude` CLI não encontrado no PATH — rode no Mac do Caio ou use o ClienteStub em testes."
+            "`claude` CLI não encontrado no PATH; instale o CLI ou use o ClienteStub em testes."
         )
     return ClienteClaudeCLI(log=log)
 
@@ -104,6 +119,24 @@ def main() -> int:
         i = args.index("--workspace")
         workspace_base = args[i + 1]
         args = args[:i] + args[i + 2:]
+
+    run_id = uuid4().hex
+    run_id_explicito = False
+    if "--run-id" in args:
+        i = args.index("--run-id")
+        if i + 1 >= len(args):
+            print("erro: --run-id exige um valor.")
+            return 2
+        run_id = args[i + 1]
+        run_id_explicito = True
+        args = args[:i] + args[i + 2:]
+    if (re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", run_id) is None
+            or ".." in run_id):
+        print("erro: --run-id inválido.")
+        return 2
+    if dir_caixa is not None and not run_id_explicito:
+        print("erro: --caixa exige --run-id estável para permitir retomada.")
+        return 2
 
     # --modelos <cfg.json>: multi-provider (papéis baratos → OpenAI-compat;
     # resto → claude). Sem a flag, comportamento intacto: tudo no claude.
@@ -199,16 +232,20 @@ def main() -> int:
         max_rodadas_reconciliacao = int(args[i + 1])
         args = args[:i] + args[i + 2:]
 
+    if not args:
+        print("erro: informe uma missão ou --spec.")
+        return 2
     entrada: dict
     if args[0] == "--spec":
         entrada = {"spec": json.loads(Path(args[1]).read_text(encoding="utf-8"))}
     else:
         entrada = {"missao_texto": " ".join(args)}
+    entrada.update({"run_id": run_id, "thread_id": run_id})
 
     raiz = Path(__file__).parent.parent
     log = LogEventos(raiz / "log.jsonl")
     try:
-        config = {"configurable": {"thread_id": "cli"}}
+        config = {"configurable": {"thread_id": run_id}}
         ferramentas = ferramentas_de_registro(dir_registro) if dir_registro is not None else {}
         ferramentas_permitidas = _lista_str((cfg_modelos or {}).get("ferramentas_permitidas"))
         if not ferramentas_permitidas and dir_registro is not None:
@@ -217,13 +254,14 @@ def main() -> int:
             "provedores" in cfg_modelos or "base_url" in cfg_modelos
         ):
             print("aviso: pins ignorados — precisam de 'provedores' (via --modelos ou ~/.motor/pins.json).")
-        cliente_por_config = bool(
-            cfg_modelos and ("provedores" in cfg_modelos or "base_url" in cfg_modelos)
-        )
         try:
-            cliente = construir_cliente(cfg_modelos, None if cliente_por_config else dir_registro, log=log)
-        except ProvedorIndisponivel as ex:
-            print(f"erro: {ex}")
+            deps_orcamento = compor_orcamento_openai(cfg_modelos or {}, workspace_base)
+            validar_independencia_orcada(deps_orcamento.rotas_certificadas)
+            cliente = deps_orcamento.cliente
+            if not _drenar_orcamento_cli(deps_orcamento.repositorio, run_id, log):
+                raise ErroOrcamento("relay monetario pendente")
+        except ErroOrcamento as ex:
+            print(f"erro: orçamento indisponível: {ex}")
             return 1
         if esgotados:
             if hasattr(cliente, "esgotados"):
@@ -246,7 +284,10 @@ def main() -> int:
                                         escalar_em_retry=escalar_em_retry,
                                         max_rodadas_reconciliacao=max_rodadas_reconciliacao,
                                         perfil_execucao=perfil_execucao,
-                                        ferramentas_permitidas=ferramentas_permitidas)
+                                        ferramentas_permitidas=ferramentas_permitidas,
+                                        repositorio_orcamento=deps_orcamento.repositorio,
+                                        fabrica_tentativas_orcadas=deps_orcamento.fabrica,
+                                        teto_bootstrap=deps_orcamento.teto_bootstrap)
                 caixa = CaixaFundador(dir_caixa, log)
                 resultado = rodar_com_caixa(grafo, entrada, config, caixa, log)
             finally:
@@ -259,7 +300,10 @@ def main() -> int:
                                     escalar_em_retry=escalar_em_retry,
                                     max_rodadas_reconciliacao=max_rodadas_reconciliacao,
                                     perfil_execucao=perfil_execucao,
-                                    ferramentas_permitidas=ferramentas_permitidas)
+                                    ferramentas_permitidas=ferramentas_permitidas,
+                                    repositorio_orcamento=deps_orcamento.repositorio,
+                                    fabrica_tentativas_orcadas=deps_orcamento.fabrica,
+                                    teto_bootstrap=deps_orcamento.teto_bootstrap)
             resultado = grafo.invoke(entrada, config)
             while "__interrupt__" in resultado:  # gate do fundador
                 pedido = resultado["__interrupt__"][0].value
@@ -268,6 +312,12 @@ def main() -> int:
                 decisao = input("decisão> ").strip()
                 resultado = grafo.invoke(Command(resume=decisao), config)
 
+        try:
+            if not _drenar_orcamento_cli(deps_orcamento.repositorio, run_id, log):
+                raise ErroOrcamento("relay monetario pendente")
+        except Exception as ex:
+            print(f"erro: relay monetário indisponível: {ex}")
+            return 1
         print("\n=== RESPOSTA FINAL ===\n")
         print(resultado.get("resposta_final", "(missão abortada)"))
         return 0

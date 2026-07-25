@@ -24,7 +24,7 @@ except ImportError:
 
 from motor.caixa import CaixaFundador, rodar_com_caixa
 from motor.eventos import LogEventos
-from motor.grafo import construir_grafo
+from tests.helpers_grafo import construir_grafo_teste as construir_grafo
 from motor.modelos import ClienteStub
 from motor.politica import PoliticaGates
 

@@ -32,7 +32,7 @@ except ImportError:
 from langgraph.types import Command  # noqa: E402
 
 from motor.eventos import LogEventos  # noqa: E402
-from motor.grafo import construir_grafo  # noqa: E402
+from tests.helpers_grafo import construir_grafo_teste as construir_grafo  # noqa: E402
 from motor.modelos import ClienteStub  # noqa: E402
 
 SPEC = json.loads((REPO / "exemplos" / "missao-pesquisa.json").read_text(encoding="utf-8"))
