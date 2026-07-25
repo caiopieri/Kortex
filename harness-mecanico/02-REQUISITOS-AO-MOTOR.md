@@ -1,9 +1,9 @@
 # Requisitos do Motor para o Harness Mecânico
 
 > **Para:** agente responsável pelo motor (`Orquestrador/motor`).
-> **De:** harness mecânico (Caio + agente de mecânica).
+> **Origem:** harness mecânico.
 > **Método:** cada item foi validado contra o **código real** (`motor/spec.py`, `motor/grafo.py`, `motor/registro.py`), com linha citada — não contra memória. Onde já funciona, está marcado **atende**. Onde falta, vem com contrato + critério de aceite.
-> **Instrução:** respeite as decisões travadas do motor (LangGraph puro; nós = funções puras que só falam `cliente.chamar`; a spec é a dinâmica; eventos JSONL próprios). **Nenhum requisito abaixo relitiga isso** — todos estendem a *spec* ou a execução de nó-ferramenta. Ambiguidade → **pare e pergunte ao Caio**, não decida.
+> **Instrução:** respeite as decisões travadas do motor (LangGraph puro; nós = funções puras que só falam `cliente.chamar`; a spec é a dinâmica; eventos JSONL próprios). **Nenhum requisito abaixo relitiga isso** — todos estendem a *spec* ou a execução de nó-ferramenta. Ambiguidades exigem decisão explícita do mantenedor.
 
 ---
 

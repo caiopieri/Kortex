@@ -11,8 +11,7 @@
 > - **Loop por fatia:** `/speckit.specify → clarify → plan` (você revisa) `→ tasks → analyze → implement`.
 > - **Depois:** gate de CI externo → seu diff review → merge → observe/learn (Fase 4, tiers T0/T1/T2).
 > - **Aposentados:** `.claude/skills/fic-*` e o `spec-template.md` próprio (spec-kit já os cobre).
-> Mapeamento completo em `spec-kit-adocao.md`; passo a passo em `COMO-FUNCIONA-passo-a-passo.md`.
-> Onde este PLAYBOOK disser "fic-*", leia o comando `/speckit.*` equivalente.
+> O passo a passo está em `COMO-FUNCIONA-passo-a-passo.md`.
 
 ---
 
@@ -28,9 +27,9 @@ A IA executa; **você não delega o julgamento.** Seu trabalho é o que a IA nã
 | 1. Intenção | Aqui, você + IA | Conversar até o objetivo ficar claro |
 | 2. Spec | Aqui, você + IA | Escrever a spec no template → `docs/specs/<task>.md` |
 | 3. Quebra | Você | Confirmar que a task é 1 PR ≤ 300 linhas |
-| 4. `/fic-research` | Claude Code (agente) | Entender o código → `research.md` |
-| 5. `/fic-plan` | Claude Code → **VOCÊ REVISA** | O plano + tier de modelo recomendado. Maior alavancagem: revisar 200 linhas, não 2000 |
-| 6. `/fic-implement` | Claude Code (agente) | Codar seguindo o plano + rodar o gate (DoD) |
+| 4. `/speckit.specify` + `clarify` | Agente | Fechar requisito e ambiguidades |
+| 5. `/speckit.plan` + `analyze` | Agente → **VOCÊ REVISA** | Plano consistente com a spec. Maior alavancagem: revisar antes do código |
+| 6. `/speckit.tasks` + `implement` | Agente | Quebrar, codar e rodar o gate (DoD) |
 | 7. Validar | Você + automação | Gate (testes/lint/SAST) + sua revisão do diff |
 | → Merge | Você | Aprovar |
 
@@ -49,9 +48,9 @@ A IA executa; **você não delega o julgamento.** Seu trabalho é o que a IA nã
 [3] QUEBRA ──── epic → tarefas pequenas. 1 tarefa = 1 PR ≤ ~300 linhas.
    │
    ▼   ┌──────── por tarefa ────────┐
-[4] /fic-research → research.md      │
-[5] /fic-plan     → plan.md   ◄── VOCÊ REVISA (revisar 200 linhas, não 2000)
-[6] /fic-implement → código + gate   │
+[4] /speckit.specify → clarify       │
+[5] /speckit.plan → analyze  ◄── VOCÊ REVISA antes do código
+[6] /speckit.tasks → implement + gate│
    │   └────────────────────────────┘
    ▼
 [7] VALIDA ──── gate automático + seu diff review (+ agente revisor opcional)
@@ -82,8 +81,6 @@ A IA executa; **você não delega o julgamento.** Seu trabalho é o que a IA nã
 
 | Documento | Onde | Escopo | Quem lê |
 |---|---|---|---|
-| `global/CLAUDE.md` | `~/.claude/CLAUDE.md` | Universal (1x) | Agente, automático, todo projeto |
-| `.claude/skills/fic-*` | `~/.claude/skills/` | Universal (1x) | Agente, via `/fic-research│plan│implement` |
 | `project-template/AGENTS.md` + shim `CLAUDE.md` | raiz de cada repo | Por projeto | Agente, automático |
 | `docs/security-DoD.md` | `docs/` de cada repo | Por projeto | Agente, sob demanda (banco/auth/input/pgto/mobile) |
 | `docs/spec-template.md` | `docs/` de cada repo | Por projeto | **Você**, ao abrir feature |
@@ -91,20 +88,16 @@ A IA executa; **você não delega o julgamento.** Seu trabalho é o que a IA nã
 
 ## Setup de QUALQUER projeto novo
 
-**Uma vez na máquina (vale pra todos os projetos):**
-1. Copie `global/CLAUDE.md` → `~/.claude/CLAUDE.md`.
-2. Copie `.claude/skills/fic-*` → `~/.claude/skills/`.
-
 **Em cada repo novo, no início:**
-3. Copie `project-template/AGENTS.md` → `./AGENTS.md` e **preencha** (stack, restrições, convenções, marque as seções de segurança). Copie o shim `project-template/CLAUDE.md` → `./CLAUDE.md` (uma linha: `@AGENTS.md`). Veja `examples/logisti.AGENTS.md` como modelo.
-4. Copie `docs/security-DoD.md` e `docs/spec-template.md` para `docs/`.
+1. Copie `project-template/AGENTS.md` → `./AGENTS.md` e **preencha** (stack, restrições, convenções e segurança). Copie o shim `project-template/CLAUDE.md` → `./CLAUDE.md`.
+2. Copie `docs/security-DoD.md` e `docs/spec-template.md` para `docs/`.
 
 **Por feature (o que você entrega ao agente):**
-5. Escreva a spec em `docs/specs/<feature>.md` (do template).
-6. Aponte o agente pra spec e rode `/fic-research` → `/fic-plan` → (revisa) → `/fic-implement`.
+3. Escreva a spec em `docs/specs/<feature>.md` (do template).
+4. Aponte o agente para a spec e rode o fluxo spec-kit descrito acima.
 
 ## O que o agente recebe, em camadas
-- **Sempre** (automático): `~/.claude/CLAUDE.md` (universal) + `./AGENTS.md` do projeto (via shim `./CLAUDE.md`).
+- **Sempre** (automático): `./AGENTS.md` do projeto e as instruções globais do executor usado.
 - **Sob demanda**: `docs/security-DoD.md` quando a tarefa toca área sensível.
 - **Por tarefa**: a spec da feature + os comandos do fluxo.
 

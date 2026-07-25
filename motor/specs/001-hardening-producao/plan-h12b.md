@@ -162,10 +162,35 @@ como dinheiro.
 | H12b0 | Eventos monetarios, schema e testes anti-drift | <=300 linhas fisicas |
 | H12b1 | Tipos, SQLite por run e transicoes atomicas | <=300 linhas fisicas |
 | H12b2 | Roteador de tentativa unica, retry/fallback e custo desconhecido | <=300 linhas fisicas |
-| H12b3 | Integracao de todos os callsites, run identity e fan-out | <=300 linhas fisicas |
+| H12b3 | Sink JSONL real com `event_id` e deduplicacao duravel do relay | <=300 linhas fisicas |
 | H12b4 | Adaptadores reais, pricing/FX versionado e conformidade | <=300 por adaptador |
 
 Cada landing pousa com seus testes; nao acumular H12b0-H12b4 em um unico PR.
+Integracao de callsites, identidade de run e fan-out continua como bloqueador separado; nao
+foi absorvida por H12b3 nem pelos adapters H12b4.
+
+### Evidencia H12b2c2
+
+O relay generico publica no maximo um evento pendente por chamada e transporta `event_id`,
+tipo e uma copia defensiva do payload. A chamada ao publicador ocorre fora da transacao
+SQLite; o ACK so ocorre depois de seu retorno. Falha antes do ACK conserva o claim ate o
+lease expirar e permite redelivery com o mesmo `event_id`, exigindo deduplicacao duravel no
+consumidor. Esse contrato e at-least-once e nao promete exactly-once.
+
+Evidencia da integracao sobre `901ce2c`: 100 testes focados H12b0-H12b2c2 e 726 testes na
+suite completa. Ruff, mypy, Bandit high/high, compileall e `git diff --check` passaram.
+
+### Contrato H12b3
+
+`LogEventos.publicar_orcamento` consome diretamente o protocolo do relay e persiste o
+`event_id` no JSONL schema-validado. Ao reabrir, o writer reconstrói o indice de dedupe do
+proprio ledger: redelivery identico nao repete o append; payload ou tipo divergente falha
+fechado e impede o ACK. O efeito e fsyncado antes de o relay confirmar a outbox. A entrega
+entre SQLite e JSONL continua at-least-once e nao promete exactly-once entre stores.
+
+Evidencia sobre `df1a3f4`: cadeia H12b0-H12b3 com 104 testes e suite completa com 730
+testes. Ruff, mypy, Bandit high/high, compileall, diff-check e Gitleaks passaram. Producao e
+testes adicionaram 159 linhas, sem integracao de callsites, adapters ou pricing.
 
 ## Testes Causais
 

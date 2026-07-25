@@ -1,19 +1,27 @@
 import asyncio
 import json
 
-import pytest
-
+import motor.servico as servico_modulo
 from motor.mcp_servidor import (
     DESCRICAO_DESPACHAR,
     DESCRICAO_EVENTOS,
     DESCRICAO_RESPONDER_GATE,
     DESCRICAO_RESUMO,
     DESCRICAO_STATUS,
+    MAX_CONTEXTO,
+    MAX_DECISAO,
+    MAX_OBJETIVO,
+    MAX_RESTRICOES_JSON,
+    MAX_MENSAGEM_ERRO,
+    MAX_RESPOSTA_JSON,
     _gerenciador_de_env,
     criar_app,
 )
 from motor.modelos import ClienteStub
-from motor.servico import GerenciadorJobs
+from tests.helpers_grafo import (
+    GerenciadorJobsTeste as GerenciadorJobs,
+    composicao_stub,
+)
 from tests.test_grafo import faz_roteador
 
 
@@ -24,18 +32,45 @@ def test_gerenciador_de_env_carrega_modelos(tmp_path, monkeypatch):
     monkeypatch.setenv("MOTOR_MODELOS", str(modelos))
     monkeypatch.setenv("MOTOR_DB", str(tmp_path / "motor.db"))
     monkeypatch.setenv("MOTOR_WORKSPACE", str(tmp_path / "runs"))
+    cliente = ClienteStub(faz_roteador())
+    observado = {}
+
+    def compor(cfg, workspace):
+        observado.update(cfg=cfg, workspace=workspace)
+        return composicao_stub(cliente, tmp_path / "orcamento")
+
+    monkeypatch.setattr(servico_modulo, "compor_orcamento_openai", compor)
 
     gerenciador = _gerenciador_de_env()
 
-    assert gerenciador.cfg_modelos == config
+    try:
+        assert gerenciador.cfg_modelos == config
+        assert observado == {"cfg": config, "workspace": tmp_path / "runs"}
+    finally:
+        gerenciador.fechar()
 
 
-def test_gerenciador_de_env_rejeita_modelos_e_registro(monkeypatch):
-    monkeypatch.setenv("MOTOR_MODELOS", "modelos.json")
-    monkeypatch.setenv("MOTOR_REGISTRO", "registro")
+def test_gerenciador_de_env_aceita_modelos_e_registro_ortogonais(tmp_path, monkeypatch):
+    modelos = tmp_path / "modelos.json"
+    modelos.write_text("{}", encoding="utf-8")
+    registro = tmp_path / "registro"
+    registro.mkdir()
+    cliente = ClienteStub(faz_roteador())
+    monkeypatch.setenv("MOTOR_MODELOS", str(modelos))
+    monkeypatch.setenv("MOTOR_REGISTRO", str(registro))
+    monkeypatch.setenv("MOTOR_DB", str(tmp_path / "motor-ortogonal.db"))
+    monkeypatch.setattr(
+        servico_modulo,
+        "compor_orcamento_openai",
+        lambda *_: composicao_stub(cliente, tmp_path / "orcamento-ortogonal"),
+    )
 
-    with pytest.raises(ValueError, match="MOTOR_MODELOS OU MOTOR_REGISTRO"):
-        _gerenciador_de_env()
+    gerenciador = _gerenciador_de_env()
+    try:
+        assert gerenciador.cfg_modelos == {}
+        assert gerenciador.dir_registro == str(registro)
+    finally:
+        gerenciador.fechar()
 
 
 async def chamar(app, nome: str, args: dict) -> dict:
@@ -190,6 +225,79 @@ def test_mcp_despachar_sem_thread_id_gera_id(tmp_path):
         assert isinstance(inicio["job_id"], str)
         assert inicio["job_id"]
         assert inicio["job_id"] != "jarvis-abc"
+
+    asyncio.run(cenario())
+
+
+def test_mcp_limita_input_externo_antes_do_servico():
+    class Espiao:
+        chamadas = 0
+
+        def iniciar(self, **_kwargs):
+            self.chamadas += 1
+
+    async def cenario():
+        espiao = Espiao()
+        app = criar_app(espiao)
+        casos = [
+            {"objetivo": "x" * (MAX_OBJETIVO + 1)},
+            {"objetivo": "ok", "contexto": "x" * (MAX_CONTEXTO + 1)},
+            {"objetivo": "ok", "restricoes": {"x": "y" * MAX_RESTRICOES_JSON}},
+            {"objetivo": "ok", "restricoes": {"x": float("nan")}},
+        ]
+        for argumentos in casos:
+            resposta = await chamar(app, "metafabrica.despachar_missao", argumentos)
+            assert resposta["estado"] == "erro"
+            assert resposta["erro"]["tipo"] == "ValueError"
+        assert espiao.chamadas == 0
+
+    asyncio.run(cenario())
+
+
+def test_mcp_limita_saida_e_mensagem_de_erro():
+    class Espiao:
+        def status(self, _job_id):
+            return {"estado": "concluido", "resposta_final": "á" * MAX_RESPOSTA_JSON}
+
+        def resumo(self, _job_id):
+            raise RuntimeError("x" * (MAX_MENSAGEM_ERRO + 100))
+
+    async def cenario():
+        app = criar_app(Espiao())
+        resposta = await chamar(app, "metafabrica.status_missao", {"job_id": "job"})
+        assert resposta == {
+            "estado": "erro",
+            "erro": {"tipo": "ValueError", "mensagem": "resposta MCP excede limite"},
+        }
+        erro = await chamar(app, "metafabrica.resumo_missao", {"job_id": "job"})
+        assert erro["erro"]["tipo"] == "RuntimeError"
+        assert len(erro["erro"]["mensagem"]) == MAX_MENSAGEM_ERRO
+
+    asyncio.run(cenario())
+
+
+def test_mcp_encaminha_decision_id_e_limita_decisao():
+    class Espiao:
+        observado = None
+
+        def responder_gate(self, job_id, decisao, decision_id=None):
+            self.observado = (job_id, decisao, decision_id)
+            return {"estado": "em_execucao"}
+
+    async def cenario():
+        espiao = Espiao()
+        app = criar_app(espiao)
+        resposta = await chamar(app, "metafabrica.responder_gate", {
+            "job_id": "job", "decisao": "sim", "decision_id": "gate-2",
+        })
+        assert resposta == {"estado": "em_execucao"}
+        assert espiao.observado == ("job", "sim", "gate-2")
+
+        resposta = await chamar(app, "metafabrica.responder_gate", {
+            "job_id": "job", "decisao": "x" * (MAX_DECISAO + 1),
+        })
+        assert resposta["estado"] == "erro"
+        assert espiao.observado == ("job", "sim", "gate-2")
 
     asyncio.run(cenario())
 

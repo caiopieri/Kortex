@@ -89,8 +89,8 @@ class LogEventos:
     """Writer exclusivo; checks pre-write pressupõem um diretorio pai confiavel."""
 
     def __init__(self, path: str | Path, truncar: bool = False):
-        self._thread_lock = threading.RLock()
         self.path = Path(path)
+        self._mutex = threading.Lock()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock_path = self.path.with_name(f".{self.path.name}.lock")
         lock_fd, lock_criado = _abrir_regular_sem_links(self._lock_path, os.O_RDWR)
@@ -123,21 +123,22 @@ class LogEventos:
                 os.fsync(self._f.fileno())
             if lock_criado or arquivo_criado:
                 _fsync_diretorio(self.path.parent)
-            ultimo_seq, ultimo_t = self._estado_persistido()
+            ultimo_seq, ultimo_t, eventos_externos = self._estado_persistido()
         except BaseException:
             self._fechar_descritores()
             raise
 
         self._proximo_seq = ultimo_seq + 1
         self._ultimo_t = ultimo_t
+        self._eventos_externos = eventos_externos
         self._base_t = ultimo_t
         self._inicio_monotonico = time.monotonic()
 
-    def _estado_persistido(self) -> tuple[int, float]:
+    def _estado_persistido(self) -> tuple[int, float, dict[str, str]]:
         self._f.seek(0)
         conteudo = self._f.read()
         if not conteudo:
-            return 0, 0.0
+            return 0, 0.0, {}
         fim_prefixo = conteudo.rfind(b"\n") + 1
         if not fim_prefixo:
             raise ValueError("log nao possui registro completo recuperavel")
@@ -146,6 +147,7 @@ class LogEventos:
 
         ultimo_t = 0.0
         ultimo_seq = 0
+        eventos_externos: dict[str, str] = {}
         for numero_linha, linha in enumerate(prefixo.splitlines(), start=1):
             try:
                 evento = json.loads(linha, parse_constant=_constante_json_invalida)
@@ -159,6 +161,11 @@ class LogEventos:
                 raise ValueError(f"linha {numero_linha} fora do schema v2")
             if evento["seq"] != ultimo_seq + 1:
                 raise ValueError(f"sequencia invalida na linha {numero_linha}")
+            event_id = evento.get("event_id")
+            if event_id is not None:
+                if event_id in eventos_externos:
+                    raise ValueError(f"event_id duplicado na linha {numero_linha}")
+                eventos_externos[event_id] = self._impressao_idempotente(evento)
 
             instante = float(evento["t"])
             if instante < ultimo_t:
@@ -171,7 +178,7 @@ class LogEventos:
             os.ftruncate(self._f.fileno(), fim_prefixo)
             os.fsync(self._f.fileno())
         self._f.seek(0, 2)
-        return ultimo_seq, ultimo_t
+        return ultimo_seq, ultimo_t, eventos_externos
 
     def _quarentenar_tail(self, tail: bytes, proximo_seq: int) -> None:
         indice = 0
@@ -213,27 +220,55 @@ class LogEventos:
         _validar_arquivo_regular(aberto, self.path)
 
     def evento(self, tipo_evento: str, **dados: Any) -> None:
-        with self._thread_lock:
-            if "evento" in dados or "t" in dados or "seq" in dados:
-                raise ValueError("campo reservado no payload de evento")
+        if {"evento", "t", "seq", "event_id"} & dados.keys():
+            raise ValueError("campo reservado no payload de evento")
+        with self._mutex:
+            self._escrever(tipo_evento, dados)
 
-            seq = self._proximo_seq
-            instante = self._tempo_atual()
-            e = {"t": instante, "seq": seq, "evento": tipo_evento, **dados}
-            if not valido(e):
-                raise ValueError("evento fora do schema")
+    def publicar_orcamento(
+        self, event_id: str, tipo_evento: str, payload: dict[str, object], /
+    ) -> None:
+        """Persiste uma entrega do relay uma vez por ``event_id`` durável."""
+        if type(payload) is not dict or {"evento", "t", "seq", "event_id"} & payload.keys():
+            raise ValueError("payload externo invalido")
+        dados = {**payload, "event_id": event_id}
+        if not valido({"t": 0.0, "seq": 1, "evento": tipo_evento, **dados}):
+            raise ValueError("evento fora do schema")
+        with self._mutex:
+            candidato = {"evento": tipo_evento, **dados}
+            impressao = self._impressao_idempotente(candidato)
+            anterior = self._eventos_externos.get(event_id)
+            if anterior is not None:
+                if anterior != impressao:
+                    raise ValueError("redelivery divergente")
+                return
+            self._escrever(tipo_evento, dados)
+            self._eventos_externos[event_id] = impressao
 
-            linha = (json.dumps(e, ensure_ascii=False, allow_nan=False) + "\n").encode()
-            try:
-                self._validar_path_aberto()
-                self._f.write(linha)
-                self._f.flush()
-                os.fsync(self._f.fileno())
-            except BaseException:
-                self._fechar_descritores()
-                raise
-            self._proximo_seq = seq + 1
-            self._ultimo_t = instante
+    @staticmethod
+    def _impressao_idempotente(evento: dict[str, Any]) -> str:
+        corpo = {chave: valor for chave, valor in evento.items() if chave not in {"t", "seq"}}
+        return json.dumps(corpo, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+                          allow_nan=False)
+
+    def _escrever(self, tipo_evento: str, dados: dict[str, Any]) -> None:
+        seq = self._proximo_seq
+        instante = self._tempo_atual()
+        e = {"t": instante, "seq": seq, "evento": tipo_evento, **dados}
+        if not valido(e):
+            raise ValueError("evento fora do schema")
+
+        linha = (json.dumps(e, ensure_ascii=False, allow_nan=False) + "\n").encode()
+        try:
+            self._validar_path_aberto()
+            self._f.write(linha)
+            self._f.flush()
+            os.fsync(self._f.fileno())
+        except BaseException:
+            self._fechar_descritores()
+            raise
+        self._proximo_seq = seq + 1
+        self._ultimo_t = instante
 
     def _fechar_descritores(self) -> BaseException | None:
         erro: BaseException | None = None
@@ -270,7 +305,7 @@ class LogEventos:
         return erro
 
     def fechar(self) -> None:
-        with self._thread_lock:
+        with self._mutex:
             erro = self._fechar_descritores()
             if erro is not None:
                 raise erro

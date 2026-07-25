@@ -109,7 +109,7 @@ A 1ª WorkflowSpec real de D0/D1 **já existe e foi validada** contra o schema d
 Passo: **rodar** (na sua máquina, com o CLI de modelo) pra ver onde atrita de verdade, *antes* de construir a v0.2:
 
 ```bash
-cd ~/Desktop/Projects/Orquestrador/motor
+cd motor
 python3 -m motor --spec exemplos/hardware-diagnostico.json --modelos exemplos/modelos-codex.json --auto
 ```
 
@@ -117,4 +117,4 @@ python3 -m motor --spec exemplos/hardware-diagnostico.json --modelos exemplos/mo
 
 ---
 
-*Documento-irmão: [[REQUISITOS-MOTOR-harness-hardware]] — o que o motor precisa ganhar para os degraus D2+.*
+*Requisitos para os degraus D2+ devem entrar como specs versionadas antes da implementação.*

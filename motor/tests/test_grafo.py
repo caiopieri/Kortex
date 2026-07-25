@@ -2,6 +2,7 @@
 o gate do fundador (interrupt/resume) e a missão dirigida por spec serializada."""
 import json
 import sys
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -14,8 +15,16 @@ except ImportError:
 
 from motor.eventos import LogEventos
 from motor import __main__ as cli
-from motor.grafo import PROMPT_SUBAGENTE, _proximo_tier, construir_grafo
+from motor.grafo import PROMPT_SUBAGENTE, _proximo_tier
+from tests.helpers_grafo import composicao_stub, construir_grafo_teste as construir_grafo
 from motor.modelos import ClienteRoteador, ClienteStub
+from motor.orcamento import (
+    CotacaoTentativa,
+    RequisitosTentativaCusteada,
+    RepositorioOrcamento,
+    ResultadoTentativa,
+    RotaTentativaCusteada,
+)
 from motor.politica import PoliticaGates
 
 SPEC = json.loads(
@@ -83,10 +92,69 @@ def faz_roteador(reprovar_beta_uma_vez=False, evaluator_aprova=True):
 
 def roda(tmp_path, roteador, entrada):
     log = LogEventos(tmp_path / "log.jsonl")
-    grafo = construir_grafo(ClienteStub(roteador), log, checkpointer=InMemorySaver(),
-                            politica=PoliticaGates(overrides={"plano": "prosseguir"}))
+    class Tentativa:
+        def __init__(self, papel_recebido, prompt_recebido):
+            self.papel, self.prompt = papel_recebido, prompt_recebido
+
+        def cotar_tentativa(self):
+            return CotacaoTentativa(Decimal("0.01"), "BRL", "teste-v1")
+
+        def tentar_uma_vez(self):
+            return ResultadoTentativa(
+                roteador(self.papel, self.prompt), Decimal("0"), "BRL", "teste-uso"
+            )
+
+    def fabrica(_papel, prompt_recebido, _tentativa, _requisitos):
+        nonlocal prompt
+        prompt = prompt_recebido
+        return [RotaTentativaCusteada(
+            f"stub:{_papel}", f"stub-provider:{_papel}", Tentativa(_papel, prompt_recebido),
+        )]
+
+    prompt = ""
+    grafo = construir_grafo(
+        ClienteStub(roteador), log, checkpointer=InMemorySaver(),
+        politica=PoliticaGates(overrides={"plano": "prosseguir"}),
+        repositorio_orcamento=RepositorioOrcamento(tmp_path / "orcamento"),
+        fabrica_tentativas_orcadas=fabrica,
+    )
+    entrada = {"run_id": "run-teste", "thread_id": "t1", **entrada}
     config = {"configurable": {"thread_id": "t1"}}
     return grafo, config, log, grafo.invoke(entrada, config)
+
+
+def _orcamento_cliente(tmp_path, cliente):
+    class Tentativa:
+        def __init__(self, papel, prompt, requisitos):
+            self.papel, self.prompt, self.requisitos = papel, prompt, requisitos
+
+        def cotar_tentativa(self):
+            return CotacaoTentativa(Decimal("0.01"), "BRL", "teste-v1")
+
+        def tentar_uma_vez(self):
+            texto = cliente.chamar(
+                self.papel, self.prompt,
+                ferramentas=self.requisitos.ferramentas,
+                tier=self.requisitos.tier,
+                evitar=self.requisitos.evitar_provedor,
+                capacidades=(
+                    list(self.requisitos.capacidades)
+                    if self.requisitos.capacidades is not None else None
+                ),
+            )
+            return ResultadoTentativa(texto, Decimal("0"), "BRL", "teste-uso")
+
+    def fabrica(papel, prompt, _tentativa, requisitos):
+        assert isinstance(requisitos, RequisitosTentativaCusteada)
+        return [RotaTentativaCusteada(
+            f"teste:{papel}", f"teste-provider:{papel}",
+            Tentativa(papel, prompt, requisitos),
+        )]
+
+    return {
+        "repositorio_orcamento": RepositorioOrcamento(tmp_path / "orcamento"),
+        "fabrica_tentativas_orcadas": fabrica,
+    }
 
 
 def eventos_de(tmp_path):
@@ -294,6 +362,13 @@ def test_cli_rascunho_propaga_perfil_para_grafo(tmp_path, monkeypatch):
     monkeypatch.setattr(sys, "argv", ["motor", "--spec", str(spec_path), "--rascunho"])
     monkeypatch.setattr(cli, "LogEventos", LogFake)
     monkeypatch.setattr(cli, "construir_cliente", lambda *args, **kwargs: ClienteStub(faz_roteador()))
+    monkeypatch.setattr(
+        cli, "compor_orcamento_openai",
+        lambda *_args, **_kwargs: composicao_stub(
+            ClienteStub(faz_roteador()), tmp_path / "orcamento-cli-rascunho",
+        ),
+    )
+    monkeypatch.setattr(cli, "_drenar_orcamento_cli", lambda *_args: True)
     monkeypatch.setattr(cli, "construir_grafo", construir_fake)
 
     assert cli.main() == 0
@@ -620,9 +695,15 @@ def _cliente_roteador(roteador):
 
 def test_revisao_plano_auto_mode_nao_interrompe(tmp_path):
     log = LogEventos(tmp_path / "log.jsonl")
-    grafo = construir_grafo(_cliente_roteador(faz_roteador()), log,
-                            checkpointer=InMemorySaver(), politica=PoliticaGates(auto_mode=True))
-    res = grafo.invoke({"spec": SPEC}, {"configurable": {"thread_id": "plano-auto"}})
+    cliente = _cliente_roteador(faz_roteador())
+    grafo = construir_grafo(
+        cliente, log, checkpointer=InMemorySaver(), politica=PoliticaGates(auto_mode=True),
+        **_orcamento_cliente(tmp_path, cliente),
+    )
+    res = grafo.invoke(
+        {"spec": SPEC, "run_id": "plano-auto", "thread_id": "plano-auto"},
+        {"configurable": {"thread_id": "plano-auto"}},
+    )
 
     assert "__interrupt__" not in res
     assert res["resposta_final"] == "SÍNTESE FINAL DA MISSÃO"
@@ -662,10 +743,13 @@ def test_revisao_plano_resume_abortar_nao_roda_fanout(tmp_path):
 
 def test_revisao_plano_resume_dict_edita_tier_antes_do_fanout(tmp_path):
     log = LogEventos(tmp_path / "log.jsonl")
-    grafo = construir_grafo(_cliente_roteador(faz_roteador()), log,
-                            checkpointer=InMemorySaver())
+    cliente = _cliente_roteador(faz_roteador())
+    grafo = construir_grafo(
+        cliente, log, checkpointer=InMemorySaver(),
+        **_orcamento_cliente(tmp_path, cliente),
+    )
     config = {"configurable": {"thread_id": "plano-editar"}}
-    res = grafo.invoke({"spec": SPEC}, config)
+    res = grafo.invoke({"spec": SPEC, "run_id": "plano-editar", "thread_id": "plano-editar"}, config)
     assert res["__interrupt__"][0].value["portao"] == "plano"
 
     retomado = grafo.invoke(Command(resume={"pesquisa-alfa": "complexa"}), config)
@@ -706,10 +790,16 @@ def test_subagente_usa_catalogo_por_capacidade(tmp_path):
     capaz.provedor = "capaz"
     log = LogEventos(tmp_path / "log.jsonl")
     cliente = ClienteRoteador(padrao=padrao, catalogo=[(capaz, frozenset({"x"}), 1)], log=log)
-    grafo = construir_grafo(cliente, log, checkpointer=InMemorySaver(),
-                            politica=PoliticaGates(overrides={"plano": "prosseguir"}))
+    grafo = construir_grafo(
+        cliente, log, checkpointer=InMemorySaver(),
+        politica=PoliticaGates(overrides={"plano": "prosseguir"}),
+        **_orcamento_cliente(tmp_path, cliente),
+    )
 
-    resultado = grafo.invoke({"spec": spec}, {"configurable": {"thread_id": "capacidade"}})
+    resultado = grafo.invoke(
+        {"spec": spec, "run_id": "capacidade", "thread_id": "capacidade"},
+        {"configurable": {"thread_id": "capacidade"}},
+    )
 
     assert resultado["resultados"][0]["saida"] == "RESULTADO capacidade"
     assert len(capaz.chamadas) == 1
@@ -793,10 +883,14 @@ def test_executor_chamado_loga_modelo_resolvido_com_roteador(tmp_path):
         catalogo=[(executor, frozenset({"pesquisa"}), 1)],
     )
     log = LogEventos(tmp_path / "log.jsonl")
-    grafo = construir_grafo(cliente, log, checkpointer=InMemorySaver(),
-                            politica=PoliticaGates(overrides={"plano": "prosseguir"}))
+    grafo = construir_grafo(
+        cliente, log, checkpointer=InMemorySaver(),
+        politica=PoliticaGates(overrides={"plano": "prosseguir"}),
+        **_orcamento_cliente(tmp_path, cliente),
+    )
 
-    grafo.invoke({"missao_texto": "produza algo"}, {"configurable": {"thread_id": "modelo-log"}})
+    grafo.invoke({"missao_texto": "produza algo", "run_id": "modelo-log",
+                  "thread_id": "modelo-log"}, {"configurable": {"thread_id": "modelo-log"}})
 
     chamados = [e for e in eventos_de(tmp_path) if e["evento"] == "executor.chamado"]
     assert next(e for e in chamados if e["executor"] == "planner")["modelo"] == "juiz/sonnet"
@@ -832,10 +926,16 @@ def test_executor_chamado_modelo_none_com_cliente_single_sem_identidade(tmp_path
 def test_retry_sem_flag_mantem_tier_declarado_em_todas_as_tentativas(tmp_path):
     cliente = ClienteTierFake(aprovar_na_tentativa=3)
     log = LogEventos(tmp_path / "log.jsonl")
-    grafo = construir_grafo(cliente, log, checkpointer=InMemorySaver(),
-                            politica=PoliticaGates(overrides={"plano": "prosseguir"}))
+    grafo = construir_grafo(
+        cliente, log, checkpointer=InMemorySaver(),
+        politica=PoliticaGates(overrides={"plano": "prosseguir"}),
+        **_orcamento_cliente(tmp_path, cliente),
+    )
 
-    resultado = grafo.invoke({"spec": _spec_um_subagente()}, {"configurable": {"thread_id": "tier-inerte"}})
+    resultado = grafo.invoke(
+        {"spec": _spec_um_subagente(), "run_id": "tier-inerte", "thread_id": "tier-inerte"},
+        {"configurable": {"thread_id": "tier-inerte"}},
+    )
 
     assert resultado["resultados"][0]["aprovado"] is True
     assert [tier for papel, tier in cliente.chamadas if papel == "pesquisador"] == ["simples", "simples", "simples"]
@@ -845,11 +945,16 @@ def test_retry_sem_flag_mantem_tier_declarado_em_todas_as_tentativas(tmp_path):
 def test_retry_com_flag_escala_tier_ate_complexa(tmp_path):
     cliente = ClienteTierFake(aprovar_na_tentativa=3)
     log = LogEventos(tmp_path / "log.jsonl")
-    grafo = construir_grafo(cliente, log, checkpointer=InMemorySaver(),
-                            politica=PoliticaGates(overrides={"plano": "prosseguir"}),
-                            escalar_em_retry=True)
+    grafo = construir_grafo(
+        cliente, log, checkpointer=InMemorySaver(),
+        politica=PoliticaGates(overrides={"plano": "prosseguir"}), escalar_em_retry=True,
+        **_orcamento_cliente(tmp_path, cliente),
+    )
 
-    resultado = grafo.invoke({"spec": _spec_um_subagente()}, {"configurable": {"thread_id": "tier-escalado"}})
+    resultado = grafo.invoke(
+        {"spec": _spec_um_subagente(), "run_id": "tier-escalado", "thread_id": "tier-escalado"},
+        {"configurable": {"thread_id": "tier-escalado"}},
+    )
 
     assert resultado["resultados"][0]["aprovado"] is True
     assert [tier for papel, tier in cliente.chamadas if papel == "pesquisador"] == ["simples", "media", "complexa"]
@@ -860,18 +965,23 @@ def test_retry_com_flag_escala_tier_ate_complexa(tmp_path):
 def test_retry_com_flag_nao_escala_quando_aprova_na_primeira(tmp_path):
     cliente = ClienteTierFake(aprovar_na_tentativa=1)
     log = LogEventos(tmp_path / "log.jsonl")
-    grafo = construir_grafo(cliente, log, checkpointer=InMemorySaver(),
-                            politica=PoliticaGates(overrides={"plano": "prosseguir"}),
-                            escalar_em_retry=True)
+    grafo = construir_grafo(
+        cliente, log, checkpointer=InMemorySaver(),
+        politica=PoliticaGates(overrides={"plano": "prosseguir"}), escalar_em_retry=True,
+        **_orcamento_cliente(tmp_path, cliente),
+    )
 
-    resultado = grafo.invoke({"spec": _spec_um_subagente()}, {"configurable": {"thread_id": "tier-aprovado"}})
+    resultado = grafo.invoke(
+        {"spec": _spec_um_subagente(), "run_id": "tier-aprovado", "thread_id": "tier-aprovado"},
+        {"configurable": {"thread_id": "tier-aprovado"}},
+    )
 
     assert resultado["resultados"][0]["tentativas"] == 1
     assert [tier for papel, tier in cliente.chamadas if papel == "pesquisador"] == ["simples"]
     assert not any(e["evento"] == "executor.escalado" for e in eventos_de(tmp_path))
 
 
-def test_cli_escalar_liga_flag_e_default_mantem_inerte(monkeypatch, capsys):
+def test_cli_escalar_liga_flag_e_default_mantem_inerte(tmp_path, monkeypatch, capsys):
     flags: list[bool] = []
 
     class GrafoFake:
@@ -879,6 +989,13 @@ def test_cli_escalar_liga_flag_e_default_mantem_inerte(monkeypatch, capsys):
             return {"resposta_final": "ok"}
 
     monkeypatch.setattr(cli, "construir_cliente", lambda cfg_modelos, dir_registro, log=None: ClienteStub(faz_roteador()))
+    monkeypatch.setattr(
+        cli, "compor_orcamento_openai",
+        lambda *_args, **_kwargs: composicao_stub(
+            ClienteStub(faz_roteador()), tmp_path / "orcamento-cli-escalar",
+        ),
+    )
+    monkeypatch.setattr(cli, "_drenar_orcamento_cli", lambda *_args: True)
 
     def construir_fake(*args, **kwargs):
         flags.append(kwargs["escalar_em_retry"])

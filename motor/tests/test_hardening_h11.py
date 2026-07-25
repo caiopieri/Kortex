@@ -1,4 +1,5 @@
 import multiprocessing
+import json
 import os
 import sqlite3
 import threading
@@ -17,9 +18,25 @@ from typing_extensions import TypedDict
 
 from motor.caixa import CaixaFundador, LedgerCaixa, rodar_com_caixa
 from motor.modelos import ClienteStub
-from motor.servico import GerenciadorJobs
 from tests.audit_corpus import casos, executar_caso, materializar_corpus
+from tests.helpers_grafo import GerenciadorJobsTeste as GerenciadorJobs
 from tests.test_grafo import SPEC, faz_roteador
+
+
+# `spawn` reimporta o pacote inteiro no filho; sob carga (varias suites em
+# paralelo) isso passa facil de 10s e o join estourava dando `exitcode is None`,
+# um vermelho que parece defeito e nao e. O orcamento aqui e generoso de
+# proposito: quem corta travamento de verdade e o `timeout` do pytest.
+_ESPERA_SPAWN_S = 60
+
+
+def _esperar_saida(processo, esperado: int) -> None:
+    processo.join(_ESPERA_SPAWN_S)
+    assert processo.exitcode is not None, (
+        f"processo spawn nao terminou em {_ESPERA_SPAWN_S}s (maquina sobrecarregada?)"
+    )
+    assert processo.exitcode == esperado
+
 
 
 CASOS_H11 = casos("H11")
@@ -275,8 +292,7 @@ def test_crash_em_cada_fronteira_converge_apos_restart(
         args=(str(db_path), str(checkpoint), decisao_id, fronteira),
     )
     processo.start()
-    processo.join(10)
-    assert processo.exitcode == 71
+    _esperar_saida(processo, 71)
 
     ledger = LedgerCaixa(db_path)
     if fronteira != "apos_ack":
@@ -313,8 +329,7 @@ def test_servico_reconcilia_automaticamente_apos_restart_de_processo(
         args=(str(db_path), str(workspace)),
     )
     processo.start()
-    processo.join(10)
-    assert processo.exitcode == 72
+    _esperar_saida(processo, 72)
 
     jobs = GerenciadorJobs(
         db_path=db_path,
@@ -343,6 +358,22 @@ def test_servico_reconcilia_automaticamente_apos_restart_de_processo(
         assert time.time() < fim
         time.sleep(0.01)
     assert status["estado"] == "concluido"
+    ledger_orcamento = workspace / ".orcamento-teste" / "restart-h11" / "orcamento.sqlite3"
+    assert ledger_orcamento.is_file()
+    with sqlite3.connect(f"file:{ledger_orcamento}?mode=ro", uri=True) as con:
+        assert con.execute(
+            "SELECT run_id,thread_id,teto,status FROM budget_session"
+        ).fetchall() == [("restart-h11", "restart-h11", "2", "ACTIVE")]
+        assert con.execute("SELECT COUNT(*) FROM budget_outbox").fetchone()[0] > 0
+        assert con.execute(
+            "SELECT DISTINCT estado FROM budget_outbox_claim"
+        ).fetchall() == [("ACKED",)]
+    eventos = [
+        json.loads(linha)
+        for linha in (workspace / "restart-h11" / "log.jsonl")
+        .read_text(encoding="utf-8").splitlines()
+    ]
+    assert any(evento["evento"] == "custo.reconciliado" for evento in eventos)
     jobs.fechar()
 
 
@@ -598,10 +629,23 @@ def test_servico_serializa_dois_interrupts_paralelos_por_job(
     liberar_primeira = threading.Event()
     aplicacoes: list[str] = []
     lock_aplicacoes = threading.Lock()
+    fechamentos = 0
+    lock_fechamentos = threading.Lock()
+    fechar_real = servico_modulo.LogEventos.fechar
+
+    def registrar_fechamento(log: Any) -> None:
+        nonlocal fechamentos
+        fechar_real(log)
+        with lock_fechamentos:
+            fechamentos += 1
+
+    monkeypatch.setattr(servico_modulo.LogEventos, "fechar", registrar_fechamento)
 
     def fault(ponto: str) -> None:
         if ponto != "apos_aplicar":
             return
+        with lock_fechamentos:
+            assert fechamentos >= 2
         with lock_aplicacoes:
             aplicacoes.append(ponto)
             primeira = len(aplicacoes) == 1

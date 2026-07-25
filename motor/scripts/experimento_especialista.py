@@ -8,6 +8,7 @@ import json
 import sys
 import tempfile
 import time
+from decimal import Decimal
 from math import ceil
 from pathlib import Path
 from typing import Any, Callable, cast
@@ -24,7 +25,15 @@ from motor.__main__ import construir_cliente  # noqa: E402
 from motor.curador import analisar  # noqa: E402
 from motor.eventos import LogEventos  # noqa: E402
 from motor.grafo import construir_grafo  # noqa: E402
-from motor.modelos import ClienteModelo  # noqa: E402
+from motor.modelos import ClienteModelo, ClienteStub  # noqa: E402
+from motor.orcamento import (  # noqa: E402
+    CotacaoTentativa,
+    RequisitosTentativaCusteada,
+    RepositorioOrcamento,
+    ResultadoTentativa,
+    RotaTentativaCusteada,
+    ErroOrcamento,
+)
 from motor.politica import PoliticaGates  # noqa: E402
 from motor.spec import WorkflowSpec  # noqa: E402
 from scripts.experimento_rag import ClienteMetricaDeterministica  # noqa: E402
@@ -92,11 +101,59 @@ def _validadores(resultado: dict[str, Any]) -> list[dict[str, Any]]:
 def executar(spec: dict[str, Any], factory: Callable[[], Any], log_path: Path, workspace: Path) -> dict[str, Any]:
     log, inicio = LogEventos(log_path), time.perf_counter()
     try:
-        cliente = cast(ClienteModelo, ClienteMetricaDeterministica(ClienteUsoEstimado(factory(), log)))
-        grafo = construir_grafo(cliente, log, checkpointer=InMemorySaver(),
-                                politica=PoliticaGates(overrides={"plano": "prosseguir", "cobertura": "prosseguir"}),
-                                workspace_base=workspace)
-        resultado = grafo.invoke({"spec": spec}, {"configurable": {"thread_id": log_path.stem}})
+        base = factory()
+        if type(base) is not ClienteStub:
+            raise ErroOrcamento(
+                "experimento com cliente real exige factory custeada certificada"
+            )
+        cliente = cast(
+            ClienteModelo,
+            ClienteMetricaDeterministica(ClienteUsoEstimado(base, log)),
+        )
+
+        class Tentativa:
+            def __init__(self, papel: str, prompt: str, requisitos: RequisitosTentativaCusteada) -> None:
+                self.papel, self.prompt, self.requisitos = papel, prompt, requisitos
+
+            def cotar_tentativa(self) -> CotacaoTentativa:
+                return CotacaoTentativa(Decimal("0.10"), "BRL", "experimento-v1")
+
+            def tentar_uma_vez(self) -> ResultadoTentativa:
+                texto = cliente.chamar(
+                    self.papel, self.prompt,
+                    ferramentas=self.requisitos.ferramentas,
+                    tier=self.requisitos.tier,
+                    evitar=self.requisitos.evitar_provedor,
+                    capacidades=(
+                        list(self.requisitos.capacidades)
+                        if self.requisitos.capacidades is not None else None
+                    ),
+                )
+                return ResultadoTentativa(texto, Decimal("0.000001"), "BRL", "estimativa-v1")
+
+        def fabricar_tentativas(
+            papel: str, prompt: str, _tentativa: int, requisitos: RequisitosTentativaCusteada,
+        ) -> list[RotaTentativaCusteada]:
+            provider_id = (
+                "deterministico" if papel in {"verifier", "evaluator", "synthesizer"}
+                else "experimento-estimado"
+            )
+            return [RotaTentativaCusteada(
+                f"{provider_id}:{papel}", provider_id, Tentativa(papel, prompt, requisitos),
+            )]
+
+        grafo = construir_grafo(
+            cliente, log, checkpointer=InMemorySaver(),
+            politica=PoliticaGates(overrides={"plano": "prosseguir", "cobertura": "prosseguir"}),
+            workspace_base=workspace,
+            repositorio_orcamento=RepositorioOrcamento(workspace / "orcamento"),
+            fabrica_tentativas_orcadas=fabricar_tentativas,
+        )
+        identidade = log_path.stem
+        resultado = grafo.invoke(
+            {"spec": spec, "run_id": identidade, "thread_id": identidade},
+            {"configurable": {"thread_id": identidade}},
+        )
     finally:
         latencia = round(time.perf_counter() - inicio, 3)
         log.fechar()

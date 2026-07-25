@@ -13,6 +13,8 @@ __pycache__/
 pytest-cache-files-*
 .venv/
 venv/
+dist/
+build/
 
 # Runtime do motor (logs vivos, banco de checkpoint, workspaces de run)
 log.jsonl
@@ -20,8 +22,13 @@ log 2.jsonl
 motor.db
 motor.db-*
 runs/
+.log.jsonl.lock
+motor/logs/
 .langgraph_api/
 motor/motor_painel/_testdel
+
+# Generated documentation corpus
+motor/exemplos/rag-docs-metafabrica.jsonl
 
 # Node (futuros consumidores/superfícies)
 node_modules/

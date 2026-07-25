@@ -46,3 +46,11 @@ def test_teto_e_decimal_hostil_falham_sem_nova_reserva(tmp_path: Path) -> None:
 def test_identidade_rejeita_path_hostil_antes_de_derivar(tmp_path: Path, valor: str) -> None:
     with pytest.raises(ErroOrcamento):
         RepositorioOrcamento(tmp_path).sessao(valor, "thread", Decimal("1"))
+
+
+def test_consulta_de_existencia_nao_cria_ledger(tmp_path: Path) -> None:
+    repo = RepositorioOrcamento(tmp_path)
+    assert repo.possui_ledger("ausente") is False
+    assert not (tmp_path / "ausente").exists()
+    repo.sessao("presente", "thread", Decimal("1"))
+    assert repo.possui_ledger("presente") is True

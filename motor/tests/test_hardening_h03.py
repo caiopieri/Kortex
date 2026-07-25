@@ -2,12 +2,19 @@ from __future__ import annotations
 
 import json
 from collections import Counter
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, cast
 
 import pytest
 
 from motor.grafo import construir_grafo
+from motor.orcamento import (
+    CotacaoTentativa,
+    RepositorioOrcamento,
+    ResultadoTentativa,
+    RotaTentativaCusteada,
+)
 from tests.audit_corpus import casos, executar_caso, materializar_corpus
 
 CASOS = casos("H03")
@@ -78,14 +85,33 @@ def _invocar(
     log: _LogMemoria,
     politica: _Politica | None = None,
 ) -> dict[str, Any]:
+    class Tentativa:
+        def __init__(self, papel: str, prompt: str) -> None:
+            self.papel, self.prompt = papel, prompt
+
+        def cotar_tentativa(self) -> CotacaoTentativa:
+            return CotacaoTentativa(Decimal("0.10"), "BRL", "teste-v1")
+
+        def tentar_uma_vez(self) -> ResultadoTentativa:
+            texto = cast(Any, cliente).chamar(self.papel, self.prompt)
+            return ResultadoTentativa(texto, Decimal("0.01"), "BRL", "teste-uso")
+
     grafo = construir_grafo(
         cast(Any, cliente),
         cast(Any, log),
         politica=cast(Any, politica or _Politica()),
         workspace_base=tmp_path,
         max_rodadas_reconciliacao=1,
+        repositorio_orcamento=RepositorioOrcamento(tmp_path / "orcamento"),
+        fabrica_tentativas_orcadas=lambda papel, prompt, _tentativa, _requisitos: [
+            RotaTentativaCusteada(
+                f"teste:{papel}", f"teste-provider:{papel}", Tentativa(papel, prompt),
+            )
+        ],
     )
-    return cast(dict[str, Any], grafo.invoke({"spec": spec}))
+    return cast(dict[str, Any], grafo.invoke({
+        "spec": spec, "run_id": "h03", "thread_id": "h03",
+    }))
 
 
 @pytest.mark.parametrize(
@@ -117,11 +143,26 @@ def test_excecao_externa_preserva_retry_sem_vazar_detalhe(
     log = _LogMemoria()
     estado = _invocar(tmp_path, _spec([_sub("A")], max_tentativas=2), cliente, log)
 
-    assert estado["resultados"][0]["aprovado"] is True
-    assert cliente.chamadas["A"] == 2
+    assert estado["resultados"][0]["aprovado"] is False
+    assert cliente.chamadas["A"] == 1
+    assert cliente.chamadas["verifier"] == (1 if fronteira == "verifier" else 0)
     erros = [dados for tipo, dados in log.eventos if tipo == "executor.erro"]
-    assert any(dados["motivo"] == motivo for dados in erros)
+    assert any(dados["motivo"] == "modelo não respondeu" for dados in erros)
     assert "detalhe confidencial" not in json.dumps(log.eventos, ensure_ascii=False)
+
+
+def test_excecao_do_executor_vira_reprovacao_e_evento(tmp_path: Path) -> None:
+    class Cliente:
+        def chamar(self, papel: str, _prompt: str, **_kwargs: Any) -> str:
+            if papel == "A":
+                raise RuntimeError("falha injetada")
+            return json.dumps({"aprovado": True})
+
+    log = _LogMemoria()
+    estado = _invocar(tmp_path, _spec([_sub("A")]), Cliente(), log)
+
+    assert estado["resultados"][0]["aprovado"] is False
+    assert any(tipo == "executor.erro" for tipo, _dados in log.eventos)
 
 
 def test_reconciliacao_bloqueia_dependente_se_fonte_reprovar(tmp_path: Path) -> None:

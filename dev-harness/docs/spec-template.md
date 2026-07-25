@@ -7,7 +7,7 @@
 Que dor real isto resolve? (1-3 frases. Se você não consegue escrever, ainda não entendeu o problema.)
 
 ## Objetivo
-O resultado desejado, observável. Como um usuário do Logisti percebe que isto funciona?
+O resultado desejado, observável. Como um usuário percebe que isto funciona?
 
 ## Escopo — dentro
 - ...

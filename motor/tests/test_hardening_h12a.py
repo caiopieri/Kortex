@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from decimal import Decimal
 from typing import Any, cast
 
 import pytest
@@ -9,6 +10,13 @@ from langgraph.checkpoint.memory import InMemorySaver
 from motor.eventos import LogEventos
 from motor.grafo import construir_grafo
 from motor.modelos import ClienteModelo, ClienteRoteador, ClienteStub
+from motor.orcamento import (
+    CotacaoTentativa,
+    ErroOrcamento,
+    RepositorioOrcamento,
+    ResultadoTentativa,
+    RotaTentativaCusteada,
+)
 from motor.politica import PoliticaGates
 
 
@@ -193,6 +201,27 @@ def test_h12a_grafo_executa_somente_rota_que_cobre_todas_capacidades(
             catalogo=catalogo,
             log=log,
         )
+
+        class Tentativa:
+            def __init__(self, papel: str, prompt: str, requisitos) -> None:
+                self.papel, self.prompt, self.requisitos = papel, prompt, requisitos
+
+            def cotar_tentativa(self) -> CotacaoTentativa:
+                return CotacaoTentativa(Decimal("0.10"), "BRL", "teste-v1")
+
+            def tentar_uma_vez(self) -> ResultadoTentativa:
+                texto = roteador.chamar(
+                    self.papel, self.prompt,
+                    ferramentas=self.requisitos.ferramentas,
+                    tier=self.requisitos.tier,
+                    evitar=self.requisitos.evitar_provedor,
+                    capacidades=(
+                        list(self.requisitos.capacidades)
+                        if self.requisitos.capacidades is not None else None
+                    ),
+                )
+                return ResultadoTentativa(texto, Decimal("0.01"), "BRL", "teste-uso")
+
         grafo = construir_grafo(
             roteador,
             log,
@@ -200,10 +229,18 @@ def test_h12a_grafo_executa_somente_rota_que_cobre_todas_capacidades(
             politica=PoliticaGates(
                 overrides={"plano": "prosseguir", "cobertura": "prosseguir"}
             ),
+            repositorio_orcamento=RepositorioOrcamento(tmp_path / "orcamento"),
+            fabrica_tentativas_orcadas=lambda papel, prompt, _tentativa, requisitos: [
+                RotaTentativaCusteada(
+                    f"teste:{papel}", f"teste-provider:{papel}",
+                    Tentativa(papel, prompt, requisitos),
+                )
+            ],
         )
 
         resultado = grafo.invoke(
-            {"spec": _spec_h12a()}, {"configurable": {"thread_id": "h12a"}}
+            {"spec": _spec_h12a(), "run_id": "h12a", "thread_id": "h12a"},
+            {"configurable": {"thread_id": "h12a"}},
         )
 
         assert resultado["resultados"][0]["aprovado"] is rota_valida
@@ -240,8 +277,27 @@ def test_h12a_grafo_bloqueia_cliente_direto_sem_enforcement(tmp_path) -> None:
         resultado = grafo.invoke(
             {"spec": _spec_h12a()}, {"configurable": {"thread_id": "h12a-direto"}}
         )
-
         assert resultado["resultados"][0]["aprovado"] is False
         assert not any(papel == "executor" for papel, _ in cliente.chamadas)
+    finally:
+        log.fechar()
+
+
+def test_construtor_certificado_nao_autoautoriza_cliente_stub(tmp_path) -> None:
+    efeitos: list[str] = []
+    cliente = ClienteStub(lambda papel, _prompt: efeitos.append(papel) or "INDEVIDO")
+    log = LogEventos(tmp_path / "eventos-stub.jsonl")
+    try:
+        grafo = construir_grafo(cliente, log, checkpointer=InMemorySaver())
+        with pytest.raises(ErroOrcamento, match="repositorio de orcamento ausente"):
+            grafo.invoke(
+                {
+                    "missao_texto": "não execute",
+                    "run_id": "stub-bloqueado",
+                    "thread_id": "stub-bloqueado",
+                },
+                {"configurable": {"thread_id": "stub-bloqueado"}},
+            )
+        assert efeitos == []
     finally:
         log.fechar()

@@ -29,6 +29,23 @@ class ErroOrcamento(ValueError):
 
 
 @dataclass(frozen=True)
+class RequisitosTentativaCusteada:
+    """Sinais de roteamento que a fabrica deve preservar sem executar efeitos."""
+
+    tier: str | None = None
+    ferramentas: str | None = None
+    capacidades: tuple[str, ...] | None = None
+    evitar_provedor: str | None = None
+
+
+@dataclass(frozen=True)
+class RespostaTentativaCusteada:
+    texto: str
+    route_id: str
+    provider_id: str
+
+
+@dataclass(frozen=True)
 class CotacaoTentativa:
     maximo: Decimal
     moeda: Moeda
@@ -97,6 +114,23 @@ class EventoOrcamentoPendente:
 class ClienteTentativaCusteada(Protocol):
     def cotar_tentativa(self) -> CotacaoTentativa: ...
     def tentar_uma_vez(self) -> ResultadoTentativa: ...
+
+
+class PublicadorEventoOrcamento(Protocol):
+    def __call__(self, event_id: str, tipo: str, payload: dict[str, object], /) -> None: ...
+
+
+@dataclass(frozen=True)
+class RotaTentativaCusteada:
+    """Candidato da TCB: provider canônico e adaptador de uma tentativa, sem fallback interno."""
+
+    route_id: str
+    provider_id: str
+    adaptador: ClienteTentativaCusteada
+
+    def __post_init__(self) -> None:
+        if not _identificador(self.route_id) or not _identificador(self.provider_id):
+            raise ErroOrcamento("identidade de rota custeada invalida")
 
 
 class PublicadorEventoOrcamento(Protocol):
@@ -197,6 +231,11 @@ def _validar_identidade(valor: object) -> IdentidadeTentativaCusteada:
     return valor
 
 
+def validar_identidade_tentativa(valor: object) -> IdentidadeTentativaCusteada:
+    """Valida uma identidade sem produzir transicao no ledger."""
+    return _validar_identidade(valor)
+
+
 class RepositorioOrcamento:
     def __init__(self, raiz: Path) -> None:
         self._raiz = raiz.resolve()
@@ -232,6 +271,16 @@ class RepositorioOrcamento:
             raise ErroOrcamento("arquivo de ledger inseguro")
         # Ainda ha TOCTOU entre lstat e sqlite.connect; a raiz precisa ser privada ao processo.
         return arquivo
+
+    def possui_ledger(self, run_id: str) -> bool:
+        """Consulta existência sem criar diretório, arquivo ou schema."""
+        run_id = _id(run_id, "run_id")
+        arquivo = self._raiz / run_id / "orcamento.sqlite3"
+        try:
+            arquivo.lstat()
+        except FileNotFoundError:
+            return False
+        return self.caminho(run_id) == arquivo
 
     def sessao(self, run_id: str, thread_id: str, teto: Decimal) -> SessaoOrcamento:
         run_id, thread_id = _id(run_id, "run_id"), _id(thread_id, "thread_id")
