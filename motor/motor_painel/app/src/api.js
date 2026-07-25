@@ -6,10 +6,24 @@ import { useEffect, useState } from 'react';
 
 const BASE = '/dados';
 
-async function get(path) {
-  const res = await fetch(`${BASE}${path}`);
+/* Rota /dados/* que o painel em execucao nao conhece cai no fallback e devolve
+   o index.html com status 200 — res.ok passa e o res.json() estoura com erro de
+   parse, que nao diz nada. Checar o content-type transforma isso na causa real. */
+async function comoJson(res, path) {
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const tipo = (res.headers.get('content-type') || '').split(';')[0].trim();
+  if (tipo !== 'application/json') {
+    throw new Error(
+      `${BASE}${path} respondeu ${tipo || 'sem content-type'} em vez de JSON. ` +
+      'O painel em execução provavelmente é anterior a esta rota — reinicie com ' +
+      'python3 -m motor_painel.painel'
+    );
+  }
   return res.json();
+}
+
+async function get(path) {
+  return comoJson(await fetch(`${BASE}${path}`), path);
 }
 
 async function post(path, body) {
@@ -18,8 +32,7 @@ async function post(path, body) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+  return comoJson(res, path);
 }
 
 export const fetchRuns = () => get('/runs');
