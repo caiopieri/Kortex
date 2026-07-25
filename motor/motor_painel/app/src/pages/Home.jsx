@@ -110,20 +110,8 @@ export default function Home() {
       });
     }
   });
-  if (feed.length < 4) {
-    feed.push({ txt: 'sistema operacional meta-fábrica online', hasBtn: false });
-    feed.push({ txt: 'conector de provedores inicializado', hasBtn: false });
-  }
-
-  // Agents
-  const defaultAgents = [
-    { mono: 'αlf', role: 'pesquisador', now: 'pesquisando', avatarClass: 'avatar ring-blue' },
-    { mono: 'βet', role: 'pesquisador', now: 'aguardando', avatarClass: 'avatar ring-amber' },
-    { mono: 'pln', role: 'planner', now: 'planejando', avatarClass: 'avatar ring-blue' },
-    { mono: 'qae', role: 'qa_engineer', now: 'verificando', avatarClass: 'avatar ring-blue' },
-    { mono: 'syn', role: 'synthesizer', now: 'ocioso', avatarClass: 'avatar ring-green' },
-    { mono: 'arq', role: 'arquiteto', now: 'ocioso', avatarClass: 'avatar ring-green' },
-  ];
+  /* Feed curto fica curto. Encher com linha generica ("conector inicializado")
+     e inventar evento que nunca aconteceu. */
 
   const getAgentAvatarClass = (agent) => {
     if (agent.falhas > 0) return 'avatar ring-red';
@@ -147,7 +135,7 @@ export default function Home() {
     role: a.papel || 'agente',
     now: a.falhas > 0 ? 'falhou' : a.chamadas > 0 ? 'ativo' : 'ocioso',
     avatarClass: getAgentAvatarClass(a)
-  })) : defaultAgents;
+  })) : [];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 26 }}>
@@ -355,11 +343,15 @@ export default function Home() {
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12 }}>
               <span className="num" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                 06 — Agentes
-                {!hasRealAgents && <span className="chip">exemplo · estático</span>}
               </span>
               <span className="lnk" onClick={() => window.location.hash = '/agentes'}>ver todos →</span>
             </div>
             <div style={{ display: 'flex', gap: 22, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+              {!hasRealAgents && (
+                <span className="mono" style={{ fontSize: 11, color: 'var(--text3)' }}>
+                  Nenhum executor chamado ainda nesta run.
+                </span>
+              )}
               {activeAgents.map((a, i) => (
                 <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7, width: 78 }} title={a.now}>
                   <div className={a.avatarClass}>{a.mono}</div>

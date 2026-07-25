@@ -1,65 +1,99 @@
-import { useMemo } from 'react';
-import { usePoll, fetchDados, getAgents } from '../api.js';
+/* Skills — papeis que a fabrica sabe exercer.
+ *
+ * Nao existe catalogo de skill no backend. O que existe de verdade e o campo
+ * `papel` de cada entidade do registry (/dados/inventario): a capacidade que
+ * aquele executor declara. Esta tela e a projecao disso, cruzada com o uso
+ * real vindo de /dados/agentes.
+ *
+ * Nao ha versao, descricao nem tag — o registry nao declara nada disso, entao
+ * a tela nao mostra.
+ */
 
-const SKILL_PRESETS = [
-  { id: 'pesquisa-web', nome: 'Pesquisa Web', descricao: 'Busca fontes na internet, coleta links e resumos com RAG', versao: '1.3', papel: 'pesquisador', tags: ['web', 'rag', 'fontes'] },
-  { id: 'analise-codigo', nome: 'Análise de Código', descricao: 'Lê repositório, identifica padrões e propõe melhorias', versao: '2.0', papel: 'arquiteto', tags: ['código', 'review', 'refactor'] },
-  { id: 'redacao-longa', nome: 'Redação Longa', descricao: 'Gera documentos de 2000+ palavras com estrutura editorial', versao: '1.1', papel: 'redator', tags: ['documentos', 'redação'] },
-  { id: 'validacao-schema', nome: 'Validação de Schema', descricao: 'Valida JSON/YAML contra schema definido, gera relatório de erros', versao: '1.0', papel: 'validador', tags: ['json', 'yaml', 'schema'] },
-  { id: 'testes-unitarios', nome: 'Geração de Testes', descricao: 'Gera suite de testes unitários para código fornecido', versao: '1.2', papel: 'testador', tags: ['testes', 'pytest', 'jest'] },
-  { id: 'sintese-dados', nome: 'Síntese de Dados', descricao: 'Agrega múltiplas fontes de pesquisa em relatório consolidado', versao: '1.0', papel: 'synthesizer', tags: ['síntese', 'dados', 'relatório'] },
-  { id: 'fatiamento-3d', nome: 'Fatiamento 3D', descricao: 'Prepara modelo 3D para impressão: suportes, infill, G-code', versao: '0.9', papel: 'fatiador', tags: ['3d', 'hardware', 'gcode'] },
-  { id: 'copy-criativo', nome: 'Copy Criativo', descricao: 'Gera variações de copy publicitário para A/B testing', versao: '1.1', papel: 'copywriter', tags: ['marketing', 'copy', 'ab-test'] },
-];
+import { useMemo } from 'react';
+import { usePoll, getInventario, getAgents } from '../api.js';
 
 export default function Skills() {
-  const { data: agents } = usePoll(getAgents);
-  const { data: fullData } = usePoll(fetchDados);
+  const { data: entidades, error } = usePoll(getInventario);
+  const { data: agentes } = usePoll(getAgents);
 
-  /* Enrich skills with real usage data */
-  const skills = useMemo(() => {
-    const eventos = fullData?.eventos || [];
-    return SKILL_PRESETS.map(s => {
-      const usage = eventos.filter(ev => ev.executor === s.papel).length;
-      return { ...s, usage };
+  /* Um papel pode ser declarado por mais de uma entidade. Agrupa por papel e
+     guarda quem o declara. */
+  const papeis = useMemo(() => {
+    if (!entidades) return [];
+    const mapa = new Map();
+    entidades.forEach((e) => {
+      (e.papel || []).forEach((p) => {
+        if (!mapa.has(p)) mapa.set(p, []);
+        mapa.get(p).push(e.id);
+      });
     });
-  }, [fullData]);
+    /* Uso real: soma chamadas dos agentes cujo papel registrado bate. */
+    return [...mapa.entries()]
+      .map(([papel, declarantes]) => {
+        const usos = (agentes || [])
+          .filter((a) => a.papel === papel)
+          .reduce((s, a) => s + (a.chamadas || 0), 0);
+        return { papel, declarantes, usos };
+      })
+      .sort((a, b) => a.papel.localeCompare(b.papel));
+  }, [entidades, agentes]);
 
-  /* Active papéis from agents */
-  const activePapeis = useMemo(() => {
-    if (!agents) return new Set();
-    return new Set(Object.keys(agents));
-  }, [agents]);
+  if (error) return (
+    <div>
+      <span className="num">Skills</span>
+      <div className="card" style={{ padding: 16, marginTop: 16, borderColor: 'var(--red)' }}>
+        <span className="mono" style={{ color: 'var(--red)' }}>Erro: {error}</span>
+      </div>
+    </div>
+  );
+
+  if (!entidades) return (
+    <div>
+      <span className="num">Skills</span>
+      <div className="card" style={{ padding: 40, textAlign: 'center', marginTop: 16 }}>
+        <span className="mono" style={{ color: 'var(--text3)' }}>Carregando papéis…</span>
+      </div>
+    </div>
+  );
 
   return (
     <>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <span className="title" style={{ fontSize: 20 }}>Skills <span className="chip" style={{ fontSize: 10, fontWeight: 'normal', marginLeft: 8 }}>catálogo estático</span></span>
-        <span className="eyebrow" style={{ borderLeft: '1px solid var(--border)', paddingLeft: 12 }}>biblioteca de capacidades · prompts reutilizáveis</span>
+        <span className="title" style={{ fontSize: 20 }}>Skills</span>
+        <span className="eyebrow" style={{ borderLeft: '1px solid var(--border)', paddingLeft: 12 }}>
+          papéis declarados no registry
+        </span>
+        <div style={{ flex: 1 }} />
+        <span className="mono" style={{ fontSize: 10, color: 'var(--text2)' }}>
+          {papeis.length} {papeis.length === 1 ? 'papel' : 'papéis'}
+        </span>
       </div>
 
-      {/* Grid of skill cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12, marginTop: 16 }}>
-        {skills.map(s => (
-          <div key={s.id} className="card" style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span className={activePapeis.has(s.papel) ? 'sh green' : 'sh idle'}></span>
-              <span className="title" style={{ fontSize: 14, flex: 1 }}>{s.nome}</span>
-              <span className="mono" style={{ fontSize: 9, color: 'var(--text3)', border: '1px solid var(--border)', borderRadius: 2, padding: '1px 5px' }}>v{s.versao}</span>
+      {papeis.length === 0 ? (
+        <div className="card" style={{ padding: 20, textAlign: 'center', marginTop: 16 }}>
+          <span className="mono" style={{ color: 'var(--text3)' }}>
+            Nenhuma entidade do registry declara papel.
+          </span>
+        </div>
+      ) : (
+        <div className="card" style={{ padding: '4px 16px', marginTop: 16 }}>
+          {papeis.map((p) => (
+            <div key={p.papel} className="trow">
+              <span className={p.usos > 0 ? 'sh green' : 'sh idle'}></span>
+              <span style={{ color: 'var(--text)', flex: 1, minWidth: 0 }}>{p.papel}</span>
+              <span className="mono" style={{ fontSize: 10, color: 'var(--text2)', flex: 2, minWidth: 0 }}>
+                {p.declarantes.join(' · ')}
+              </span>
+              <span
+                className="mono"
+                style={{ fontSize: 10, color: p.usos > 0 ? 'var(--blue)' : 'var(--text3)', flex: 'none' }}
+              >
+                {p.usos} {p.usos === 1 ? 'uso' : 'usos'}
+              </span>
             </div>
-            <div className="mono" style={{ fontSize: 11, color: 'var(--text2)', lineHeight: 1.5 }}>{s.descricao}</div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {s.tags.map(t => (
-                <span key={t} className="pill" style={{ fontSize: 8, padding: '2px 6px' }}>{t}</span>
-              ))}
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 6, borderTop: '1px solid var(--border)' }}>
-              <span className="mono" style={{ fontSize: 10, color: 'var(--text3)' }}>papel: {s.papel}</span>
-              <span className="mono" style={{ fontSize: 10, color: s.usage > 0 ? 'var(--blue)' : 'var(--text3)' }}>{s.usage} usos</span>
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </>
   );
 }
