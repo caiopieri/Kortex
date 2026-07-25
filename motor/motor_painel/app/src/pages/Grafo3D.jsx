@@ -13,6 +13,15 @@ const TIPO_VAR = {
   decisor: '--text3',
 };
 
+/* Rotulo legivel por tipo. A cor vem de TIPO_VAR, nunca repetida a mao. */
+const LEGENDA = [
+  ['nucleo', 'núcleo'],
+  ['executor', 'executor'],
+  ['subagente', 'subagente'],
+  ['portao', 'portão'],
+  ['decisor', 'decisor'],
+];
+
 const colorOf = (n) => {
   if (n.hot === 'gate') return cssVar('--amber');
   return cssVar(TIPO_VAR[n.tipo] || '--text3');
@@ -42,38 +51,34 @@ export default function Grafo3D() {
   const [themeTick, setThemeTick] = useState(0);
 
   const [scriptsLoaded, setScriptsLoaded] = useState(false);
+  const [erroScript, setErroScript] = useState(null);
 
-  // Carregar Three.js e 3D Force Graph dinamicamente via CDN
+  /* Carrega three.js e 3d-force-graph da CDN.
+     Sao as unicas dependencias do painel que nao vivem no package.json: sem
+     rede, esta tela nao abre. Antes so havia onload — se a CDN falhasse, a
+     Promise nunca resolvia e a tela ficava preta e muda para sempre. Agora
+     onerror e timeout viram mensagem na tela. */
   useEffect(() => {
     let active = true;
 
+    const carregar = (src) => new Promise((resolve, reject) => {
+      const el = document.createElement('script');
+      el.src = src;
+      el.async = true;
+      const limite = setTimeout(() => reject(new Error(`tempo esgotado ao buscar ${src}`)), 15000);
+      el.onload = () => { clearTimeout(limite); resolve(); };
+      el.onerror = () => { clearTimeout(limite); reject(new Error(`falha ao buscar ${src}`)); };
+      document.body.appendChild(el);
+    });
+
     const loadScripts = async () => {
-      if (window.THREE && window.ForceGraph3D) {
+      try {
+        if (!window.THREE) await carregar('https://unpkg.com/three@0.160.0/build/three.min.js');
+        if (!window.ForceGraph3D) await carregar('https://unpkg.com/3d-force-graph@1.73.4/dist/3d-force-graph.min.js');
         if (active) setScriptsLoaded(true);
-        return;
+      } catch (e) {
+        if (active) setErroScript(e.message);
       }
-
-      if (!window.THREE) {
-        const threeScript = document.createElement('script');
-        threeScript.src = 'https://unpkg.com/three@0.160.0/build/three.min.js';
-        threeScript.async = true;
-        document.body.appendChild(threeScript);
-        await new Promise((resolve) => {
-          threeScript.onload = resolve;
-        });
-      }
-
-      if (!window.ForceGraph3D) {
-        const fgScript = document.createElement('script');
-        fgScript.src = 'https://unpkg.com/3d-force-graph@1.73.4/dist/3d-force-graph.min.js';
-        fgScript.async = true;
-        document.body.appendChild(fgScript);
-        await new Promise((resolve) => {
-          fgScript.onload = resolve;
-        });
-      }
-
-      if (active) setScriptsLoaded(true);
     };
 
     loadScripts();
@@ -83,13 +88,16 @@ export default function Grafo3D() {
     };
   }, []);
 
-  // Reagir à troca de tema (data-theme no .mf-root)
+  /* Reagir a troca de tema.
+     Antes isto observava o atributo data-theme do .mf-root, o que so pega
+     troca de MODO (claro/escuro). Trocar de TEMA no mesmo modo (kortex ->
+     gemini) reescreve as variaveis CSS sem mexer no atributo, entao a cena 3D
+     ficava com as cores do tema anterior ate recarregar a pagina.
+     applyTheme() emite mf-theme-applied em toda aplicacao — modo e tema. */
   useEffect(() => {
-    const root = document.querySelector('.mf-root');
-    if (!root) return;
-    const obs = new MutationObserver(() => setThemeTick((t) => t + 1));
-    obs.observe(root, { attributes: true, attributeFilter: ['data-theme'] });
-    return () => obs.disconnect();
+    const recolorir = () => setThemeTick((t) => t + 1);
+    document.addEventListener('mf-theme-applied', recolorir);
+    return () => document.removeEventListener('mf-theme-applied', recolorir);
   }, []);
 
   // Grafo real derivado de /dados: nós de data.nos, arestas de data.arestas,
@@ -231,13 +239,16 @@ export default function Grafo3D() {
       .onNodeClick(n => setSelectedNode(n))
       .onBackgroundClick(() => setSelectedNode(null));
 
-    // OTIMIZAÇÃO DE PERFORMANCE EXTREMA: Congelar a física após 35 iterações (ticks).
-    // Isso impede que a CPU/GPU continuem recalculando a gravidade e atração para sempre,
-    // liberando a thread principal do navegador e eliminando totalmente os travamentos ao navegar.
+    // Congela a física depois que o layout assenta, para não recalcular gravidade
+    // e atração para sempre e travar a thread principal.
+    // O limite era 35 ticks / 1.2s, herdado de quando o grafo tinha 1 nó. Com
+    // 15-20 nós de uma missão real isso congela antes de separar o aglomerado —
+    // economiza CPU entregando layout errado. 200 ticks dão tempo de assentar e
+    // ainda param muito antes de virar custo permanente.
     graph.d3Force('charge').strength(-160);
-    graph.d3AlphaDecay(0.04); // Decaimento rápido
-    graph.cooldownTicks(35);  // Executa apenas 35 frames de física e congela no espaço
-    graph.cooldownTime(1200); // Tempo limite de 1.2 segundos para estabilização física
+    graph.d3AlphaDecay(0.0228); // padrão do d3; 0.04 cortava o layout junto com o tempo
+    graph.cooldownTicks(200);
+    graph.cooldownTime(5000);
 
     graph.renderer().setPixelRatio(1); // Travar pixel ratio em 1 para poupar a GPU
     graph.renderer().shadowMap.enabled = false; // Desativar sombras WebGL pesadas
@@ -305,9 +316,14 @@ export default function Grafo3D() {
     if (sc.fog) sc.fog.color.set(cssVar('--bg'));
     if (dustRef.current) dustRef.current.material.color.set(cssVar('--text3'));
     if (fillLightRef.current) fillLightRef.current.color.set(cssVar('--blue'));
-    // Reconstruir esferas + labels com as novas cores
+    // Reconstruir esferas + labels com as novas cores.
+    // Limpar o cache e reatribuir o accessor nao basta: o 3d-force-graph nao
+    // regera objeto de no ja montado so porque o accessor mudou. Sem o
+    // refresh() o fundo trocava de cor e as esferas ficavam com a cor do tema
+    // anterior — medido comparando o pixel da esfera entre dois temas.
     nodesRef.current.forEach((n) => { delete n.__threeObj; });
     graph.nodeThreeObject((n) => buildNodeObject(n));
+    graph.refresh();
   }, [themeTick]);
 
   // Atualização reativa de dados com prevenção de reaquecimento físico redundante (flicker/jitter)
@@ -424,26 +440,40 @@ export default function Grafo3D() {
         </div>
         <div style={{ flex: 1 }}></div>
         <div style={{ display: 'flex', gap: 10 }}>
-          <span className="lg" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: "'IBM Plex Mono',monospace", fontSize: '9.5px', textTransform: 'uppercase', color: 'var(--text2)' }}>
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--blue)' }}></span>núcleo
-          </span>
-          <span className="lg" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: "'IBM Plex Mono',monospace", fontSize: '9.5px', textTransform: 'uppercase', color: 'var(--text2)' }}>
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--text)' }}></span>executor
-          </span>
-          <span className="lg" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: "'IBM Plex Mono',monospace", fontSize: '9.5px', textTransform: 'uppercase', color: 'var(--text2)' }}>
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--green)' }}></span>subagente
-          </span>
-          <span className="lg" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: "'IBM Plex Mono',monospace", fontSize: '9.5px', textTransform: 'uppercase', color: 'var(--text2)' }}>
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--amber)' }}></span>portão
-          </span>
-          <span className="lg" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: "'IBM Plex Mono',monospace", fontSize: '9.5px', textTransform: 'uppercase', color: 'var(--text2)' }}>
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--text3)' }}></span>decisor
-          </span>
+          {/* Derivada de TIPO_VAR: a legenda nao pode divergir da cor do no. */}
+          {LEGENDA.map(([tipo, rotulo]) => (
+            <span key={tipo} className="lg" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: "'IBM Plex Mono',monospace", fontSize: '9.5px', textTransform: 'uppercase', color: 'var(--text2)' }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: `var(${TIPO_VAR[tipo]})` }}></span>{rotulo}
+            </span>
+          ))}
         </div>
       </div>
 
       {/* 3D Canvas stage */}
       <div ref={stageRef} style={{ width: '100%', height: '100%', position: 'absolute', inset: 0 }}></div>
+
+      {(erroScript || !scriptsLoaded) && (
+        <div style={{ position: 'absolute', inset: 0, zIndex: 5, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, padding: 24, textAlign: 'center' }}>
+          {erroScript ? (
+            <>
+              <div className="title" style={{ fontSize: 15, color: 'var(--red)' }}>
+                Motor 3D não carregou
+              </div>
+              <div className="mono" style={{ fontSize: 11, color: 'var(--text2)', maxWidth: 420, lineHeight: 1.6 }}>
+                Esta tela busca three.js e 3d-force-graph em unpkg.com a cada visita —
+                são as únicas dependências do painel que não estão instaladas localmente.
+                Sem rede, ela não abre.
+              </div>
+              <div className="mono" style={{ fontSize: 10, color: 'var(--text3)' }}>{erroScript}</div>
+              <span className="pill" style={{ marginTop: 6 }} onClick={() => { window.location.hash = '/grafo'; }}>
+                ver em 2D
+              </span>
+            </>
+          ) : (
+            <span className="mono" style={{ fontSize: 11, color: 'var(--text3)' }}>Carregando motor 3D…</span>
+          )}
+        </div>
+      )}
 
       {/* Selected Node Drawer */}
       {selectedNodeDetails && (
@@ -462,7 +492,9 @@ export default function Grafo3D() {
         <span className={`pill${layer === 'macro' ? ' on' : ''}`} style={{ pointerEvents: 'auto' }} onClick={() => setLayer('macro')}>macro</span>
         <span className={`pill${layer === 'full' ? ' on' : ''}`} style={{ pointerEvents: 'auto' }} onClick={() => setLayer('full')}>completo</span>
         <div style={{ width: 1, height: 16, background: 'var(--border)' }}></div>
-        <span className={`pill${paused ? ' on' : ''}`} style={{ pointerEvents: 'auto' }} onClick={() => setPaused(!paused)}>{paused ? '▶ retomar' : '⏸ pausar física'}</span>
+        {/* pauseAnimation() para o loop de render inteiro, nao so a fisica — com
+            ele ligado a camera tambem congela. O rotulo agora diz isso. */}
+        <span className={`pill${paused ? ' on' : ''}`} style={{ pointerEvents: 'auto' }} onClick={() => setPaused(!paused)}>{paused ? '▶ retomar render' : '⏸ pausar render'}</span>
         <span className={`pill${flow ? ' on' : ''}`} style={{ pointerEvents: 'auto' }} onClick={() => setFlow(!flow)}>⚡ fluxo</span>
         <div style={{ width: 1, height: 16, background: 'var(--border)' }}></div>
         <span className="eyebrow" style={{ pointerEvents: 'auto' }}>arestas</span>
