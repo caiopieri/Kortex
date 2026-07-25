@@ -6,7 +6,10 @@ build-backend = "setuptools.build_meta"
 name = "motor-metafabrica"
 version = "0.5.0"
 description = "Motor v0.5 da Meta-fábrica — grafo LangGraph fixo que interpreta uma WorkflowSpec dinâmica"
-requires-python = ">=3.10"
+# Teto em 3.14: nessa versão o `langchain_core` (via langgraph) ainda importa
+# `pydantic.v1`, que avisa não ser compatível. A suíte passa, mas o aviso é um
+# sinal de incompatibilidade real — não rode o gate lá até a cadeia atualizar.
+requires-python = ">=3.10,<3.14"
 dependencies = [
     "langgraph>=1.0,<2",
     "pydantic>=2.7,<3",
@@ -19,7 +22,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.11,<1", "mypy>=1.15,<2", "bandit>=1.8,<2"]
+dev = [
+    "pytest>=8",
+    "pytest-timeout>=2.3,<3",
+    "ruff>=0.11,<1",
+    "mypy>=1.15,<2",
+    "bandit>=1.8,<2",
+]
 studio = [
     "langgraph-cli[inmem]>=0.4.29,<0.5",
     "langgraph-api==0.10.0",
@@ -34,6 +43,10 @@ motor_painel = ["*.html"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Rede de segurança: um teste travado não pode travar o gate inteiro. O gate
+# alvo é <5 min determinístico; 120s por teste é folgado para a suíte atual
+# (o teste mais lento fica bem abaixo disso) e ainda corta um deadlock rápido.
+timeout = 120
 
 [tool.ruff]
 target-version = "py310"

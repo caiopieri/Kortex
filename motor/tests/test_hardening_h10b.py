@@ -10,6 +10,22 @@ import pytest
 from motor.caixa import LedgerCaixa
 
 
+# `spawn` reimporta o pacote inteiro no filho; sob carga (varias suites em
+# paralelo) isso passa facil de 10s e o join estourava dando `exitcode is None`,
+# um vermelho que parece defeito e nao e. O orcamento aqui e generoso de
+# proposito: quem corta travamento de verdade e o `timeout` do pytest.
+_ESPERA_SPAWN_S = 60
+
+
+def _esperar_saida(processo, esperado: int) -> None:
+    processo.join(_ESPERA_SPAWN_S)
+    assert processo.exitcode is not None, (
+        f"processo spawn nao terminou em {_ESPERA_SPAWN_S}s (maquina sobrecarregada?)"
+    )
+    assert processo.exitcode == esperado
+
+
+
 def _registrar(ledger: LedgerCaixa, *, decisao: str = "prosseguir") -> int:
     return ledger.registrar_decisao(decisao_id="decisao-1", job_id="job-1",
                                     portao="cobertura", decisao=decisao)
@@ -204,8 +220,7 @@ def test_crash_entre_ledger_e_outbox_recupera_rollback(tmp_path: Path) -> None:
         args=(str(db_path),),
     )
     processo.start()
-    processo.join(10)
-    assert processo.exitcode == 23
+    _esperar_saida(processo, 23)
     reaberto = LedgerCaixa(db_path)
     assert _contagens(db_path) == (0, 0)
     with sqlite3.connect(db_path) as conn:
