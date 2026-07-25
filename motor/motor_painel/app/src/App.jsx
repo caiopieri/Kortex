@@ -20,6 +20,7 @@ import Runners from './pages/Runners';
 import Skills from './pages/Skills';
 import Curador from './pages/Curador';
 import Conexoes from './pages/Conexoes';
+import Inventario from './pages/Inventario';
 import Grafo3D from './pages/Grafo3D';
 
 /* Roteador hash-based — mais leve possível, zero deps */
@@ -86,6 +87,7 @@ function App() {
   else if (route === '/skills') Page = <Skills />;
   else if (route === '/curador') Page = <Curador />;
   else if (route === '/conexoes') Page = <Conexoes />;
+  else if (route === '/inventario') Page = <Inventario />;
   else Page = <Home />;
 
   return (
