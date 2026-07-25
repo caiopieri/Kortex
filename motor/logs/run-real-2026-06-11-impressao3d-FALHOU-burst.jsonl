@@ -1,0 +1,105 @@
+{"t": 0.017, "evento": "executor.chamado", "executor": "planner", "tentativa": 1}
+{"t": 54.157, "evento": "spec.criada", "missao": "impressao3d-oportunidades-receita", "subagentes": 6}
+{"t": 54.158, "evento": "paralelo.iniciado", "subagentes": ["segmentos-alto-crescimento", "modelos-receita-recorrente", "nichos-emergentes-tendencias", "estrategias-precificacao-upsell", "analise-competitiva-lacunas", "casos-sucesso-benchmarks"]}
+{"t": 54.16, "evento": "executor.chamado", "executor": "segmentos-alto-crescimento", "papel": "pesquisador", "tentativa": 1}
+{"t": 54.161, "evento": "executor.chamado", "executor": "nichos-emergentes-tendencias", "papel": "pesquisador", "tentativa": 1}
+{"t": 54.165, "evento": "executor.chamado", "executor": "estrategias-precificacao-upsell", "papel": "pesquisador", "tentativa": 1}
+{"t": 54.166, "evento": "executor.chamado", "executor": "modelos-receita-recorrente", "papel": "pesquisador", "tentativa": 1}
+{"t": 54.166, "evento": "executor.chamado", "executor": "analise-competitiva-lacunas", "papel": "pesquisador", "tentativa": 1}
+{"t": 54.171, "evento": "executor.chamado", "executor": "casos-sucesso-benchmarks", "papel": "pesquisador", "tentativa": 1}
+{"t": 85.805, "evento": "modelo.falha", "papel": "pesquisador", "tentativa": 1, "motivo": "rc=1 stderr=''"}
+{"t": 90.401, "evento": "modelo.falha", "papel": "pesquisador", "tentativa": 2, "motivo": "rc=1 stderr=''"}
+{"t": 100.897, "evento": "modelo.falha", "papel": "pesquisador", "tentativa": 3, "motivo": "rc=1 stderr=''"}
+{"t": 100.897, "evento": "executor.erro", "executor": "casos-sucesso-benchmarks", "motivo": "modelo não respondeu", "tentativa": 1}
+{"t": 100.897, "evento": "executor.chamado", "executor": "casos-sucesso-benchmarks", "papel": "pesquisador", "tentativa": 2}
+{"t": 102.894, "evento": "modelo.falha", "papel": "pesquisador", "tentativa": 1, "motivo": "rc=1 stderr=''"}
+{"t": 106.89, "evento": "modelo.falha", "papel": "pesquisador", "tentativa": 2, "motivo": "rc=1 stderr=''"}
+{"t": 112.806, "evento": "modelo.falha", "papel": "pesquisador", "tentativa": 3, "motivo": "rc=1 stderr=''"}
+{"t": 112.806, "evento": "executor.erro", "executor": "casos-sucesso-benchmarks", "motivo": "modelo não respondeu", "tentativa": 2}
+{"t": 112.806, "evento": "executor.chamado", "executor": "casos-sucesso-benchmarks", "papel": "pesquisador", "tentativa": 3}
+{"t": 114.836, "evento": "modelo.falha", "papel": "pesquisador", "tentativa": 1, "motivo": "rc=1 stderr=''"}
+{"t": 118.873, "evento": "modelo.falha", "papel": "pesquisador", "tentativa": 2, "motivo": "rc=1 stderr=''"}
+{"t": 123.132, "evento": "executor.respondeu", "executor": "estrategias-precificacao-upsell", "tentativa": 1}
+{"t": 124.025, "evento": "executor.respondeu", "executor": "segmentos-alto-crescimento", "tentativa": 1}
+{"t": 125.047, "evento": "modelo.falha", "papel": "pesquisador", "tentativa": 3, "motivo": "rc=1 stderr=''"}
+{"t": 125.047, "evento": "executor.erro", "executor": "casos-sucesso-benchmarks", "motivo": "modelo não respondeu", "tentativa": 3}
+{"t": 125.223, "evento": "modelo.falha", "papel": "verifier", "tentativa": 1, "motivo": "rc=1 stderr=''"}
+{"t": 126.173, "evento": "modelo.falha", "papel": "verifier", "tentativa": 1, "motivo": "rc=1 stderr=''"}
+{"t": 129.499, "evento": "modelo.falha", "papel": "verifier", "tentativa": 2, "motivo": "rc=1 stderr=''"}
+{"t": 130.205, "evento": "modelo.falha", "papel": "verifier", "tentativa": 2, "motivo": "rc=1 stderr=''"}
+{"t": 131.324, "evento": "executor.respondeu", "executor": "nichos-emergentes-tendencias", "tentativa": 1}
+{"t": 133.281, "evento": "modelo.falha", "papel": "verifier", "tentativa": 1, "motivo": "rc=1 stderr=''"}
+{"t": 135.578, "evento": "modelo.falha", "papel": "verifier", "tentativa": 3, "motivo": "rc=1 stderr=''"}
+{"t": 135.578, "evento": "portao.reprovado", "portao": "verifier:estrategias-precificacao-upsell", "ciclo": 1, "motivo": "verifier sem JSON"}
+{"t": 135.578, "evento": "executor.chamado", "executor": "estrategias-precificacao-upsell", "papel": "pesquisador", "tentativa": 2}
+{"t": 136.738, "evento": "modelo.falha", "papel": "verifier", "tentativa": 3, "motivo": "rc=1 stderr=''"}
+{"t": 136.739, "evento": "portao.reprovado", "portao": "verifier:segmentos-alto-crescimento", "ciclo": 1, "motivo": "verifier sem JSON"}
+{"t": 136.739, "evento": "executor.chamado", "executor": "segmentos-alto-crescimento", "papel": "pesquisador", "tentativa": 2}
+{"t": 136.961, "evento": "executor.respondeu", "executor": "analise-competitiva-lacunas", "tentativa": 1}
+{"t": 137.21, "evento": "modelo.falha", "papel": "verifier", "tentativa": 2, "motivo": "rc=1 stderr=''"}
+{"t": 137.584, "evento": "modelo.falha", "papel": "pesquisador", "tentativa": 1, "motivo": "rc=1 stderr=''"}
+{"t": 138.896, "evento": "modelo.falha", "papel": "pesquisador", "tentativa": 1, "motivo": "rc=1 stderr=''"}
+{"t": 139.014, "evento": "modelo.falha", "papel": "verifier", "tentativa": 1, "motivo": "rc=1 stderr=''"}
+{"t": 141.531, "evento": "modelo.falha", "papel": "pesquisador", "tentativa": 2, "motivo": "rc=1 stderr=''"}
+{"t": 143.25, "evento": "modelo.falha", "papel": "verifier", "tentativa": 2, "motivo": "rc=1 stderr=''"}
+{"t": 143.365, "evento": "modelo.falha", "papel": "pesquisador", "tentativa": 2, "motivo": "rc=1 stderr=''"}
+{"t": 143.471, "evento": "modelo.falha", "papel": "verifier", "tentativa": 3, "motivo": "rc=1 stderr=''"}
+{"t": 143.471, "evento": "portao.reprovado", "portao": "verifier:nichos-emergentes-tendencias", "ciclo": 1, "motivo": "verifier sem JSON"}
+{"t": 143.471, "evento": "executor.chamado", "executor": "nichos-emergentes-tendencias", "papel": "pesquisador", "tentativa": 2}
+{"t": 145.778, "evento": "modelo.falha", "papel": "pesquisador", "tentativa": 1, "motivo": "rc=1 stderr=''"}
+{"t": 147.416, "evento": "modelo.falha", "papel": "pesquisador", "tentativa": 3, "motivo": "rc=1 stderr=''"}
+{"t": 147.416, "evento": "executor.erro", "executor": "estrategias-precificacao-upsell", "motivo": "modelo não respondeu", "tentativa": 2}
+{"t": 147.416, "evento": "executor.chamado", "executor": "estrategias-precificacao-upsell", "papel": "pesquisador", "tentativa": 3}
+{"t": 149.638, "evento": "modelo.falha", "papel": "verifier", "tentativa": 3, "motivo": "rc=1 stderr=''"}
+{"t": 149.638, "evento": "portao.reprovado", "portao": "verifier:analise-competitiva-lacunas", "ciclo": 1, "motivo": "verifier sem JSON"}
+{"t": 149.638, "evento": "executor.chamado", "executor": "analise-competitiva-lacunas", "papel": "pesquisador", "tentativa": 2}
+{"t": 149.647, "evento": "modelo.falha", "papel": "pesquisador", "tentativa": 3, "motivo": "rc=1 stderr=''"}
+{"t": 149.648, "evento": "executor.erro", "executor": "segmentos-alto-crescimento", "motivo": "modelo não respondeu", "tentativa": 2}
+{"t": 149.648, "evento": "executor.chamado", "executor": "segmentos-alto-crescimento", "papel": "pesquisador", "tentativa": 3}
+{"t": 149.657, "evento": "modelo.falha", "papel": "pesquisador", "tentativa": 1, "motivo": "rc=1 stderr=''"}
+{"t": 149.944, "evento": "modelo.falha", "papel": "pesquisador", "tentativa": 2, "motivo": "rc=1 stderr=''"}
+{"t": 151.783, "evento": "modelo.falha", "papel": "pesquisador", "tentativa": 1, "motivo": "rc=1 stderr=''"}
+{"t": 152.007, "evento": "modelo.falha", "papel": "pesquisador", "tentativa": 1, "motivo": "rc=1 stderr=''"}
+{"t": 153.742, "evento": "modelo.falha", "papel": "pesquisador", "tentativa": 2, "motivo": "rc=1 stderr=''"}
+{"t": 155.866, "evento": "modelo.falha", "papel": "pesquisador", "tentativa": 2, "motivo": "rc=1 stderr=''"}
+{"t": 156.104, "evento": "modelo.falha", "papel": "pesquisador", "tentativa": 3, "motivo": "rc=1 stderr=''"}
+{"t": 156.104, "evento": "executor.erro", "executor": "nichos-emergentes-tendencias", "motivo": "modelo não respondeu", "tentativa": 2}
+{"t": 156.104, "evento": "executor.chamado", "executor": "nichos-emergentes-tendencias", "papel": "pesquisador", "tentativa": 3}
+{"t": 156.213, "evento": "modelo.falha", "papel": "pesquisador", "tentativa": 2, "motivo": "rc=1 stderr=''"}
+{"t": 159.003, "evento": "modelo.falha", "papel": "pesquisador", "tentativa": 1, "motivo": "rc=1 stderr=''"}
+{"t": 160.029, "evento": "modelo.falha", "papel": "pesquisador", "tentativa": 3, "motivo": "rc=1 stderr=''"}
+{"t": 160.03, "evento": "executor.erro", "executor": "estrategias-precificacao-upsell", "motivo": "modelo não respondeu", "tentativa": 3}
+{"t": 161.885, "evento": "modelo.falha", "papel": "pesquisador", "tentativa": 3, "motivo": "rc=1 stderr=''"}
+{"t": 161.885, "evento": "executor.erro", "executor": "segmentos-alto-crescimento", "motivo": "modelo não respondeu", "tentativa": 3}
+{"t": 162.197, "evento": "modelo.falha", "papel": "pesquisador", "tentativa": 3, "motivo": "rc=1 stderr=''"}
+{"t": 162.197, "evento": "executor.erro", "executor": "analise-competitiva-lacunas", "motivo": "modelo não respondeu", "tentativa": 2}
+{"t": 162.197, "evento": "executor.chamado", "executor": "analise-competitiva-lacunas", "papel": "pesquisador", "tentativa": 3}
+{"t": 163.185, "evento": "modelo.falha", "papel": "pesquisador", "tentativa": 2, "motivo": "rc=1 stderr=''"}
+{"t": 164.275, "evento": "modelo.falha", "papel": "pesquisador", "tentativa": 1, "motivo": "rc=1 stderr=''"}
+{"t": 164.334, "evento": "executor.respondeu", "executor": "modelos-receita-recorrente", "tentativa": 1}
+{"t": 166.345, "evento": "modelo.falha", "papel": "verifier", "tentativa": 1, "motivo": "rc=1 stderr=''"}
+{"t": 168.258, "evento": "modelo.falha", "papel": "pesquisador", "tentativa": 2, "motivo": "rc=1 stderr=''"}
+{"t": 169.262, "evento": "modelo.falha", "papel": "pesquisador", "tentativa": 3, "motivo": "rc=1 stderr=''"}
+{"t": 169.262, "evento": "executor.erro", "executor": "nichos-emergentes-tendencias", "motivo": "modelo não respondeu", "tentativa": 3}
+{"t": 171.733, "evento": "modelo.falha", "papel": "verifier", "tentativa": 2, "motivo": "rc=1 stderr=''"}
+{"t": 174.557, "evento": "modelo.falha", "papel": "pesquisador", "tentativa": 3, "motivo": "rc=1 stderr=''"}
+{"t": 174.557, "evento": "executor.erro", "executor": "analise-competitiva-lacunas", "motivo": "modelo não respondeu", "tentativa": 3}
+{"t": 177.728, "evento": "modelo.falha", "papel": "verifier", "tentativa": 3, "motivo": "rc=1 stderr=''"}
+{"t": 177.729, "evento": "portao.reprovado", "portao": "verifier:modelos-receita-recorrente", "ciclo": 1, "motivo": "verifier sem JSON"}
+{"t": 177.729, "evento": "executor.chamado", "executor": "modelos-receita-recorrente", "papel": "pesquisador", "tentativa": 2}
+{"t": 179.722, "evento": "modelo.falha", "papel": "pesquisador", "tentativa": 1, "motivo": "rc=1 stderr=''"}
+{"t": 183.864, "evento": "modelo.falha", "papel": "pesquisador", "tentativa": 2, "motivo": "rc=1 stderr=''"}
+{"t": 189.932, "evento": "modelo.falha", "papel": "pesquisador", "tentativa": 3, "motivo": "rc=1 stderr=''"}
+{"t": 189.932, "evento": "executor.erro", "executor": "modelos-receita-recorrente", "motivo": "modelo não respondeu", "tentativa": 2}
+{"t": 189.932, "evento": "executor.chamado", "executor": "modelos-receita-recorrente", "papel": "pesquisador", "tentativa": 3}
+{"t": 191.934, "evento": "modelo.falha", "papel": "pesquisador", "tentativa": 1, "motivo": "rc=1 stderr=''"}
+{"t": 195.986, "evento": "modelo.falha", "papel": "pesquisador", "tentativa": 2, "motivo": "rc=1 stderr=''"}
+{"t": 201.943, "evento": "modelo.falha", "papel": "pesquisador", "tentativa": 3, "motivo": "rc=1 stderr=''"}
+{"t": 201.943, "evento": "executor.erro", "executor": "modelos-receita-recorrente", "motivo": "modelo não respondeu", "tentativa": 3}
+{"t": 201.945, "evento": "paralelo.concluido", "commitados": 6}
+{"t": 201.945, "evento": "executor.chamado", "executor": "global_evaluator"}
+{"t": 204.173, "evento": "modelo.falha", "papel": "evaluator", "tentativa": 1, "motivo": "rc=1 stderr=''"}
+{"t": 208.197, "evento": "modelo.falha", "papel": "evaluator", "tentativa": 2, "motivo": "rc=1 stderr=''"}
+{"t": 214.303, "evento": "modelo.falha", "papel": "evaluator", "tentativa": 3, "motivo": "rc=1 stderr=''"}
+{"t": 214.303, "evento": "portao.reprovado", "portao": "cobertura", "lacunas": ["evaluator sem JSON", "subagente reprovado: segmentos-alto-crescimento", "subagente reprovado: modelos-receita-recorrente", "subagente reprovado: nichos-emergentes-tendencias", "subagente reprovado: estrategias-precificacao-upsell", "subagente reprovado: analise-competitiva-lacunas", "subagente reprovado: casos-sucesso-benchmarks"]}
+{"t": 214.303, "evento": "escalado", "para": "fundador"}

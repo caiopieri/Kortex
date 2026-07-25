@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KORTEX — Comparação de acento (A: âmbar+teal · B: ciano)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wdth,wght@62..125,100..900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  /* ============ base neutra da página (chrome do comparativo) ============ */
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#E9E9E6; font-family:'Inter',sans-serif; color:#141414; }
+  .page-note { max-width:1100px; margin:0 auto; padding:40px 24px 8px; }
+  .page-note h1 { font-family:'Anton',sans-serif; font-size:34px; letter-spacing:.01em; text-transform:uppercase; }
+  .page-note p { font-size:14px; color:#555; margin-top:8px; max-width:70ch; line-height:1.55; }
+  .divider-label { max-width:1100px; margin:48px auto 0; padding:0 24px; font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.22em; color:#888; text-transform:uppercase; }
+
+  /* ============ tokens por opção ============ */
+  .opt {
+    /* base clara STARK — igual nas duas opções */
+    --bg:#F4F4F1;            /* off-white papel */
+    --surface:#FFFFFF;
+    --ink:#141414;           /* quase-preto */
+    --ink-2:#5C5C58;         /* texto secundário */
+    --hairline:#D8D8D3;
+    --canvas:#0B0D0E;        /* teatro escuro dos grafos (igual nos 2 temas) */
+    --canvas-ink:#E8EAE8;
+    /* status (§4 do brief — inalterado) */
+    --ok:#3F8A4E; --run:#3B6FB5; --warn:#C7841E; --err:#B3402F;
+  }
+  .opt-a {
+    --accent:#B87514;        /* âmbar tático = PRECISA DE VOCÊ (só humano) */
+    --accent-ink:#FFFFFF;
+    --tele:#2DD4BF;          /* teal = telemetria viva (só no canvas escuro) */
+    --tele-dim:#134E4A;
+  }
+  .opt-b {
+    --accent:#0E7490;        /* ciano profundo = atenção humana (claro) */
+    --accent-ink:#FFFFFF;
+    --tele:#22D3EE;          /* ciano claro = telemetria (canvas escuro) */
+    --tele-dim:#164E63;
+  }
+
+  .opt { max-width:1100px; margin:16px auto 0 auto; background:var(--bg); border:1px solid var(--hairline); }
+
+  /* ---- topbar ---- */
+  .topbar { display:flex; align-items:center; justify-content:space-between; padding:14px 28px; border-bottom:1px solid var(--hairline); background:var(--surface); }
+  .wordmark { font-family:'Archivo',sans-serif; font-variation-settings:'wdth' 125,'wght' 900; font-size:20px; letter-spacing:.06em; color:var(--ink); }
+  .wordmark span { color:var(--accent); }
+  .topnav { display:flex; gap:26px; font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.18em; color:var(--ink-2); text-transform:uppercase; }
+  .topnav b { color:var(--ink); font-weight:500; border-bottom:2px solid var(--accent); padding-bottom:3px; }
+
+  /* ---- hero ---- */
+  .hero { padding:64px 28px 48px; display:grid; grid-template-columns:170px 1fr; gap:24px; }
+  .side-label { font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.24em; color:var(--ink-2); text-transform:uppercase; padding-top:10px; }
+  .hero h2 { font-family:'Anton',sans-serif; font-size:64px; line-height:.98; text-transform:uppercase; color:var(--ink); letter-spacing:.005em; }
+  .hero .sub { margin-top:18px; font-size:15px; color:var(--ink-2); max-width:56ch; line-height:1.6; }
+  .hero .cta { margin-top:28px; display:flex; gap:14px; }
+  .btn { font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.16em; text-transform:uppercase; padding:12px 22px; cursor:pointer; border:1px solid var(--ink); background:transparent; color:var(--ink); }
+  .btn-primary { background:var(--ink); color:var(--bg); }
+  .btn-accent { border-color:var(--accent); color:var(--accent); }
+
+  /* ---- fila / status ---- */
+  .strip { padding:22px 28px; border-top:1px solid var(--hairline); display:flex; align-items:center; gap:22px; flex-wrap:wrap; background:var(--surface); }
+  .chip { display:inline-flex; align-items:center; gap:8px; font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.1em; text-transform:uppercase; }
+  .dot { width:9px; height:9px; }
+  .sq { width:9px; height:9px; }
+  .needs { background:var(--accent); color:var(--accent-ink); padding:8px 14px; display:inline-flex; gap:10px; align-items:center; font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.14em; text-transform:uppercase; }
+
+  /* ---- cards ---- */
+  .cards { display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; padding:24px 28px 28px; }
+  .card { background:var(--surface); border:1px solid var(--hairline); padding:18px; }
+  .card .k { font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.2em; color:var(--ink-2); text-transform:uppercase; }
+  .card h3 { font-family:'Space Grotesk',sans-serif; font-size:17px; font-weight:700; margin-top:8px; color:var(--ink); }
+  .card p { font-size:12.5px; color:var(--ink-2); margin-top:6px; line-height:1.5; }
+  .card .meta { margin-top:14px; display:flex; justify-content:space-between; font-family:'JetBrains Mono',monospace; font-size:10.5px; color:var(--ink-2); }
+  .card-gate { border-left:3px solid var(--accent); }
+  .card-gate .k { color:var(--accent); }
+
+  /* ---- canvas escuro (teatro de operações) ---- */
+  .canvas { background:var(--canvas); color:var(--canvas-ink); padding:26px 28px 30px; position:relative; overflow:hidden; }
+  .canvas .k { font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.22em; color:#6b7573; text-transform:uppercase; }
+  .graph { margin-top:18px; height:150px; position:relative; }
+  .node { position:absolute; width:14px; height:14px; border-radius:50%; background:var(--tele); box-shadow:0 0 12px var(--tele); }
+  .node.dim { background:var(--tele-dim); box-shadow:none; }
+  .node.gate { background:var(--accent); box-shadow:0 0 14px var(--accent); border-radius:0; transform:rotate(45deg); }
+  .edge { position:absolute; height:1px; background:linear-gradient(90deg, var(--tele-dim), var(--tele)); transform-origin:left center; opacity:.75; }
+  .tele-line { position:absolute; right:28px; top:26px; text-align:right; font-family:'JetBrains Mono',monospace; font-size:10.5px; line-height:1.9; color:#8fa5a1; }
+  .tele-line b { color:var(--tele); font-weight:500; }
+  .tele-line .g { color:var(--accent); }
+
+  /* ---- swatches ---- */
+  .swatches { display:flex; border-top:1px solid var(--hairline); }
+  .sw { flex:1; padding:14px 10px 12px; font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.06em; }
+  .sw .b { height:34px; margin-bottom:8px; border:1px solid rgba(0,0,0,.08); }
+  .verdict { padding:18px 28px 26px; font-size:13px; color:var(--ink-2); line-height:1.6; background:var(--bg); border-top:1px solid var(--hairline); }
+  .verdict b { color:var(--ink); }
+  @media (max-width:760px){ .hero{grid-template-columns:1fr} .cards{grid-template-columns:1fr} .hero h2{font-size:44px} }
+</style>
+</head>
+<body>
+
+<div class="page-note">
+  <h1>Kortex — dois acentos, mesma base</h1>
+  <p>Tema claro STARK nos dois (off-white de papel, quase-preto, hairlines, mono caps). O que muda é a lógica de cor:
+  <strong>A</strong> separa temperatura por significado — âmbar quente = atenção humana, teal frio = telemetria da máquina.
+  <strong>B</strong> unifica tudo em ciano. Role e compare os mesmos componentes.</p>
+</div>
+
+<!-- ================= OPÇÃO A ================= -->
+<div class="divider-label">Opção A — Âmbar humano · Teal máquina</div>
+<div class="opt opt-a">
+  <div class="topbar">
+    <div class="wordmark">KORTE<span>X</span></div>
+    <nav class="topnav"><b>Missões</b><span>Projetos</span><span>Agentes</span><span>Datahouse</span><span>Curador</span></nav>
+  </div>
+  <div class="hero">
+    <div class="side-label">Comando &amp; Controle<br><br>Meta-fábrica v0.5</div>
+    <div>
+      <h2>A fábrica inteira<br>sob seu comando</h2>
+      <p class="sub">Agentes executam, verificadores auditam, gates decidem. Você entra apenas onde a máquina delega — e vê tudo acontecendo.</p>
+      <div class="cta">
+        <button class="btn btn-primary">Nova missão →</button>
+        <button class="btn">Ver sistemas →</button>
+        <button class="btn btn-accent">2 pendências →</button>
+      </div>
+    </div>
+  </div>
+  <div class="strip">
+    <span class="needs">◆ Precisa de você — gate do plano</span>
+    <span class="chip"><span class="dot" style="background:var(--ok);border-radius:50%"></span>aprovado</span>
+    <span class="chip"><span class="dot" style="background:var(--run);border-radius:50%"></span>rodando</span>
+    <span class="chip"><span class="sq" style="background:var(--warn)"></span>degradado</span>
+    <span class="chip"><span class="sq" style="background:var(--err);transform:rotate(45deg)"></span>reprovado</span>
+  </div>
+  <div class="cards">
+    <div class="card">
+      <div class="k">Projeto · Logisti</div>
+      <h3>Fatia 2 — custos por caminhão</h3>
+      <p>Planner concluiu. 4 subagentes em produção, verificação em onda 2.</p>
+      <div class="meta"><span>3 runs ativos</span><span>$0.42 hoje</span></div>
+    </div>
+    <div class="card card-gate">
+      <div class="k">◆ Caixa do fundador</div>
+      <h3>Aprovar plano da missão</h3>
+      <p>Tier sugerido: 2 tarefas simples → free, 1 complexa → premium. Revisar e liberar.</p>
+      <div class="meta"><span>aguardando há 12min</span><span>gate: plano</span></div>
+    </div>
+    <div class="card">
+      <div class="k">Curador</div>
+      <h3>Proposta de realocação</h3>
+      <p>redator/simples: kimi-k2 ≈ mesma qualidade, −78% custo. Sombra pendente.</p>
+      <div class="meta"><span>evidência: 14 runs</span><span>ler proposta</span></div>
+    </div>
+  </div>
+  <div class="canvas">
+    <div class="k">Teatro de operações — grafo vivo (escuro nos dois temas)</div>
+    <div class="tele-line">
+      <b>executor.chamado</b> pesquisador · tier free<br>
+      <b>verificador.aprovou</b> 2/3 · onda 2<br>
+      <span class="g">gate.interrompeu</span> cobertura → fundador
+    </div>
+    <div class="graph">
+      <div class="edge" style="left:60px;top:40px;width:180px;transform:rotate(14deg)"></div>
+      <div class="edge" style="left:60px;top:40px;width:200px;transform:rotate(38deg)"></div>
+      <div class="edge" style="left:250px;top:86px;width:170px;transform:rotate(-8deg)"></div>
+      <div class="edge" style="left:270px;top:120px;width:150px;transform:rotate(-20deg)"></div>
+      <div class="node" style="left:52px;top:32px"></div>
+      <div class="node" style="left:240px;top:78px"></div>
+      <div class="node dim" style="left:266px;top:116px"></div>
+      <div class="node dim" style="left:150px;top:120px"></div>
+      <div class="node gate" style="left:428px;top:64px"></div>
+    </div>
+  </div>
+  <div class="swatches">
+    <div class="sw"><div class="b" style="background:#F4F4F1"></div>bg #F4F4F1</div>
+    <div class="sw"><div class="b" style="background:#141414"></div>ink #141414</div>
+    <div class="sw"><div class="b" style="background:#B87514"></div>accent #B87514</div>
+    <div class="sw"><div class="b" style="background:#2DD4BF"></div>tele #2DD4BF</div>
+    <div class="sw"><div class="b" style="background:#0B0D0E"></div>canvas #0B0D0E</div>
+    <div class="sw"><div class="b" style="background:#D8D8D3"></div>hairline #D8D8D3</div>
+  </div>
+  <div class="verdict"><b>Leitura:</b> o âmbar só aparece onde VOCÊ é necessário — o olho aprende que "quente = eu". O teal fica confinado ao teatro escuro: é a máquina respirando. Nenhuma cor compete com a outra.</div>
+</div>
+
+<!-- ================= OPÇÃO B ================= -->
+<div class="divider-label">Opção B — Ciano unificado</div>
+<div class="opt opt-b">
+  <div class="topbar">
+    <div class="wordmark">KORTE<span>X</span></div>
+    <nav class="topnav"><b>Missões</b><span>Projetos</span><span>Agentes</span><span>Datahouse</span><span>Curador</span></nav>
+  </div>
+  <div class="hero">
+    <div class="side-label">Comando &amp; Controle<br><br>Meta-fábrica v0.5</div>
+    <div>
+      <h2>A fábrica inteira<br>sob seu comando</h2>
+      <p class="sub">Agentes executam, verificadores auditam, gates decidem. Você entra apenas onde a máquina delega — e vê tudo acontecendo.</p>
+      <div class="cta">
+        <button class="btn btn-primary">Nova missão →</button>
+        <button class="btn">Ver sistemas →</button>
+        <button class="btn btn-accent">2 pendências →</button>
+      </div>
+    </div>
+  </div>
+  <div class="strip">
+    <span class="needs">◆ Precisa de você — gate do plano</span>
+    <span class="chip"><span class="dot" style="background:var(--ok);border-radius:50%"></span>aprovado</span>
+    <span class="chip"><span class="dot" style="background:var(--run);border-radius:50%"></span>rodando</span>
+    <span class="chip"><span class="sq" style="background:var(--warn)"></span>degradado</span>
+    <span class="chip"><span class="sq" style="background:var(--err);transform:rotate(45deg)"></span>reprovado</span>
+  </div>
+  <div class="cards">
+    <div class="card">
+      <div class="k">Projeto · Logisti</div>
+      <h3>Fatia 2 — custos por caminhão</h3>
+      <p>Planner concluiu. 4 subagentes em produção, verificação em onda 2.</p>
+      <div class="meta"><span>3 runs ativos</span><span>$0.42 hoje</span></div>
+    </div>
+    <div class="card card-gate">
+      <div class="k">◆ Caixa do fundador</div>
+      <h3>Aprovar plano da missão</h3>
+      <p>Tier sugerido: 2 tarefas simples → free, 1 complexa → premium. Revisar e liberar.</p>
+      <div class="meta"><span>aguardando há 12min</span><span>gate: plano</span></div>
+    </div>
+    <div class="card">
+      <div class="k">Curador</div>
+      <h3>Proposta de realocação</h3>
+      <p>redator/simples: kimi-k2 ≈ mesma qualidade, −78% custo. Sombra pendente.</p>
+      <div class="meta"><span>evidência: 14 runs</span><span>ler proposta</span></div>
+    </div>
+  </div>
+  <div class="canvas">
+    <div class="k">Teatro de operações — grafo vivo (escuro nos dois temas)</div>
+    <div class="tele-line">
+      <b>executor.chamado</b> pesquisador · tier free<br>
+      <b>verificador.aprovou</b> 2/3 · onda 2<br>
+      <span class="g">gate.interrompeu</span> cobertura → fundador
+    </div>
+    <div class="graph">
+      <div class="edge" style="left:60px;top:40px;width:180px;transform:rotate(14deg)"></div>
+      <div class="edge" style="left:60px;top:40px;width:200px;transform:rotate(38deg)"></div>
+      <div class="edge" style="left:250px;top:86px;width:170px;transform:rotate(-8deg)"></div>
+      <div class="edge" style="left:270px;top:120px;width:150px;transform:rotate(-20deg)"></div>
+      <div class="node" style="left:52px;top:32px"></div>
+      <div class="node" style="left:240px;top:78px"></div>
+      <div class="node dim" style="left:266px;top:116px"></div>
+      <div class="node dim" style="left:150px;top:120px"></div>
+      <div class="node gate" style="left:428px;top:64px"></div>
+    </div>
+  </div>
+  <div class="swatches">
+    <div class="sw"><div class="b" style="background:#F4F4F1"></div>bg #F4F4F1</div>
+    <div class="sw"><div class="b" style="background:#141414"></div>ink #141414</div>
+    <div class="sw"><div class="b" style="background:#0E7490"></div>accent #0E7490</div>
+    <div class="sw"><div class="b" style="background:#22D3EE"></div>tele #22D3EE</div>
+    <div class="sw"><div class="b" style="background:#0B0D0E"></div>canvas #0B0D0E</div>
+    <div class="sw"><div class="b" style="background:#D8D8D3"></div>hairline #D8D8D3</div>
+  </div>
+  <div class="verdict"><b>Leitura:</b> tudo frio e coeso — o clima Borealis invade o tema claro. O custo: o gate pendente (losango ciano no grafo) quase some no meio da telemetria ciano; "precisa de você" perde o grito. Repare no losango do canvas acima vs. o da Opção A.</div>
+</div>
+
+<div class="page-note" style="padding-bottom:56px">
+  <p><strong>Tipografia usada nos dois:</strong> Anton (heros caps condensada — o "tipo STARK"), Archivo Expanded Black (wordmark KORTEX), Space Grotesk (títulos de componente — a "display técnica"), Inter (corpo), JetBrains Mono (labels caps espaçadas). Status §4 do brief inalterado nos dois.</p>
+</div>
+
+</body>
+</html>

@@ -56,7 +56,7 @@ harness-mecanico/      semente da vertical mecânica
 ```bash
 cd motor
 python -m pip install -e ".[dev]"
-pytest -q                                       # suíte sem rede; mesmo alvo funcional do CI
+pytest -q                                       # sem rede; 965 verdes + 7 pulados (ver H05b abaixo)
 python -m motor --modelos /caminho/modelos-orcados.json "pesquise oportunidades de aumento de receita"  # fail-closed
 ```
 
@@ -84,15 +84,31 @@ integração fail-closed dos callsites de modelo. O estado comprovado hoje é:
 
 As fronteiras abaixo impedem declarar o gate global fechado:
 
-1. **H05b bloqueado externamente:** falta um backend real de sandbox, com imagem por digest e policy
-   versionada, para provar isolamento de filesystem/rede/ambiente, limite de output e TERM/KILL da
-   árvore de processos. Sem isso, C2/C3 permanecem indisponíveis.
+1. **H05b depende do ambiente, não de código faltando:** o backend Docker fail-closed existe
+   (`motor/motor/runner.py`), com identidade OCI selada, limite de output e limpeza de execução. O que
+   falta é *rodá-lo e certificá-lo*: o default composto continua sendo `DenyCommandRunner`, e o harness
+   de conformance é Linux. Fora de um ambiente certificado, C2/C3 permanecem indisponíveis — por
+   desenho, não por omissão. Os testes de auditoria que exigem execução real ficam explicitamente
+   pulados (`MOTOR_RUNNER_CERTIFICADO=1` os liga); a segurança de `argv` que eles cobriam é provada
+   sem execução em `test_auditoria_gpt5_d.py::test_c4_metacaractere_vira_exatamente_um_argv`.
 2. **Composição real ainda não é operacional:** uma única rota OpenAI não satisfaz a independência
    entre executor e verifier. O teto bootstrap agora é governado por configuração e limita a spec
    gerada, mas o deployment deve dimensioná-lo para a reserva conservadora. Studio e experimentos
    reais falham fechados até receberem composição custeada durável.
 3. **Autoridade do curador é externa:** sem `RepositorioCertificacoes` autoritativo, promoção continua
    indisponível; o motor produz no máximo uma intenção sujeita a gate humano.
+
+### Auditoria dual-frontier
+
+O charter está em [AUDITORIA-FINAL.md](motor/docs/AUDITORIA-FINAL.md) e as reproduções dos auditores
+são versionadas em `motor/tests/test_auditoria_*.py` (111 testes, fatiados por grupo de invariante).
+
+A triagem dos 15 vermelhos que elas produziam **não encontrou nenhum defeito aberto**: 7 eram a mesma
+causa raiz (o default fail-closed do executor, item 1 acima) e 8 eram reproduções obsoletas — o
+hardening já tinha landado e o teste ainda codificava a expectativa antiga. Todas foram reescritas
+preservando a intenção do auditor, com docstring dizendo o que a auditoria pedia e por que a fronteira
+real é outra. Isso fecha o critério 2 de produção (invariante sem teste virou teste verde), **não** o
+critério 3: o cadeado Anthropic da Fase A ainda não rodou, e "dois vendors assinando" continua aberto.
 
 O estado verificável e os bloqueios estão em
 [verification.md](motor/specs/001-hardening-producao/verification.md). O sequenciamento operacional

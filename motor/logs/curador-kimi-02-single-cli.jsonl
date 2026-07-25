@@ -1,0 +1,29 @@
+{"t": 0.024, "evento": "spec.recebida", "missao": "curador-single-cli", "subagentes": 1}
+{"t": 0.025, "evento": "gate.auto", "portao": "plano", "decisao": "prosseguir"}
+{"t": 0.025, "evento": "paralelo.iniciado", "subagentes": ["especificador"]}
+{"t": 0.026, "evento": "executor.chamado", "executor": "especificador", "papel": "especificador", "tier": "media", "tentativa": 1, "modelo": "nv-kimi/moonshotai/kimi-k2.6"}
+{"t": 0.026, "evento": "modelo.roteado_tier", "papel": "especificador", "tier": "media"}
+{"t": 20.857, "evento": "executor.respondeu", "executor": "especificador", "tentativa": 1}
+{"t": 20.857, "evento": "modelo.pin", "papel": "verifier", "tier": null}
+{"t": 33.332, "evento": "portao.aprovado", "portao": "verifier:especificador", "ciclo": 1}
+{"t": 33.333, "evento": "paralelo.concluido", "commitados": 1}
+{"t": 33.333, "evento": "executor.chamado", "executor": "global_evaluator", "modelo": "codex/gpt-5.4"}
+{"t": 33.334, "evento": "modelo.pin", "papel": "evaluator", "tier": null}
+{"t": 47.391, "evento": "portao.reprovado", "portao": "cobertura", "lacunas": ["O contrato funcional nao esta fechado: faltam a interface canonica da CLI e a semantica exata das flags/opcoes (assinatura do comando, nomes finais, argumentos obrigatorios/opcionais e combinacoes validas).", "O formato de saida JSON continua ambiguo: nao define se a CLI emite um array, NDJSON/JSON Lines ou um objeto por linha, nem a regra exata de mapeamento CSV->JSON (chaves, ordem, valores vazios, tipos e tratamento de colunas faltantes/excedentes).", "Ha inconsistencias internas que impedem considerar o contrato definido, por exemplo `--strict-fields` aparece com `strict=True` por default mas o texto tambem fala em comportamento 'sem flag', e `--skip-first lines`/`--skip-first rows` usam nomes divergentes."]}
+{"t": 47.391, "evento": "gate.auto", "portao": "cobertura", "decisao": "preencher"}
+{"t": 47.392, "evento": "reconciliacao.iniciada", "nos": ["especificador"]}
+{"t": 47.392, "evento": "executor.chamado", "executor": "especificador", "papel": "especificador", "tier": "media", "tentativa": 1, "modelo": "nv-kimi/moonshotai/kimi-k2.6"}
+{"t": 47.392, "evento": "modelo.roteado_tier", "papel": "especificador", "tier": "media"}
+{"t": 111.645, "evento": "executor.respondeu", "executor": "especificador", "tentativa": 1}
+{"t": 111.645, "evento": "modelo.pin", "papel": "verifier", "tier": null}
+{"t": 119.201, "evento": "portao.aprovado", "portao": "verifier:especificador", "ciclo": 1}
+{"t": 119.201, "evento": "lacuna.preenchida", "subagente": "especificador"}
+{"t": 119.201, "evento": "reconciliacao.concluida", "nos": ["especificador"]}
+{"t": 119.201, "evento": "executor.chamado", "executor": "global_evaluator", "modelo": "codex/gpt-5.4"}
+{"t": 119.201, "evento": "modelo.pin", "papel": "evaluator", "tier": null}
+{"t": 136.504, "evento": "portao.reprovado", "portao": "cobertura", "lacunas": ["Contrato funcional não está definido de forma unívoca: células vazias aparecem ora como `null`, ora como `\"\"`.", "Contrato funcional não está definido de forma unívoca para `--strict-fields warn`: uma parte diz que gera warning em `stderr`, outra condiciona isso a `--verbose`.", "Contrato funcional não está definido de forma unívoca nos códigos de saída: erros de E/S e decoding aparecem ora como `sys.exit(2)`, ora como `sys.exit(1)`.", "A especificação mistura `NDJSON` com `RFC 7464`, que são formatos distintos, deixando o contrato de saída ambíguo."]}
+{"t": 136.504, "evento": "reconciliacao.esgotada", "rodadas": 1}
+{"t": 136.504, "evento": "gate.auto", "portao": "cobertura", "decisao": "prosseguir"}
+{"t": 136.506, "evento": "executor.chamado", "executor": "synthesizer", "modelo": "codex/gpt-5.4"}
+{"t": 136.507, "evento": "modelo.pin", "papel": "synthesizer", "tier": null}
+{"t": 155.624, "evento": "tarefa.concluida", "missao": "curador-single-cli"}
