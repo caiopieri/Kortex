@@ -51,6 +51,18 @@ timeout = 120
 [tool.ruff]
 target-version = "py310"
 
+# Conjunto de regras EXPLÍCITO — não herde o default da ferramenta.
+# O default do ruff mudou na 0.16.0: com `ruff>=0.11,<1` no dev dep, a mesma
+# árvore passava na 0.15.21 e acusava 351 achados na 0.16.0. Gate cujo
+# resultado depende de qual versão o CI resolveu não é gate. Estes são os
+# defaults clássicos (pyflakes + os subconjuntos de pycodestyle), ou seja, o
+# que este projeto sempre checou — só que agora dito em voz alta.
+#
+# Subir a régua (I, UP, B, BLE...) é decisão de produto, não efeito colateral
+# de um upgrade: a 0.16.0 aponta 103 FURB157, 93 UP045, 57 I001 e 31 BLE001.
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+
 [tool.mypy]
 python_version = "3.10"
 warn_return_any = true
