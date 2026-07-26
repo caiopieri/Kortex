@@ -496,6 +496,15 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         log.evento("run.perfil", perfil=perfil_execucao)
         if state.get("spec"):  # spec fornecida pelo usuário: valida e segue (missão dirigida por dado)
             spec = WorkflowSpec.model_validate(state["spec"])
+            # O teto bootstrap é a única contenção monetária do sistema, e a spec
+            # vinda da CLI/serviço é o entrypoint de produção. Confrontar só o ramo
+            # gerado pelo planner deixaria o teto contornável por quem escreve o
+            # arquivo de spec — que é o caminho normal, não a exceção.
+            if Decimal(str(spec.restricoes.teto_custo)) > teto_bootstrap:
+                raise ValueError(
+                    f"spec fornecida nao pode elevar teto bootstrap "
+                    f"({spec.restricoes.teto_custo} > {teto_bootstrap})"
+                )
             log.evento("spec.recebida", missao=spec.missao.id, subagentes=len(spec.subagentes))
             return {"spec": spec.model_dump(), "run_id": run_id}
         rota_ativa = rota

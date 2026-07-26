@@ -6,7 +6,6 @@ contra o código atual; não corrigem nada.
 """
 import json
 from decimal import Decimal
-from pathlib import Path
 
 import pytest
 
@@ -51,7 +50,7 @@ def _spec_dep():
 
 
 def _eventos(tmp_path):
-    return [json.loads(l) for l in (tmp_path / "log.jsonl").read_text().splitlines() if l.strip()]
+    return [json.loads(linha) for linha in (tmp_path / "log.jsonl").read_text().splitlines() if linha.strip()]
 
 
 # ---------------------------------------------------------------- A1 (G2/S2)
@@ -128,16 +127,24 @@ def test_A2_spec_do_usuario_pode_elevar_teto_acima_do_bootstrap(tmp_path):
         tetos.append(Decimal(str(teto)))
         return real_sessao(self, run_id, thread_id, teto)
 
+    # O invariante é "nenhuma sessão de orçamento abre acima do bootstrap".
+    # Recusar a spec e rebaixar o teto satisfazem os dois; o teste mede o
+    # invariante, não o mecanismo — o motor recusa (fail-fast, igual ao ramo do
+    # planner), e recusar é justamente `tetos` ficar vazio.
     mod_orc.RepositorioOrcamento.sessao = espiao
     try:
         grafo = construir_grafo(ClienteStub(roteador), log, checkpointer=InMemorySaver(),
                                 politica=pol, teto_bootstrap=Decimal("2.0"))
-        grafo.invoke({"spec": spec}, {"configurable": {"thread_id": "audit-a2"}})
+        try:
+            grafo.invoke({"spec": spec}, {"configurable": {"thread_id": "audit-a2"}})
+        except ValueError as ex:
+            assert "teto bootstrap" in str(ex), f"recusa por outro motivo: {ex}"
     finally:
         mod_orc.RepositorioOrcamento.sessao = real_sessao
 
-    assert max(tetos) <= Decimal("2.0"), (
-        f"spec do usuário abriu sessão de orçamento com teto {max(tetos)} > bootstrap 2.0"
+    assert max(tetos, default=Decimal(0)) <= Decimal("2.0"), (
+        f"spec do usuário abriu sessão de orçamento com teto "
+        f"{max(tetos)} > bootstrap 2.0"
     )
 
 
