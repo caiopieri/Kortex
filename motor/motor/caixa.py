@@ -37,6 +37,11 @@ _RE_ID_LEDGER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _SCHEMA_LEDGER = 1
 _SQLITE_INT_MAX = 2**63 - 1
 _LEASE_APPLIED = ":APPLIED:"
+# Lease do consumer da CLI. É constante, e não literal repetido, porque `claim` e
+# `consumir` PRECISAM concordar: quem reivindica com 30s mas consome sem declarar
+# o lease nunca sobe a thread de renovação — e aí uma retomada mais longa que a
+# janela aplica o efeito e falha no ACK, deixando a linha da outbox reelegível.
+_LEASE_CLI_S = 30
 
 
 class LedgerCaixa:
@@ -640,11 +645,13 @@ def rodar_com_caixa(grafo, entrada, config, caixa: CaixaFundador, log: Any, *,
 
     try:
         resultado = None
-        while claim := ledger.claim(owner_id, lease_s=30, job_id=job_id):
+        while claim := ledger.claim(owner_id, lease_s=_LEASE_CLI_S, job_id=job_id):
             pendente = caixa._nota_path(claim["payload"]["portao"])
             if pendente.exists():
                 caixa._arquivar(pendente, claim["payload"]["portao"])
-            resultado = ledger.consumir(claim, aplicar, fault=fault)
+            resultado = ledger.consumir(
+                claim, aplicar, fault=fault, lease_s=_LEASE_CLI_S
+            )
         if resultado is None:
             snapshot = grafo.get_state(config)
             if getattr(snapshot, "created_at", None) is None:
@@ -709,10 +716,12 @@ def rodar_com_caixa(grafo, entrada, config, caixa: CaixaFundador, log: Any, *,
                     fault("apos_arquivar")
 
             claim = ledger.claim(
-                owner_id, lease_s=30, decisao_id=decisao_id
+                owner_id, lease_s=_LEASE_CLI_S, decisao_id=decisao_id
             )
             if claim is not None:
-                resultado = ledger.consumir(claim, aplicar, fault=fault)
+                resultado = ledger.consumir(
+                    claim, aplicar, fault=fault, lease_s=_LEASE_CLI_S
+                )
             else:
                 atual = ledger.buscar_decisao(decisao_id)
                 if atual is not None and atual["estado"] == "APPLIED":
