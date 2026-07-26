@@ -1,16 +1,41 @@
-# React + Vite
+# Painel do Kortex — app React
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+A interface própria da meta-fábrica. Cada tela é uma **view fina** sobre o contrato de dados
+exposto por `../painel.py` (`/dados/*`). O log é a fonte da verdade; a tela só lê.
 
-Currently, two official plugins are available:
+O plano de implementação e a ordem dos tiers estão em [`../PLANO-PAINEL.md`](../PLANO-PAINEL.md).
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Rodar
 
-## React Compiler
+```bash
+npm ci          # NÃO use `npm install` — ver abaixo
+npm run dev     # desenvolvimento com HMR
+npm run build   # build de produção -> dist/
+npm run lint    # oxlint
+```
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+O `painel.py` precisa estar no ar para as telas terem dado:
 
-## Expanding the Oxlint configuration
+```bash
+cd .. && python3 painel.py
+```
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+## Por que `npm ci` e não `npm install`
+
+`npm install` **reescreve o `package-lock.json`**: ao reinstalar do zero, ele resolveu
+dependências opcionais de outra arquitetura e sujou o lock com 23 linhas que ninguém pediu.
+`npm ci` instala exatamente o que está versionado e **falha** em vez de reescrever — que é o
+comportamento certo para algo que se quer reproduzível.
+
+Mesma lógica do `select` explícito do ruff em `../../pyproject.toml`: ferramenta de gate não
+pode mudar de resultado dependendo do que o resolvedor escolheu naquele dia.
+
+## Contrato de dados
+
+As telas consomem `/dados/*` do `painel.py`. Rota `/dados/` desconhecida responde **404** de
+propósito — antes caía no fallback estático e devolvia `index.html` com status 200, o que fazia
+o `res.json()` estourar parseando HTML, com um erro que não dizia nada sobre a causa real
+(normalmente um painel no ar mais velho que o código).
+
+Se uma tela precisar de dado que o contrato não expõe: **não invente e não mocke**. Estado vazio
+honesto, e o endpoint entra em `painel.py` primeiro.
