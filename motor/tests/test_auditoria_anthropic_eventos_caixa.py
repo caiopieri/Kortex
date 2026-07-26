@@ -10,7 +10,6 @@ from __future__ import annotations
 import inspect
 import os
 import re
-import tempfile
 import threading
 import time
 from operator import add
@@ -54,15 +53,22 @@ def _grafo_com_gate(saver: SqliteSaver, portao: str = "cobertura"):
     return builder.compile(checkpointer=saver)
 
 
-def _responder_nota(caixa: CaixaFundador, portao: str, valor: str) -> None:
-    """Simula o humano respondendo a nota.
+def _responder_nota(
+    caixa: CaixaFundador, portao: str, valor: str, job_id: str
+) -> None:
+    """Simula o humano respondendo a nota DAQUELE job.
+
+    O `job_id` é obrigatório de propósito: a nota é escopada por job, e um
+    harness que escrevesse na nota "do portão" sem dizer de qual job estaria
+    reproduzindo justamente o defeito que este arquivo audita.
 
     A escrita é atômica (tmp + `os.replace`) porque a Caixa relê a nota em laço:
     escrever no lugar deixa o leitor pegar o arquivo pela metade e levantar
     "nota inválida" — uma corrida do harness, não do que se quer medir.
     """
+    escopada = caixa.para_job(job_id)
     for _ in range(1000):
-        path = caixa._nota_path(portao)
+        path = escopada._nota_path(portao)
         try:
             texto = path.read_text(encoding="utf-8") if path.exists() else ""
         except (OSError, UnicodeError):
@@ -91,7 +97,7 @@ def test_decisao_de_um_job_nao_pode_ser_reusada_por_outro_job(tmp_path: Path) ->
         with SqliteSaver.from_conn_string(str(tmp_path / "ckpt.sqlite")) as saver:
             grafo = _grafo_com_gate(saver)
             threading.Thread(
-                target=_responder_nota, args=(caixa, "cobertura", "abortar"), daemon=True
+                target=_responder_nota, args=(caixa, "cobertura", "abortar", "job-a"), daemon=True
             ).start()
             a = rodar_com_caixa(
                 grafo, {"decisoes": []},
@@ -157,7 +163,7 @@ def test_retomada_longa_pela_cli_renova_o_lease(
         with SqliteSaver.from_conn_string(str(tmp_path / "ckpt.sqlite")) as saver:
             grafo = montar(saver)
             threading.Thread(
-                target=_responder_nota, args=(caixa, "gate", "prosseguir"), daemon=True
+                target=_responder_nota, args=(caixa, "gate", "prosseguir", "job-lento"), daemon=True
             ).start()
             resultado = rodar_com_caixa(
                 grafo, {"decisoes": []},

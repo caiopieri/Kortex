@@ -461,23 +461,47 @@ class CaixaFundador:
     """
 
     def __init__(self, dir_caixa: str | Path, log: Any,
-                 timeout_s: int = 600, poll_s: int = 5):
+                 timeout_s: int = 600, poll_s: int = 5,
+                 job_id: str | None = None):
         self.dir_caixa = Path(dir_caixa)
         self.log = log
         self.timeout_s = timeout_s
         self.poll_s = poll_s
+        self.job_id = self._validar_componente(job_id) if job_id is not None else None
 
-    def _nota_path(self, portao: str) -> Path:
+    def para_job(self, job_id: str) -> "CaixaFundador":
+        """Devolve uma Caixa vinculada a este job.
+
+        O vault de `--caixa <dir>` é compartilhado por construção. Sem vínculo,
+        a nota se chamaria só pelo portão e a decisão arquivada de um job seria
+        encontrada por outro — o humano aprova o projeto A e o projeto B segue
+        sozinho. O vínculo põe o job no nome do arquivo e no glob.
+        """
+        return CaixaFundador(
+            self.dir_caixa, self.log,
+            timeout_s=self.timeout_s, poll_s=self.poll_s, job_id=job_id,
+        )
+
+    @staticmethod
+    def _validar_componente(valor: str) -> str:
         if (
-            not isinstance(portao, str)
-            or not portao
-            or portao != portao.strip()
-            or not portao.isprintable()
-            or portao in {".", ".."}
-            or any(separador in portao for separador in ("/", "\\", "\0"))
+            not isinstance(valor, str)
+            or not valor
+            or valor != valor.strip()
+            or not valor.isprintable()
+            or valor in {".", ".."}
+            or any(separador in valor for separador in ("/", "\\", "\0"))
         ):
             raise ValueError("portao inválido")
-        return self.dir_caixa / f"PENDENTE — {portao}.md"
+        return valor
+
+    def _escopo(self, portao: str) -> str:
+        """Sufixo que identifica nota e arquivo. Inclui o job quando vinculado."""
+        portao = self._validar_componente(portao)
+        return f"{self.job_id} — {portao}" if self.job_id is not None else portao
+
+    def _nota_path(self, portao: str) -> Path:
+        return self.dir_caixa / f"PENDENTE — {self._escopo(portao)}.md"
 
     @staticmethod
     def _ler_nota(path: Path, portao: str) -> tuple[str, set[str]]:
@@ -595,11 +619,12 @@ class CaixaFundador:
             if self._decisao_arquivada(portao) is not None:
                 return
             raise FileNotFoundError(path)
+        escopo = self._escopo(portao)
         instante = time.strftime("%Y%m%d-%H%M%S")
-        novo = self.dir_caixa / f"decidida {instante} — {portao}.md"
+        novo = self.dir_caixa / f"decidida {instante} — {escopo}.md"
         sequencia = 2
         while novo.exists():
-            novo = self.dir_caixa / f"decidida {instante}-{sequencia} — {portao}.md"
+            novo = self.dir_caixa / f"decidida {instante}-{sequencia} — {escopo}.md"
             sequencia += 1
         try:
             path.replace(novo)
@@ -608,8 +633,8 @@ class CaixaFundador:
                 raise
 
     def _decisao_arquivada(self, portao: str) -> str | None:
-        self._nota_path(portao)  # valida antes de interpolar no glob
-        for path in sorted(self.dir_caixa.glob(f"decidida * — {portao}.md"), reverse=True):
+        escopo = self._escopo(portao)  # valida antes de interpolar no glob
+        for path in sorted(self.dir_caixa.glob(f"decidida * — {escopo}.md"), reverse=True):
             decisao, opcoes = self._ler_nota(path, portao)
             if decisao and decisao in opcoes:
                 return decisao
@@ -631,6 +656,10 @@ def rodar_com_caixa(grafo, entrada, config, caixa: CaixaFundador, log: Any, *,
     job_id = configuravel.get("thread_id") if isinstance(configuravel, dict) else None
     if not isinstance(job_id, str) or _RE_ID_LEDGER.fullmatch(job_id) is None:
         raise ValueError("config.configurable.thread_id inválido")
+    # Vincula a Caixa a ESTE job antes de tocar em qualquer nota. O vault é
+    # compartilhado; sem o vínculo, a decisão que o humano deu para outro job
+    # é encontrada pelo glob e consumida aqui, sem nenhuma interação.
+    caixa = caixa.para_job(job_id)
     proprio_ledger = ledger is None
     ledger = ledger or LedgerCaixa(caixa.dir_caixa / ".ledger.sqlite")
     owner_id = f"runner-{id(caixa):x}"

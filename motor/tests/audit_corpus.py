@@ -10,7 +10,7 @@ from pathlib import Path, PurePosixPath
 MOTOR = Path(__file__).parents[1]
 SPEC = MOTOR / "specs/001-hardening-producao"
 MANIFEST = SPEC / "reproducer-manifest.jsonl"
-CORPUS = SPEC / "reproducer-corpus-0bdbb677dd281edc.tar"
+CORPUS = SPEC / "reproducer-corpus-784c478a054ca380.tar"
 LANDING_DISPOSITIONS = {"accepted", "duplicate", "retain_control"}
 
 

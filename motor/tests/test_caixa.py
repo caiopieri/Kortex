@@ -67,7 +67,9 @@ def test_interrupt_cria_nota_e_decisao_conclui(tmp_path):
 
     # thread em background escreve a decisão depois de a nota aparecer
     def decidir():
-        nota = dir_caixa / "PENDENTE — cobertura.md"
+        # A nota é escopada por job. Deriva do contrato em vez de fixar o nome:
+        # assim o teste acompanha o esquema em vez de quebrar em silêncio.
+        nota = caixa.para_job(config["configurable"]["thread_id"])._nota_path("cobertura")
         for _ in range(200):
             if nota.exists():
                 txt = nota.read_text(encoding="utf-8")
@@ -86,7 +88,7 @@ def test_interrupt_cria_nota_e_decisao_conclui(tmp_path):
 
     # a nota pendente foi arquivada como `decidida ... — cobertura.md`
     pendentes = list(dir_caixa.glob("PENDENTE — *.md"))
-    decididas = list(dir_caixa.glob("decidida * — cobertura.md"))
+    decididas = list(dir_caixa.glob("decidida * — ta — cobertura.md"))
     assert not pendentes and len(decididas) == 1
 
     # formato exato do v0.4: frontmatter + corpo
@@ -153,14 +155,15 @@ def test_resume_pos_crash_via_runner(tmp_path):
     grafo1, conn1 = _grafo_sqlite(tmp_path, log, faz_roteador(evaluator_aprova=False))
     resultado = grafo1.invoke({"spec": SPEC}, config)
     pedido = resultado["__interrupt__"][0].value
-    caixa1 = CaixaFundador(dir_caixa, log, timeout_s=10, poll_s=0.05)
+    # escopada pelo job, como `rodar_com_caixa` faria em produção
+    caixa1 = CaixaFundador(dir_caixa, log, timeout_s=10, poll_s=0.05).para_job("crash-2")
     caixa1.escrever_nota("cobertura", pedido["pergunta"],
                          "; ".join(pedido["lacunas"]), pedido["opcoes"])
     conn1.close()
     del grafo1, conn1
 
     # o humano decide enquanto o motor estava morto
-    nota = dir_caixa / "PENDENTE — cobertura.md"
+    nota = caixa1._nota_path("cobertura")
     nota.write_text(nota.read_text(encoding="utf-8")
                     .replace("decisao: \n", "decisao: prosseguir\n"), encoding="utf-8")
 

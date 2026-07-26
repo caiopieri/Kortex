@@ -150,7 +150,9 @@ def test_f1_resume_sqlite_nao_reexecuta_entrada_inicial(tmp_path: Path) -> None:
         assert "__interrupt__" in _grafo(saver, ("gate",), chamadas).invoke(
             {"decisoes": []}, config
         )
-    caixa = CaixaFundador(tmp_path / "caixa", _Log(), timeout_s=0, poll_s=0)
+    # A nota do fundador é escopada por job (U-01): o harness responde a nota
+    # DESTE job, como `rodar_com_caixa` faz em produção.
+    caixa = CaixaFundador(tmp_path / "caixa", _Log(), timeout_s=0, poll_s=0).para_job("resume-idempotente")
     _responder(caixa, "gate", "aprovar")
     with SqliteSaver.from_conn_string(str(banco)) as saver:
         resultado = rodar_com_caixa(
@@ -168,7 +170,9 @@ def test_f1_crash_apos_arquivo_preserva_decisao_sqlite(tmp_path: Path) -> None:
         assert "__interrupt__" in _grafo(saver, ("gate",), chamadas).invoke(
             {"decisoes": []}, config
         )
-    caixa = CaixaFundador(tmp_path / "caixa", _Log(), timeout_s=0, poll_s=0)
+    # A nota do fundador é escopada por job (U-01): o harness responde a nota
+    # DESTE job, como `rodar_com_caixa` faz em produção.
+    caixa = CaixaFundador(tmp_path / "caixa", _Log(), timeout_s=0, poll_s=0).para_job("crash-apos-arquivo")
     _responder(caixa, "gate", "aprovar")
     assert caixa.aguardar_decisao("gate") == "aprovar"  # crash logo depois
     with SqliteSaver.from_conn_string(str(banco)) as saver:
@@ -179,7 +183,9 @@ def test_f1_crash_apos_arquivo_preserva_decisao_sqlite(tmp_path: Path) -> None:
 
 
 def test_f2_dois_interrupts_concorrentes_recebem_respostas(tmp_path: Path) -> None:
-    caixa = CaixaFundador(tmp_path / "caixa", _Log(), timeout_s=0, poll_s=0)
+    # A nota do fundador é escopada por job (U-01): o harness responde a nota
+    # DESTE job, como `rodar_com_caixa` faz em produção.
+    caixa = CaixaFundador(tmp_path / "caixa", _Log(), timeout_s=0, poll_s=0).para_job("dois-interrupts")
     _responder(caixa, "gate-a", "aprovar")
     _responder(caixa, "gate-b", "abortar")
     config = {"configurable": {"thread_id": "dois-interrupts"}}

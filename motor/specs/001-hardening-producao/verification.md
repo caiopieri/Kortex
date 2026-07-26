@@ -27,7 +27,8 @@ The H00-H13 program and the H12b extension through H12b4f provide causal tests f
 - a 64 KiB UTF-8 cap on serialized MCP tool responses and bounded error messages.
 
 The public test corpus is content-addressed by `reproducer-manifest.jsonl` and
-`reproducer-corpus-0bdbb677dd281edc.tar`. `tests/test_hardening_*.py` contains the maintained
+`reproducer-corpus-784c478a054ca380.tar` (was `…-0bdbb677dd281edc.tar` until the U-01 contract
+change; see `docs/auditoria/FASE-C-CORRECOES.md`). `tests/test_hardening_*.py` contains the maintained
 causal tests. Loose audit copies and session reports are not part of the repository contract.
 
 ## Current gates
