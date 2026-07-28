@@ -107,9 +107,27 @@ externo e o protocolo não é validado em runtime — enumerar as exceções de 
 possíveis é justamente o que não dá para fazer. `BaseException` continua propagando
 (`KeyboardInterrupt`/`SystemExit` não viram reprovação).
 
+## U-06a — o `--sombra` da CLI fabricava evidência certificável (U2/U3)
+
+Metade do U-06, a que não dependia de decisão. `_runner_cli_read_only` ecoa
+`caso["candidato"]` do arquivo de entrada e a evidência saía selada como
+`sombra_concluida` — **zero chamada de modelo, e passava na certificação**. Quem escrevesse o
+JSON certificava a troca de modelo que quisesse.
+
+**Fix:** `rodar_sombra(..., runner_executa_modelo=False)` marca a evidência como
+`sombra_simulada`. `_recomputar_sombra` já exigia `sombra_concluida`, então a recusa saiu de
+graça — o fix marca a **proveniência**, não quebra a sombra.
+
+`tests/test_curador.py` **assertava o comportamento defeituoso** (exigia `sombra_concluida` na
+saída da CLI): o teste travava o buraco. Corrigido, com o porquê no lugar.
+
+**A outra metade (U-06b) segue aberta** e é decisão do fundador: `evidencia_sha256` é sha256
+público recomputável, então evidência inventada do zero ainda certifica. Só um MAC com chave
+resolve, e não há gestão de chave no motor.
+
 ## Ainda abertos
 
-🔴 U-04, U-06, U-07 — os três do curador, que bloqueiam o flywheel. 🟡 os 15, dos quais três
+🔴 U-04, U-06b, U-07 — os do curador, que bloqueiam o flywheel. 🟡 os 15, dos quais três
 seguem vermelhos por design em
 `test_auditoria_anthropic_eventos_caixa.py` (E-01 sidecar, E-02 quarentena, E-03 guard
 anti-drift).

@@ -1100,7 +1100,11 @@ def test_cli_sombra_certificacao_e_promocao_read_only(tmp_path):
     assert "- slot: executor/simples" in sombra.stdout
     assert "- modelo: modelo-c" in sombra.stdout
     evidencia_cli = json.loads(evidencia_out.read_text(encoding="utf-8"))
-    assert evidencia_cli["status"] == "sombra_concluida"
+    # `sombra_simulada`, nao `sombra_concluida`: o runner do `--sombra` da CLI so
+    # ecoa o campo `candidato` do arquivo de entrada -- nenhum modelo foi chamado.
+    # Este teste ANTES exigia `sombra_concluida`, ou seja, travava o defeito: uma
+    # evidencia escrita a mao saia selada e passava na certificacao.
+    assert evidencia_cli["status"] == "sombra_simulada"
     assert evidencia_cli["candidato"]["custo_medio_usd"] == 0.01
 
     evidencia_json = tmp_path / "evidencia.json"
@@ -1138,3 +1142,42 @@ def test_cli_sombra_certificacao_e_promocao_read_only(tmp_path):
     assert "curador.promoveu" not in promocao.stdout
     promocao_cli = json.loads(promocao_out.read_text(encoding="utf-8"))
     assert promocao_cli["status"] == "promocao_vetada"
+
+
+def test_evidencia_do_runner_cli_nao_pode_ser_certificada() -> None:
+    """U-06a: o `--sombra` da CLI fabricava evidência certificável.
+
+    `_runner_cli_read_only` ecoa `caso["candidato"]` do arquivo de entrada e a
+    evidência saía selada como `sombra_concluida` — zero chamada de modelo, e
+    passava na certificação. Qualquer um que escrevesse o JSON certificava a
+    troca de modelo que quisesse.
+
+    A marca é `sombra_simulada`, e a certificação a recusa. Este teste falha se
+    alguém devolver o status antigo ao caminho da CLI.
+    """
+    from motor.curador import _runner_cli_read_only, certificar_sombra, rodar_sombra
+
+    proposta = {
+        "slot": "executor/simples",
+        "titular": "modelo-t",
+        "candidato": "modelo-c",
+        "politica": {"min_casos": 1},
+    }
+    casos = [{
+        "id": "c1",
+        "slot": "executor/simples",
+        "meta": {"origem": "held-out", "split": "held-out", "proveniencia": "real"},
+        "titular": {"modelo": "modelo-t", "aprovado": False, "custo_usd": 0.02},
+        "candidato": {"modelo": "modelo-c", "aprovado": True, "custo_usd": 0.01},
+    }]
+
+    simulada = rodar_sombra(
+        proposta, casos, _runner_cli_read_only, runner_executa_modelo=False,
+    )
+    assert simulada["status"] == "sombra_simulada"
+    assert certificar_sombra(simulada)["status"] != "certificado"
+
+    # O mesmo caminho, declarando execução real, segue produzindo evidência apta:
+    # o fix marca a PROVENIÊNCIA, não quebra a sombra.
+    real = rodar_sombra(proposta, casos, _runner_cli_read_only)
+    assert real["status"] == "sombra_concluida"

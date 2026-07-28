@@ -224,6 +224,8 @@ def rodar_sombra(
     casos: list[dict[str, Any]],
     runner: Callable[[dict[str, Any], str], dict[str, Any]],
     emitir_evento: Callable[[str, Any], None] | None = None,
+    *,
+    runner_executa_modelo: bool = True,
 ) -> dict[str, Any]:
     """Roda um modelo candidato em sombra sobre casos held-out, read-only.
 
@@ -231,6 +233,12 @@ def rodar_sombra(
     Executa o candidato via runner injetado e retorna evidencia comparativa serializavel,
     sem alterar catalogo, config, roteamento ou logs originais. Se ``emitir_evento`` for
     informado, emite ``curador.sombra`` com o resumo da sombra.
+
+    ``runner_executa_modelo=False`` marca a evidencia como ``sombra_simulada``, que
+    `certificar_sombra` RECUSA. Existe porque o runner do ``--sombra`` da CLI so ecoa
+    o campo ``candidato`` do arquivo de entrada: e util para inspecionar formato, mas
+    a evidencia dele nao vale certificacao -- nenhum modelo foi chamado. Sem esta
+    marca, dava para certificar troca de modelo a partir de um JSON escrito a mao.
     """
     slot_bruto = proposta.get("slot")
     titular_bruto = proposta.get("titular")
@@ -260,7 +268,10 @@ def rodar_sombra(
 
     evidencia = {
         "versao": 2,
-        "status": "sombra_concluida" if casos_eval else "sombra_invalida",
+        "status": (
+            ("sombra_concluida" if runner_executa_modelo else "sombra_simulada")
+            if casos_eval else "sombra_invalida"
+        ),
         "slot": slot,
         "modelos": {"titular": modelo_titular, "candidato": modelo_candidato},
         "politica": _copia_segura(proposta.get("politica")),
@@ -836,7 +847,9 @@ def main(argv: list[str] | None = None) -> int:
         dados = _ler_json_path(args.sombra_json)
         proposta = dados.get("proposta") or {}
         casos = dados.get("casos") or []
-        evidencia = rodar_sombra(proposta, casos, _runner_cli_read_only)
+        evidencia = rodar_sombra(
+            proposta, casos, _runner_cli_read_only, runner_executa_modelo=False,
+        )
         if args.json_path:
             _escrever_json(args.json_path, evidencia)
         print(formatar_sombra_markdown(evidencia), end="")
