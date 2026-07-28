@@ -9,12 +9,6 @@
           "provider_id": "google",
           "max_input_tokens": 32000,
           "max_completion_tokens": 16000
-        },
-        {
-          "modelo": "codex/gpt-5.3-codex",
-          "provider_id": "openai",
-          "max_input_tokens": 32000,
-          "max_completion_tokens": 16000
         }
       ],
       "executor": [
@@ -25,16 +19,16 @@
           "max_completion_tokens": 32000
         },
         {
-          "modelo": "codex/gpt-5.3-codex",
-          "provider_id": "openai",
+          "modelo": "claude/claude-opus-4-6",
+          "provider_id": "anthropic",
           "max_input_tokens": 150000,
           "max_completion_tokens": 32000
         }
       ],
       "verifier": [
         {
-          "modelo": "codex/gpt-5.3-codex",
-          "provider_id": "openai",
+          "modelo": "claude/claude-opus-4-6",
+          "provider_id": "anthropic",
           "max_input_tokens": 150000,
           "max_completion_tokens": 8000
         },
@@ -47,8 +41,8 @@
       ],
       "evaluator": [
         {
-          "modelo": "codex/gpt-5.3-codex",
-          "provider_id": "openai",
+          "modelo": "claude/claude-opus-4-7",
+          "provider_id": "anthropic",
           "max_input_tokens": 150000,
           "max_completion_tokens": 8000
         },
@@ -63,12 +57,6 @@
         {
           "modelo": "agy/gemini-3.1-pro-high",
           "provider_id": "google",
-          "max_input_tokens": 180000,
-          "max_completion_tokens": 32000
-        },
-        {
-          "modelo": "codex/gpt-5.3-codex",
-          "provider_id": "openai",
           "max_input_tokens": 180000,
           "max_completion_tokens": 32000
         }
