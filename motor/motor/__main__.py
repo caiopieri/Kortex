@@ -37,7 +37,11 @@ except ImportError:  # nome antigo
 from langgraph.checkpoint.sqlite import SqliteSaver
 
 from .caixa import CaixaFundador, rodar_com_caixa
-from .composicao_orcamento import compor_orcamento_openai, validar_independencia_orcada
+from .composicao_orcamento import (
+    compor_orcamento_multi,
+    compor_orcamento_openai,
+    validar_independencia_orcada,
+)
 from .eventos import LogEventos
 from .grafo import construir_grafo
 from .modelos import ClienteClaudeCLI, ClienteModelo, ProvedorIndisponivel, cliente_de_config
@@ -255,7 +259,17 @@ def main() -> int:
         ):
             print("aviso: pins ignorados — precisam de 'provedores' (via --modelos ou ~/.motor/pins.json).")
         try:
-            deps_orcamento = compor_orcamento_openai(cfg_modelos or {}, workspace_base)
+            # A config escolhe o arranjo por presenca POSITIVA dos blocos multi.
+            # Ausencia nao elege nada: config sem bloco nenhum tem que continuar
+            # caindo no compositor antigo e falhando com a mensagem dele, senao
+            # troca-se um erro conhecido por outro so porque o default mudou.
+            cfg_orcada = cfg_modelos or {}
+            compor = (
+                compor_orcamento_multi
+                if {"gemini", "anthropic"} <= set(cfg_orcada)
+                else compor_orcamento_openai
+            )
+            deps_orcamento = compor(cfg_orcada, workspace_base)
             validar_independencia_orcada(deps_orcamento.rotas_certificadas)
             cliente = deps_orcamento.cliente
             if not _drenar_orcamento_cli(deps_orcamento.repositorio, run_id, log):

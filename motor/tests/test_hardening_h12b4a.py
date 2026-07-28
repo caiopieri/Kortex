@@ -6,12 +6,15 @@ import pytest
 
 from motor.openai_orcado import (
     MAX_INPUT_TOKENS, PRICING_SOURCE, PRICING_VERSION, ClienteOpenAICusteado, MODELO,
-    SnapshotFX, SnapshotPricing,
+    SnapshotFX, SnapshotPricing, _arredondar_brl,
 )
 from motor.orcamento import (
     ErroOrcamento, IdentidadeTentativaCusteada, RepositorioOrcamento,
     executar_tentativa_custeada,
 )
+
+_COTACAO_TESTE = Decimal("5")
+_MARGEM_TESTE = Decimal("1.10")
 
 
 def _resposta(*, model=MODELO, prompt=100, cached=0, completion=10, total=110):
@@ -27,10 +30,10 @@ def _cliente(transporte, **kw):
     pricing = kw.pop("pricing", SnapshotPricing(PRICING_VERSION, 900, PRICING_SOURCE))
     return ClienteOpenAICusteado(
         api_key="secret", prompt="p", max_input_tokens=MAX_INPUT_TOKENS,
-        max_completion_tokens=10, fx=SnapshotFX("ptax-1", 900, Decimal("5")),
+        max_completion_tokens=10, fx=SnapshotFX("ptax-1", 900, _COTACAO_TESTE),
         pricing=pricing,
         agora=1000, fx_max_age_s=200, pricing_max_age_s=200,
-        margem=Decimal("1.10"), timeout=3,
+        margem=_MARGEM_TESTE, timeout=3,
         transporte=transporte, **kw,
     )
 
@@ -56,7 +59,17 @@ def test_reserva_usa_pior_caso_nao_cached_e_arredonda_para_cima(tmp_path):
     maximo, real, status = _estado(repo)
     assert set(visto) == {"model", "messages", "max_completion_tokens"}
     assert visto["model"] == MODELO and visto["max_completion_tokens"] == 10
-    assert Decimal(maximo) == Decimal("2.750550") > Decimal(real) > 0
+    # Valor derivado da tabela vigente ($2.50 input / $15 output por 1M), nao
+    # copiado: quando o preco for reconferido e mudar, este teste acompanha em
+    # vez de quebrar num literal que ninguem sabe de onde veio. O que ele mede e
+    # o INVARIANTE -- reserva pelo pior caso (nada cacheado, saida cheia), com
+    # margem, arredondada para cima, e sempre acima do custo real.
+    esperado = _arredondar_brl(
+        (Decimal(MAX_INPUT_TOKENS) * Decimal("2.5") / Decimal(1_000_000)
+         + Decimal(10) * Decimal("15") / Decimal(1_000_000))
+        * _COTACAO_TESTE * _MARGEM_TESTE
+    )
+    assert Decimal(maximo) == esperado > Decimal(real) > 0
     assert status == "RECONCILED" and resultado.usage_ref == "req_123"
 
 

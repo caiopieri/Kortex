@@ -1,4 +1,15 @@
-"""Adaptador custeado para uma tentativa direta na OpenAI Chat Completions API."""
+"""Adaptador custeado para uma tentativa direta na Gemini generateContent API.
+
+Espelha `openai_orcado.py` de proposito: mesma forma, mesmas guardas, mesma
+disciplina de custo derivado SOMENTE do usage devolvido pelo provedor. Divergir
+da forma do adapter existente seria pagar duas vezes o custo de revisar a
+fronteira financeira.
+
+ATENCAO -- os precos abaixo sao code-owned e precisam ser verificados contra a
+tabela publica antes de qualquer gasto real. `PRICING_VERSION` carrega a data da
+verificacao e `PRICING_SOURCE` a origem; a composicao confronta os dois e recusa
+snapshot velho. Preco errado aqui e contencao monetaria errada no motor inteiro.
+"""
 from __future__ import annotations
 
 import json
@@ -10,22 +21,21 @@ from typing import Callable, Mapping, cast
 from .orcamento import CotacaoTentativa, ErroOrcamento, ResultadoTentativa
 
 
-MODELO = "gpt-5.6-terra"
-MAX_INPUT_TOKENS = 400_000
-MAX_OUTPUT_TOKENS = 128_000
-PRICING_VERSION = "openai-gpt56terra-standard-verified-2026-07-28"
-PRICING_SOURCE = "https://developers.openai.com/api/docs/pricing"
+MODELO = "gemini-2.5-pro"
+# 200k e a fronteira de faixa de preco, nao um limite do modelo: acima dela
+# input dobra e output sobe 50%. O teto fica NA faixa barata de proposito, para
+# a tabela abaixo nunca subestimar. Elevar isto sem trocar os precos fura o teto.
+MAX_INPUT_TOKENS = 200_000
+MAX_OUTPUT_TOKENS = 64_000
+PRICING_VERSION = "gemini-2.5-pro-standard-verified-2026-07-28"
+PRICING_SOURCE = "https://ai.google.dev/gemini-api/docs/pricing"
 # Verificado em 2026-07-28 contra PRICING_SOURCE.
-#
-# ATENCAO -- ate 2026-07-28 este adapter cotava `gpt-5-2025-08-07` a
-# $1.25/$0.125/$10, que era o preco de LANCAMENTO de agosto/2025. A linha
-# vigente e gpt-5.4/5.5/5.6 e o `gpt-5` daquela tabela nao existe mais. Ou seja:
-# o motor subfaturava ~4x na entrada e ~3x na saida, na unica contencao
-# monetaria que ele tem. Preco de modelo e dado PERECIVEL -- PRICING_MAX_AGE_S
-# existe para forcar a reconferencia, e ela precisa ser real, nao carimbo.
-_INPUT_USD = Decimal("2.5") / Decimal(1_000_000)
-_CACHED_USD = Decimal("0.25") / Decimal(1_000_000)
-_OUTPUT_USD = Decimal("15") / Decimal(1_000_000)
+# Faixa de prompt <= 200k tokens; acima disso input vira $2.50 e output $15.00.
+# O teto conservador de input (MAX_INPUT_TOKENS) mantem o prompt nesta faixa --
+# se alguem elevar esse teto acima de 200k, esta tabela passa a SUBESTIMAR.
+_INPUT_USD = Decimal("1.25") / Decimal(1_000_000)
+_CACHED_USD = Decimal("0.125") / Decimal(1_000_000)
+_OUTPUT_USD = Decimal("10") / Decimal(1_000_000)
 _QUANTUM_BRL = Decimal("0.000001")
 
 
@@ -69,7 +79,7 @@ def _http_real(url: str, corpo: bytes, headers: Mapping[str, str], timeout: int)
         return resposta.status, dict(resposta.headers.items()), resposta.read()
 
 
-class ClienteOpenAICusteado:
+class ClienteGeminiCusteado:
     """Uma chamada, sem retry, com custo derivado somente do usage do provedor."""
 
     def __init__(
@@ -79,7 +89,7 @@ class ClienteOpenAICusteado:
         margem: Decimal, timeout: int, transporte: TransporteHTTP = _http_real,
     ) -> None:
         if not isinstance(api_key, str) or not api_key or not isinstance(prompt, str) or not prompt:
-            raise ErroOrcamento("entrada OpenAI invalida")
+            raise ErroOrcamento("entrada Gemini invalida")
         self.max_input_tokens = _inteiro(max_input_tokens, "max_input_tokens")
         self.max_completion_tokens = _inteiro(max_completion_tokens, "max_completion_tokens")
         if (self.max_input_tokens != MAX_INPUT_TOKENS
@@ -127,40 +137,51 @@ class ClienteOpenAICusteado:
 
     def tentar_uma_vez(self) -> ResultadoTentativa:
         payload = {
-            "model": MODELO,
-            "messages": [{"role": "user", "content": self._prompt}],
-            "max_completion_tokens": self.max_completion_tokens,
+            "contents": [{"role": "user", "parts": [{"text": self._prompt}]}],
+            "generationConfig": {"maxOutputTokens": self.max_completion_tokens},
         }
         status, headers, bruto = self._transporte(
-            "https://api.openai.com/v1/chat/completions",
+            f"https://generativelanguage.googleapis.com/v1beta/models/{MODELO}:generateContent",
             json.dumps(payload, separators=(",", ":")).encode(),
-            {"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"},
+            {"x-goog-api-key": self._api_key, "Content-Type": "application/json"},
             self._timeout,
         )
         if status != 200:
-            raise ErroOrcamento("resposta OpenAI ambigua")
+            raise ErroOrcamento("resposta Gemini ambigua")
         try:
             resposta = cast(dict[str, object], json.loads(bruto))
-            if resposta.get("model") != MODELO:
+            # `modelVersion` pode vir com sufixo de build (ex. "gemini-2.5-pro-002"):
+            # o contrato e a familia cotada, nao o build exato.
+            versao_modelo = resposta.get("modelVersion")
+            if not isinstance(versao_modelo, str) or not versao_modelo.startswith(MODELO):
                 raise ErroOrcamento("modelo divergente")
-            usage = cast(dict[str, object], resposta["usage"])
-            entrada = _inteiro(usage["prompt_tokens"], "prompt_tokens")
-            saida = _inteiro(usage["completion_tokens"], "completion_tokens")
-            total = _inteiro(usage["total_tokens"], "total_tokens")
-            detalhes = usage.get("prompt_tokens_details", {})
-            if not isinstance(detalhes, dict):
-                raise ErroOrcamento("usage invalido")
-            cached = _inteiro(detalhes.get("cached_tokens", 0), "cached_tokens")
+            usage = cast(dict[str, object], resposta["usageMetadata"])
+            entrada = _inteiro(usage["promptTokenCount"], "promptTokenCount")
+            saida = _inteiro(usage["candidatesTokenCount"], "candidatesTokenCount")
+            total = _inteiro(usage["totalTokenCount"], "totalTokenCount")
+            cached = _inteiro(usage.get("cachedContentTokenCount", 0), "cachedContentTokenCount")
+            # `thoughtsTokenCount` e cobrado como saida e NAO entra em
+            # candidatesTokenCount. Ignora-lo subfatura o raciocinio do modelo.
+            pensamento = _inteiro(usage.get("thoughtsTokenCount", 0), "thoughtsTokenCount")
+            saida += pensamento
             if total != entrada + saida or cached > entrada:
                 raise ErroOrcamento("usage inconsistente")
             if entrada > self.max_input_tokens or saida > self.max_completion_tokens:
                 raise ErroOrcamento("usage excede limites reservados")
-            texto = cast(dict[str, object], cast(list[object], resposta["choices"])[0])["message"]
-            conteudo = cast(dict[str, object], texto)["content"]
-            request_id = next((v for k, v in headers.items() if k.lower() == "x-request-id"), None)
-            if not isinstance(conteudo, str) or not conteudo or not isinstance(request_id, str):
-                raise ErroOrcamento("resposta OpenAI incompleta")
+            candidato = cast(dict[str, object], cast(list[object], resposta["candidates"])[0])
+            conteudo = cast(dict[str, object], candidato["content"])
+            partes = cast(list[object], conteudo["parts"])
+            texto = "".join(
+                str(cast(dict[str, object], parte)["text"])
+                for parte in partes
+                if isinstance(parte, dict) and isinstance(parte.get("text"), str)
+            )
+            request_id = next(
+                (v for k, v in headers.items() if k.lower() == "x-request-id"), None
+            )
+            if not texto or not isinstance(request_id, str):
+                raise ErroOrcamento("resposta Gemini incompleta")
             custo = self._brl(entrada, cached, saida, margem=False)
-            return ResultadoTentativa(conteudo, custo, "BRL", request_id)
+            return ResultadoTentativa(texto, custo, "BRL", request_id)
         except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as erro:
-            raise ErroOrcamento("resposta OpenAI invalida") from erro
+            raise ErroOrcamento("resposta Gemini invalida") from erro

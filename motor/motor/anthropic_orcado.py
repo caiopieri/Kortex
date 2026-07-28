@@ -1,4 +1,13 @@
-"""Adaptador custeado para uma tentativa direta na OpenAI Chat Completions API."""
+"""Adaptador custeado para uma tentativa direta na Anthropic Messages API.
+
+Espelha `openai_orcado.py` de proposito: mesma forma, mesmas guardas, mesma
+disciplina de custo derivado SOMENTE do usage devolvido pelo provedor.
+
+ATENCAO -- os precos abaixo sao code-owned e precisam ser verificados contra a
+tabela publica antes de qualquer gasto real. `PRICING_VERSION` carrega a data da
+verificacao e `PRICING_SOURCE` a origem; a composicao confronta os dois e recusa
+snapshot velho. Preco errado aqui e contencao monetaria errada no motor inteiro.
+"""
 from __future__ import annotations
 
 import json
@@ -10,21 +19,25 @@ from typing import Callable, Mapping, cast
 from .orcamento import CotacaoTentativa, ErroOrcamento, ResultadoTentativa
 
 
-MODELO = "gpt-5.6-terra"
-MAX_INPUT_TOKENS = 400_000
-MAX_OUTPUT_TOKENS = 128_000
-PRICING_VERSION = "openai-gpt56terra-standard-verified-2026-07-28"
-PRICING_SOURCE = "https://developers.openai.com/api/docs/pricing"
+MODELO = "claude-sonnet-5"
+VERSAO_API = "2023-06-01"
+MAX_INPUT_TOKENS = 200_000
+MAX_OUTPUT_TOKENS = 64_000
+PRICING_VERSION = "anthropic-sonnet5-standard-verified-2026-07-28"
+PRICING_SOURCE = "https://platform.claude.com/docs/en/about-claude/pricing"
 # Verificado em 2026-07-28 contra PRICING_SOURCE.
 #
-# ATENCAO -- ate 2026-07-28 este adapter cotava `gpt-5-2025-08-07` a
-# $1.25/$0.125/$10, que era o preco de LANCAMENTO de agosto/2025. A linha
-# vigente e gpt-5.4/5.5/5.6 e o `gpt-5` daquela tabela nao existe mais. Ou seja:
-# o motor subfaturava ~4x na entrada e ~3x na saida, na unica contencao
-# monetaria que ele tem. Preco de modelo e dado PERECIVEL -- PRICING_MAX_AGE_S
-# existe para forcar a reconferencia, e ela precisa ser real, nao carimbo.
-_INPUT_USD = Decimal("2.5") / Decimal(1_000_000)
-_CACHED_USD = Decimal("0.25") / Decimal(1_000_000)
+# DELIBERADO: o Sonnet 5 esta em preco promocional de $2/$10 ate 2026-08-31, e
+# passa a $3/$15 em 01/09. A tabela abaixo usa o preco PROMOCIONAL ENCERRADO,
+# nao o vigente. Superfatura ~50% ate agosto e fica exata depois -- errar para
+# cima e seguro (o teto so aperta), errar para baixo furaria a unica contencao
+# monetaria do sistema exatamente no dia da virada, sem ninguem perceber.
+#
+# `cache_read` = 0.1x do input; escrita de cache de 5min = 1.25x. As tres linhas
+# sao disjuntas no usage da Messages API -- ver `tentar_uma_vez`.
+_INPUT_USD = Decimal("3") / Decimal(1_000_000)
+_CACHED_USD = Decimal("0.30") / Decimal(1_000_000)
+_CACHE_WRITE_USD = Decimal("3.75") / Decimal(1_000_000)
 _OUTPUT_USD = Decimal("15") / Decimal(1_000_000)
 _QUANTUM_BRL = Decimal("0.000001")
 
@@ -69,7 +82,7 @@ def _http_real(url: str, corpo: bytes, headers: Mapping[str, str], timeout: int)
         return resposta.status, dict(resposta.headers.items()), resposta.read()
 
 
-class ClienteOpenAICusteado:
+class ClienteAnthropicCusteado:
     """Uma chamada, sem retry, com custo derivado somente do usage do provedor."""
 
     def __init__(
@@ -79,7 +92,7 @@ class ClienteOpenAICusteado:
         margem: Decimal, timeout: int, transporte: TransporteHTTP = _http_real,
     ) -> None:
         if not isinstance(api_key, str) or not api_key or not isinstance(prompt, str) or not prompt:
-            raise ErroOrcamento("entrada OpenAI invalida")
+            raise ErroOrcamento("entrada Anthropic invalida")
         self.max_input_tokens = _inteiro(max_input_tokens, "max_input_tokens")
         self.max_completion_tokens = _inteiro(max_completion_tokens, "max_completion_tokens")
         if (self.max_input_tokens != MAX_INPUT_TOKENS
@@ -111,14 +124,23 @@ class ClienteOpenAICusteado:
         self._api_key, self._prompt = api_key, prompt
         self._timeout, self._transporte = timeout, transporte
 
-    def _brl(self, input_tokens: int, cached_tokens: int, output_tokens: int, *, margem: bool) -> Decimal:
-        usd = ((input_tokens - cached_tokens) * _INPUT_USD
-               + cached_tokens * _CACHED_USD + output_tokens * _OUTPUT_USD)
+    def _brl(
+        self, input_tokens: int, cached_tokens: int, output_tokens: int,
+        cache_write_tokens: int = 0, *, margem: bool,
+    ) -> Decimal:
+        usd = (input_tokens * _INPUT_USD
+               + cached_tokens * _CACHED_USD
+               + cache_write_tokens * _CACHE_WRITE_USD
+               + output_tokens * _OUTPUT_USD)
         multiplicador = self.margem if margem else Decimal(1)
         return _arredondar_brl(usd * self.fx.cotacao_venda * multiplicador)
 
     def cotar_tentativa(self) -> CotacaoTentativa:
-        maximo = self._brl(self.max_input_tokens, 0, self.max_completion_tokens, margem=True)
+        # Reserva pelo pior caso: todo o input cobrado como escrita de cache, que
+        # e a linha mais cara. Subcotar aqui e deixar o teto ser furado.
+        maximo = self._brl(
+            0, 0, self.max_completion_tokens, self.max_input_tokens, margem=True,
+        )
         versao = (
             f"{self.pricing.versao}@{self.pricing.capturado_em}"
             f"+fx:{self.fx.versao}+margin:{self.margem}"
@@ -128,39 +150,52 @@ class ClienteOpenAICusteado:
     def tentar_uma_vez(self) -> ResultadoTentativa:
         payload = {
             "model": MODELO,
+            "max_tokens": self.max_completion_tokens,
             "messages": [{"role": "user", "content": self._prompt}],
-            "max_completion_tokens": self.max_completion_tokens,
         }
         status, headers, bruto = self._transporte(
-            "https://api.openai.com/v1/chat/completions",
+            "https://api.anthropic.com/v1/messages",
             json.dumps(payload, separators=(",", ":")).encode(),
-            {"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"},
+            {
+                "x-api-key": self._api_key,
+                "anthropic-version": VERSAO_API,
+                "Content-Type": "application/json",
+            },
             self._timeout,
         )
         if status != 200:
-            raise ErroOrcamento("resposta OpenAI ambigua")
+            raise ErroOrcamento("resposta Anthropic ambigua")
         try:
             resposta = cast(dict[str, object], json.loads(bruto))
             if resposta.get("model") != MODELO:
                 raise ErroOrcamento("modelo divergente")
             usage = cast(dict[str, object], resposta["usage"])
-            entrada = _inteiro(usage["prompt_tokens"], "prompt_tokens")
-            saida = _inteiro(usage["completion_tokens"], "completion_tokens")
-            total = _inteiro(usage["total_tokens"], "total_tokens")
-            detalhes = usage.get("prompt_tokens_details", {})
-            if not isinstance(detalhes, dict):
-                raise ErroOrcamento("usage invalido")
-            cached = _inteiro(detalhes.get("cached_tokens", 0), "cached_tokens")
-            if total != entrada + saida or cached > entrada:
-                raise ErroOrcamento("usage inconsistente")
-            if entrada > self.max_input_tokens or saida > self.max_completion_tokens:
+            # Na Messages API `input_tokens` NAO inclui os tokens de cache: as
+            # tres linhas sao disjuntas e cada uma tem preco proprio.
+            entrada = _inteiro(usage["input_tokens"], "input_tokens")
+            saida = _inteiro(usage["output_tokens"], "output_tokens")
+            cached = _inteiro(
+                usage.get("cache_read_input_tokens", 0), "cache_read_input_tokens"
+            )
+            escrita = _inteiro(
+                usage.get("cache_creation_input_tokens", 0), "cache_creation_input_tokens"
+            )
+            if entrada + cached + escrita > self.max_input_tokens:
                 raise ErroOrcamento("usage excede limites reservados")
-            texto = cast(dict[str, object], cast(list[object], resposta["choices"])[0])["message"]
-            conteudo = cast(dict[str, object], texto)["content"]
-            request_id = next((v for k, v in headers.items() if k.lower() == "x-request-id"), None)
-            if not isinstance(conteudo, str) or not conteudo or not isinstance(request_id, str):
-                raise ErroOrcamento("resposta OpenAI incompleta")
-            custo = self._brl(entrada, cached, saida, margem=False)
-            return ResultadoTentativa(conteudo, custo, "BRL", request_id)
+            if saida > self.max_completion_tokens:
+                raise ErroOrcamento("usage excede limites reservados")
+            blocos = cast(list[object], resposta["content"])
+            texto = "".join(
+                str(cast(dict[str, object], bloco)["text"])
+                for bloco in blocos
+                if isinstance(bloco, dict) and bloco.get("type") == "text"
+            )
+            request_id = next(
+                (v for k, v in headers.items() if k.lower() == "request-id"), None
+            )
+            if not texto or not isinstance(request_id, str):
+                raise ErroOrcamento("resposta Anthropic incompleta")
+            custo = self._brl(entrada, cached, saida, escrita, margem=False)
+            return ResultadoTentativa(texto, custo, "BRL", request_id)
         except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as erro:
-            raise ErroOrcamento("resposta OpenAI invalida") from erro
+            raise ErroOrcamento("resposta Anthropic invalida") from erro
