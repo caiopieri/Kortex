@@ -75,10 +75,42 @@ dois valores.
 (exigia que a sessão abrisse, com teto rebaixado). Passou a medir o invariante — *nenhuma sessão
 de orçamento abre acima do bootstrap* — que recusa e rebaixamento satisfazem igualmente.
 
+## U-05 — reconciliação descartava o nó culpado (G2)
+
+Havendo reprovado, o veredito era **reconstruído do zero** (`{"aprovado": False, "lacunas": …}`)
+e a linha seguinte lia `nos_a_refazer` desse dict mutilado. Com A→B→C, C reprovado e o evaluator
+apontando A como origem, a atribuição a montante sumia e a reconciliação refazia só o sintoma C
+— queimando uma rodada do teto para corrigir o nó errado. Achado por **dois auditores
+independentes** (A1 do kernel e B1 do grafo), o sinal mais forte do lote.
+
+**Fix:** `{**veredito, "aprovado": False, "lacunas": …}` em vez de dict novo. Uma linha. O
+fecho transitivo a jusante (`preencher_lacunas`) já existia e estava correto — com `nos_a_refazer`
+preservado, `{A}` ∪ `{C}` fecha em `{A, B, C}` sozinho.
+
+## U-03 — falha parcial derrubava o motor (G4/C1)
+
+Tudo depois do veredito do verifier estava fora de guarda. Três caminhos, todos alcançáveis por
+spec gerada pelo planner (LLM), já que `produz_artefatos` é `list[dict[str, Any]]` e a validação
+não protege:
+
+| entrada | exceção | antes |
+|---|---|---|
+| `produz_artefatos: [{}]` | `KeyError: 'nome'` | queda do run, sem evento |
+| `nome: "sub/dir/x.md"` | `OSError` no `mkdir` | queda do run, sem evento |
+| runner que levanta / `\x00` numa entrada | `RuntimeError` / `ValueError` | atravessava a fronteira |
+
+**Fix:** bloco de artefato sob `try` → `portao.reprovado` + resultado reprovado com motivo;
+`command_runner.run` sob `try` → `{"ok": False, "erro": "runner_falhou", …}`.
+
+**Por que `except Exception` largo na fronteira do runner:** o `CommandRunner` é um adapter
+externo e o protocolo não é validado em runtime — enumerar as exceções de todos os backends
+possíveis é justamente o que não dá para fazer. `BaseException` continua propagando
+(`KeyboardInterrupt`/`SystemExit` não viram reprovação).
+
 ## Ainda abertos
 
-🔴 U-03 (falha parcial derruba o motor), U-04, U-05 (reconciliação descarta o nó culpado),
-U-06, U-07. 🟡 os 15, dos quais três seguem vermelhos por design em
+🔴 U-04, U-06, U-07 — os três do curador, que bloqueiam o flywheel. 🟡 os 15, dos quais três
+seguem vermelhos por design em
 `test_auditoria_anthropic_eventos_caixa.py` (E-01 sidecar, E-02 quarentena, E-03 guard
 anti-drift).
 
@@ -94,5 +126,12 @@ anti-drift).
 - **U-02 pode quebrar runbook existente.** Qualquer spec de exemplo com `teto_custo` acima do
   `teto_bootstrap_brl` configurado passa a ser recusada no arranque. Não auditei os 25 exemplos
   contra os tetos configurados.
-- **Nenhum destes três foi revisto pelo cadeado GPT-5/Codex**, que é requisito do critério 3 do
-  charter. Os três continuam correções auto-avaliadas.
+- **U-03 troca queda por reprovação silenciosa.** Antes, spec com artefato malformado explodia
+  alto; agora o subagente reprova com motivo e o run segue para reconciliação — que pode gastar
+  rodadas do teto tentando refazer um nó cuja spec está errada e vai falhar igual. Isso é
+  disponibilidade comprada com custo, e não medi o custo.
+- **`except Exception` na fronteira do runner pode mascarar bug do motor**, não só do adapter.
+  Uma falha de programação dentro de `CommandRequest` viraria "runner falhou" com o traceback
+  perdido na mensagem. O motivo carrega `type(ex).__name__`, mas não o traceback.
+- **Nenhum destes cinco foi revisto pelo cadeado GPT-5/Codex**, que é requisito do critério 3 do
+  charter. Continuam correções auto-avaliadas.

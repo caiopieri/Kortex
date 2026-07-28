@@ -777,10 +777,24 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                 resultado = {"id": sub["id"], "saida": ultima,
                              "tentativas": tentativa, "aprovado": True}
                 if sub.get("produz_artefatos"):
-                    artefato = sub["produz_artefatos"][0]
-                    nome = f"{sub['id']}__{artefato['nome']}"
-                    ref = registrar_artefato(payload["workspace"], nome, artefato["tipo"], ultima)
-                    ref["nome"] = artefato["nome"]
+                    # `produz_artefatos` e `list[dict[str, Any]]` e vem da spec, que o
+                    # planner (LLM) gera: a validacao nao garante nem que `nome` exista
+                    # nem que seja um componente de path. Sem guarda, um dict sem `nome`
+                    # (KeyError) ou um nome com separador (OSError) derrubava o run
+                    # inteiro, sem evento e sem resultado. Falha de artefato e falha
+                    # DESTE subagente — reprovacao, nao queda do motor.
+                    try:
+                        artefato = sub["produz_artefatos"][0]
+                        nome = f"{sub['id']}__{artefato['nome']}"
+                        ref = registrar_artefato(payload["workspace"], nome, artefato["tipo"], ultima)
+                        ref["nome"] = artefato["nome"]
+                    except (KeyError, TypeError, OSError, ValueError) as ex:
+                        motivo = f"artefato invalido: {type(ex).__name__}: {ex}"
+                        log.evento("portao.reprovado", portao=f"artefato:{sub['id']}",
+                                   ciclo=tentativa, motivo=motivo)
+                        return {"resultados": [{"id": sub["id"], "saida": ultima,
+                                                "tentativas": tentativa, "aprovado": False,
+                                                "motivo": motivo}]}
                     log.evento(
                         "artefato.atualizou",
                         nome=ref["nome"],
@@ -881,11 +895,24 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                 "saida": "",
             }
         partes[0] = str(identidade)
-        proc = command_runner.run(CommandRequest(
-            argv=tuple(partes),
-            workspace=cwd,
-            timeout_s=timeout_s,
-        ))
+        # O `CommandRunner` e um adapter externo e o protocolo nao e validado em
+        # runtime. Um backend que levanta — sandbox pifado, `ValueError: embedded
+        # null byte` de um `\x00` que veio na spec — nao pode atravessar a fronteira
+        # e derrubar o motor: a fronteira e justamente o lugar onde falha de
+        # execucao vira reprovacao com motivo.
+        try:
+            proc = command_runner.run(CommandRequest(
+                argv=tuple(partes),
+                workspace=cwd,
+                timeout_s=timeout_s,
+            ))
+        except Exception as ex:
+            return {
+                "ok": False,
+                "erro": "runner_falhou",
+                "motivo": f"runner de comando falhou: {type(ex).__name__}: {ex}",
+                "saida": "",
+            }
         saida = "\n".join(p for p in [proc.stdout.strip(), proc.stderr.strip()] if p)
         if proc.erro is not None:
             return {"ok": False, "erro": proc.erro, "motivo": proc.motivo, "saida": saida}
@@ -1154,7 +1181,12 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
             tipado = _VereditoEvaluator(aprovado=False, lacunas=["evaluator sem veredito valido"])
         veredito = tipado.model_dump()
         if reprovados:
-            veredito = {"aprovado": False,
+            # `{**veredito, ...}` e nao um dict novo: reconstruir do zero descartava
+            # `nos_a_refazer`, e a leitura logo abaixo pegava o dict mutilado. Com A→B→C
+            # e C reprovado, a atribuicao a montante do evaluator ("a causa e A") sumia e
+            # a reconciliacao refazia so o sintoma C — queimando uma rodada do teto para
+            # corrigir o no errado.
+            veredito = {**veredito, "aprovado": False,
                         "lacunas": list(veredito.get("lacunas", [])) + [f"subagente reprovado: {i}" for i in reprovados]}
         nomes = veredito.get("nos_a_refazer", [])
         if not isinstance(nomes, list):
