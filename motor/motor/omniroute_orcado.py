@@ -84,13 +84,17 @@ PRECOS: dict[str, PrecoModelo] = {
     "agy/gemini-3.5-flash-high": PrecoModelo(
         Decimal("0.30"), Decimal("0.03"), Decimal("2.50"),
     ),
-    # Codex pela assinatura. Cotado pela tabela publica do gpt-5.x equivalente
-    # (2026-07-28) -- ver kortex-preco-modelo-perecivel.
-    "codex/gpt-5.3-codex": PrecoModelo(
-        Decimal("2.50"), Decimal("0.25"), Decimal("15"),
+    # Codex pela assinatura ChatGPT. Ids canonicos (`codex/gpt-5.6-sol`), nao os
+    # nomes de exibicao do catalogo ("GPT 5.6 Sol") -- estes o upstream recusa.
+    # Precos da tabela publica de 2026-07-28; ver kortex-preco-modelo-perecivel.
+    "codex/gpt-5.6-sol": PrecoModelo(
+        Decimal("5"), Decimal("0.50"), Decimal("30"),
     ),
-    "codex/gpt-5.2-codex": PrecoModelo(
-        Decimal("2.50"), Decimal("0.25"), Decimal("15"),
+    "codex/gpt-5.6-luna": PrecoModelo(
+        Decimal("1"), Decimal("0.10"), Decimal("6"),
+    ),
+    "codex/gpt-5.5": PrecoModelo(
+        Decimal("5"), Decimal("0.50"), Decimal("30"),
     ),
 
     # --- rotas via openrouter (pay-as-you-go; sem credito em 2026-07-28) ---

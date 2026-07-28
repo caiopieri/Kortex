@@ -384,6 +384,17 @@ class _ClienteOmniSomenteOrcado(ClienteSomenteOrcado):
     modelo = "roteado"
 
 
+def _rota_omniroute(**kwargs: Any) -> RotaTentativaCusteada:
+    """Monta uma rota custeada; o route_id sai do nome do modelo, saneado."""
+    modelo = str(kwargs["modelo"])
+    provider_id = str(kwargs.pop("provider_id"))
+    return RotaTentativaCusteada(
+        re.sub(r"[^a-z0-9_.:-]", "-", modelo.lower()),
+        provider_id,
+        ClienteOmniRouteCusteado(**kwargs),
+    )
+
+
 def compor_orcamento_omniroute(
     cfg: dict, workspace: str | Path, *,
     relogio: Callable[[], int] = lambda: int(time.time()),
@@ -461,25 +472,29 @@ def compor_orcamento_omniroute(
         ]
         if not candidatas:
             return []
-        modelo, provider_id, tokens, entrada_max = candidatas[0]
         api_key = os.environ.get(env)
         if not api_key:
             raise ErroOrcamento("credencial omniroute ausente")
-        adaptador = ClienteOmniRouteCusteado(
-            api_key=api_key, base_url=base_url, modelo=modelo, prompt=prompt,
-            max_input_tokens=entrada_max, max_completion_tokens=tokens,
-            fx=omniroute_orcado.SnapshotFX(fx_versao, fx_capturado, fx_cotacao),
-            pricing=omniroute_orcado.SnapshotPricing(
-                omniroute_orcado.PRICING_VERSION, PRICING_CAPTURADO_EM,
-                omniroute_orcado.PRICING_SOURCE,
-            ),
-            agora=relogio(), fx_max_age_s=fx_max_age,
-            pricing_max_age_s=PRICING_MAX_AGE_S, margem=margem,
-            timeout=timeout, **kwargs,
-        )
-        return [RotaTentativaCusteada(
-            re.sub(r"[^a-z0-9_.:-]", "-", modelo.lower()), provider_id, adaptador,
-        )]
+        # Devolve a CADEIA inteira, nao so a preferida: `chamar_orcado` percorre
+        # a lista em ordem e cai na proxima quando uma rota falha. Devolver um
+        # item so jogava esse failover fora -- bastava o provedor preferido estar
+        # sem cota para o papel inteiro morrer, com "modelo nao respondeu".
+        rotas: list[RotaTentativaCusteada] = []
+        for modelo, provider_id, tokens, entrada_max in candidatas:
+            rotas.append(_rota_omniroute(
+                provider_id=provider_id,
+                api_key=api_key, base_url=base_url, modelo=modelo, prompt=prompt,
+                max_input_tokens=entrada_max, max_completion_tokens=tokens,
+                fx=omniroute_orcado.SnapshotFX(fx_versao, fx_capturado, fx_cotacao),
+                pricing=omniroute_orcado.SnapshotPricing(
+                    omniroute_orcado.PRICING_VERSION, PRICING_CAPTURADO_EM,
+                    omniroute_orcado.PRICING_SOURCE,
+                ),
+                agora=relogio(), fx_max_age_s=fx_max_age,
+                pricing_max_age_s=PRICING_MAX_AGE_S, margem=margem,
+                timeout=timeout, **kwargs,
+            ))
+        return rotas
 
     vistos: dict[str, set[str]] = {}
     for papel in ("executor", "verifier"):

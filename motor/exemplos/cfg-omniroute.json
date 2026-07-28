@@ -5,13 +5,13 @@
     "papeis": {
       "planner": [
         {
-          "modelo": "agy/gemini-3.1-pro-high",
-          "provider_id": "google",
+          "modelo": "claude/claude-opus-4-8",
+          "provider_id": "anthropic",
           "max_input_tokens": 32000,
           "max_completion_tokens": 16000
         },
         {
-          "modelo": "codex/gpt-5.3-codex",
+          "modelo": "codex/gpt-5.6-luna",
           "provider_id": "openai",
           "max_input_tokens": 32000,
           "max_completion_tokens": 16000
@@ -19,56 +19,56 @@
       ],
       "executor": [
         {
-          "modelo": "agy/gemini-3.1-pro-high",
-          "provider_id": "google",
+          "modelo": "codex/gpt-5.6-luna",
+          "provider_id": "openai",
           "max_input_tokens": 150000,
           "max_completion_tokens": 32000
         },
         {
-          "modelo": "codex/gpt-5.3-codex",
-          "provider_id": "openai",
+          "modelo": "claude/claude-opus-4-6",
+          "provider_id": "anthropic",
           "max_input_tokens": 150000,
           "max_completion_tokens": 32000
         }
       ],
       "verifier": [
         {
-          "modelo": "codex/gpt-5.3-codex",
-          "provider_id": "openai",
+          "modelo": "claude/claude-opus-4-6",
+          "provider_id": "anthropic",
           "max_input_tokens": 150000,
           "max_completion_tokens": 8000
         },
         {
-          "modelo": "agy/gemini-3.1-pro-high",
-          "provider_id": "google",
+          "modelo": "codex/gpt-5.6-luna",
+          "provider_id": "openai",
           "max_input_tokens": 150000,
           "max_completion_tokens": 8000
         }
       ],
       "evaluator": [
         {
-          "modelo": "codex/gpt-5.3-codex",
+          "modelo": "codex/gpt-5.6-luna",
           "provider_id": "openai",
           "max_input_tokens": 150000,
           "max_completion_tokens": 8000
         },
         {
-          "modelo": "agy/gemini-3.1-pro-low",
-          "provider_id": "google",
+          "modelo": "claude/claude-opus-4-7",
+          "provider_id": "anthropic",
           "max_input_tokens": 150000,
           "max_completion_tokens": 8000
         }
       ],
       "synthesizer": [
         {
-          "modelo": "agy/gemini-3.1-pro-high",
-          "provider_id": "google",
+          "modelo": "codex/gpt-5.6-luna",
+          "provider_id": "openai",
           "max_input_tokens": 180000,
           "max_completion_tokens": 32000
         },
         {
-          "modelo": "codex/gpt-5.3-codex",
-          "provider_id": "openai",
+          "modelo": "claude/claude-opus-4-8",
+          "provider_id": "anthropic",
           "max_input_tokens": 180000,
           "max_completion_tokens": 32000
         }

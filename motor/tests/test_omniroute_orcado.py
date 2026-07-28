@@ -262,3 +262,31 @@ def test_executor_ou_verifier_ausente_recusa(credencial, tmp_path) -> None:
     del cfg["omniroute"]["papeis"]["verifier"]
     with pytest.raises(ErroOrcamento, match="papel verifier ausente"):
         compor_orcamento_omniroute(cfg, tmp_path)
+
+
+def test_a_cadeia_inteira_e_devolvida_para_o_motor_poder_cair_na_proxima(
+    credencial, tmp_path
+) -> None:
+    """`chamar_orcado` percorre a lista de rotas em ordem e cai na próxima
+    quando uma falha. Devolver só a preferida jogava esse failover fora: bastava
+    o provedor de topo estar sem cota para o papel inteiro morrer com
+    "modelo não respondeu" — foi o que derrubou uma missão real.
+    """
+    deps = compor_orcamento_omniroute(_cfg(), tmp_path)
+    rotas = deps.fabrica("verifier", "p", 1, RequisitosTentativaCusteada())
+    assert [r.provider_id for r in rotas] == ["google", "anthropic"]
+
+    # `evitar_provedor` continua podando a cadeia, não só a primeira posição.
+    podada = deps.fabrica(
+        "verifier", "p", 1, RequisitosTentativaCusteada(evitar_provedor="google")
+    )
+    assert [r.provider_id for r in podada] == ["anthropic"]
+
+
+def test_route_ids_da_cadeia_sao_distintos(credencial, tmp_path) -> None:
+    """`validar_independencia_orcada` rejeita `route_id` duplicado, e o motor usa
+    o índice na cadeia para compor a identidade da reserva."""
+    rotas = compor_orcamento_omniroute(_cfg(), tmp_path).fabrica(
+        "verifier", "p", 1, RequisitosTentativaCusteada()
+    )
+    assert len({r.route_id for r in rotas}) == len(rotas)
