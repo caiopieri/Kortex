@@ -39,6 +39,7 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 from .caixa import CaixaFundador, rodar_com_caixa
 from .composicao_orcamento import (
     compor_orcamento_multi,
+    compor_orcamento_omniroute,
     compor_orcamento_openai,
     validar_independencia_orcada,
 )
@@ -264,11 +265,12 @@ def main() -> int:
             # caindo no compositor antigo e falhando com a mensagem dele, senao
             # troca-se um erro conhecido por outro so porque o default mudou.
             cfg_orcada = cfg_modelos or {}
-            compor = (
-                compor_orcamento_multi
-                if {"gemini", "anthropic"} <= set(cfg_orcada)
-                else compor_orcamento_openai
-            )
+            if "omniroute" in cfg_orcada:
+                compor = compor_orcamento_omniroute
+            elif {"gemini", "anthropic"} <= set(cfg_orcada):
+                compor = compor_orcamento_multi
+            else:
+                compor = compor_orcamento_openai
             deps_orcamento = compor(cfg_orcada, workspace_base)
             validar_independencia_orcada(deps_orcamento.rotas_certificadas)
             cliente = deps_orcamento.cliente

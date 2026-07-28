@@ -7,11 +7,12 @@ import time
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
-from . import anthropic_orcado, gemini_orcado, openai_orcado
+from . import anthropic_orcado, gemini_orcado, omniroute_orcado, openai_orcado
 from .anthropic_orcado import ClienteAnthropicCusteado
 from .gemini_orcado import ClienteGeminiCusteado
+from .omniroute_orcado import ClienteOmniRouteCusteado
 from .openai_orcado import (
     MAX_INPUT_TOKENS,
     MODELO,
@@ -356,4 +357,144 @@ def compor_orcamento_multi(
             RotaOrcadaCertificada("anthropic:sonnet-4-5", "anthropic", frozenset({"verifier"})),
         ),
         teto_bootstrap,
+    )
+
+
+# --------------------------------------------------------------------------
+# Composicao via OmniRoute (proxy OpenAI-compativel)
+# --------------------------------------------------------------------------
+#
+# Alcanca Gemini, GPT e Claude com uma credencial so. A concessao esta em
+# `omniroute_orcado`: `provider_id` passa a ser DECLARADO, nao observado, entao
+# o motor nao consegue mais verificar sozinho que executor e verifier sao mesmo
+# modelos diferentes. Produtor != juiz vira promessa do proxy. Serve para MVP;
+# nao serve para o curador decidir promocao de modelo.
+
+_ESPERADOS_OMNI = {
+    "omniroute", "fx", "fx_max_age_s", "margem", "teto_bootstrap_brl", "timeout",
+}
+_ESPERADOS_BLOCO_OMNI = {"base_url", "api_key_env", "papeis"}
+_ESPERADOS_PAPEL_OMNI = {
+    "modelo", "provider_id", "max_completion_tokens", "max_input_tokens",
+}
+
+
+class _ClienteOmniSomenteOrcado(ClienteSomenteOrcado):
+    provedor = "omniroute"
+    modelo = "roteado"
+
+
+def compor_orcamento_omniroute(
+    cfg: dict, workspace: str | Path, *,
+    relogio: Callable[[], int] = lambda: int(time.time()),
+    transporte: Any = None,
+) -> DependenciasOrcamento:
+    bloco_raiz = cfg if isinstance(cfg, dict) else None
+    if not isinstance(bloco_raiz, dict) or not _ESPERADOS_OMNI <= set(bloco_raiz):
+        raise ErroOrcamento("configuracao orcada ausente ou invalida")
+    bloco = bloco_raiz["omniroute"]
+    if not isinstance(bloco, dict) or set(bloco) != _ESPERADOS_BLOCO_OMNI:
+        raise ErroOrcamento("bloco omniroute ausente ou invalido")
+
+    base_url = _texto(bloco, "base_url")
+    env = _texto(bloco, "api_key_env")
+    if re.fullmatch(r"[A-Z][A-Z0-9_]{0,63}", env) is None or not os.environ.get(env):
+        raise ErroOrcamento("credencial omniroute ausente")
+
+    papeis_bruto = bloco["papeis"]
+    if not isinstance(papeis_bruto, dict) or not papeis_bruto:
+        raise ErroOrcamento("papeis omniroute invalidos")
+    # Cada papel carrega uma LISTA de alternativas em ordem de preferencia. Isso
+    # nao e luxo: o motor passa `evitar_provedor` com o provedor que PRODUZIU o
+    # no, e um papel com uma alternativa so fica sem rota sempre que o produtor
+    # coincide com ele. Com Anthropic planejando, um verifier exclusivamente
+    # Anthropic nunca roda -- foi exatamente o que derrubou a missao antes.
+    papeis: dict[str, list[tuple[str, str, int, int]]] = {}
+    for papel, bruto in papeis_bruto.items():
+        itens = bruto if isinstance(bruto, list) else [bruto]
+        if not isinstance(papel, str) or not itens:
+            raise ErroOrcamento(f"papel omniroute invalido: {papel}")
+        alternativas: list[tuple[str, str, int, int]] = []
+        for item in itens:
+            if not isinstance(item, dict) or set(item) != _ESPERADOS_PAPEL_OMNI:
+                raise ErroOrcamento(f"papel omniroute invalido: {papel}")
+            modelo = _texto(item, "modelo")
+            if modelo not in omniroute_orcado.PRECOS:
+                raise ErroOrcamento(f"modelo sem preco declarado: {modelo}")
+            provider_id = _texto(item, "provider_id")
+            if re.fullmatch(r"[a-z0-9][a-z0-9_.-]{0,63}", provider_id) is None:
+                raise ErroOrcamento(f"provider_id invalido: {provider_id}")
+            alternativas.append((
+                modelo, provider_id,
+                _inteiro(item, "max_completion_tokens"),
+                _inteiro(item, "max_input_tokens",
+                         maximo=omniroute_orcado.MAX_INPUT_TOKENS),
+            ))
+        papeis[papel] = alternativas
+
+    for obrigatorio in ("executor", "verifier"):
+        if obrigatorio not in papeis:
+            raise ErroOrcamento(f"papel {obrigatorio} ausente")
+
+    fx_bruto = bloco_raiz["fx"]
+    if not isinstance(fx_bruto, dict) or set(fx_bruto) != {
+        "versao", "capturado_em", "cotacao_venda"
+    }:
+        raise ErroOrcamento("snapshot FX invalido")
+    fx_versao = _texto(fx_bruto, "versao")
+    fx_capturado = _inteiro(fx_bruto, "capturado_em")
+    fx_cotacao = _decimal(fx_bruto, "cotacao_venda")
+    fx_max_age = _inteiro(bloco_raiz, "fx_max_age_s", maximo=FX_MAX_AGE_LIMITE_S)
+    timeout = _inteiro(bloco_raiz, "timeout", maximo=600)
+    margem = _decimal(bloco_raiz, "margem")
+    teto_bootstrap = _decimal(bloco_raiz, "teto_bootstrap_brl")
+
+    kwargs = {} if transporte is None else {"transporte": transporte}
+
+    def fabricar(
+        papel: str, prompt: str, _tentativa: int, requisitos: RequisitosTentativaCusteada,
+    ) -> list[RotaTentativaCusteada]:
+        if requisitos.ferramentas is not None or papel not in papeis:
+            return []
+        candidatas = [
+            alt for alt in papeis[papel] if requisitos.evitar_provedor != alt[1]
+        ]
+        if not candidatas:
+            return []
+        modelo, provider_id, tokens, entrada_max = candidatas[0]
+        api_key = os.environ.get(env)
+        if not api_key:
+            raise ErroOrcamento("credencial omniroute ausente")
+        adaptador = ClienteOmniRouteCusteado(
+            api_key=api_key, base_url=base_url, modelo=modelo, prompt=prompt,
+            max_input_tokens=entrada_max, max_completion_tokens=tokens,
+            fx=omniroute_orcado.SnapshotFX(fx_versao, fx_capturado, fx_cotacao),
+            pricing=omniroute_orcado.SnapshotPricing(
+                omniroute_orcado.PRICING_VERSION, PRICING_CAPTURADO_EM,
+                omniroute_orcado.PRICING_SOURCE,
+            ),
+            agora=relogio(), fx_max_age_s=fx_max_age,
+            pricing_max_age_s=PRICING_MAX_AGE_S, margem=margem,
+            timeout=timeout, **kwargs,
+        )
+        return [RotaTentativaCusteada(
+            re.sub(r"[^a-z0-9_.:-]", "-", modelo.lower()), provider_id, adaptador,
+        )]
+
+    vistos: dict[str, set[str]] = {}
+    for papel in ("executor", "verifier"):
+        for modelo, provider_id, _t, _e in papeis[papel]:
+            vistos.setdefault(f"{modelo}|{provider_id}", set()).add(papel)
+    certificadas = tuple(
+        RotaOrcadaCertificada(
+            re.sub(r"[^a-z0-9_.:-]", "-", chave.split("|")[0].lower()),
+            chave.split("|")[1],
+            frozenset(usos),
+        )
+        for chave, usos in vistos.items()
+    )
+    return DependenciasOrcamento(
+        _ClienteOmniSomenteOrcado(),
+        RepositorioOrcamento(Path(workspace) / "orcamento"),
+        fabricar, certificadas, teto_bootstrap,
     )

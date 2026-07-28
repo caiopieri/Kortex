@@ -1,0 +1,121 @@
+{
+  "versao": "0.1",
+  "padrao": "grafo_dependencias",
+  "missao": {
+    "id": "ebay-busca-filtros",
+    "objetivo": "Projetar e escrever um sistema em Python que consulta anúncios no eBay pela API oficial e permite busca livre com filtros",
+    "contexto": "MVP de linha de comando. Usa a eBay Browse API (endpoint /buy/browse/v1/item_summary/search), autenticação OAuth2 client-credentials com escopo público. O usuário informa um termo de busca e filtros opcionais: faixa de preço, condição do item, país de origem, tipo de anúncio (leilão ou preço fixo) e ordenação. A saída é uma tabela legível no terminal e, opcionalmente, JSON. Credenciais vêm de variáveis de ambiente, nunca hardcoded. O sistema precisa tratar paginação, limite de taxa e resposta de erro da API sem quebrar.",
+    "criterios_cobertura": [
+      "o cliente HTTP obtém e renova o token OAuth2 sozinho, e as credenciais vêm de variáveis de ambiente",
+      "todos os filtros pedidos (preço, condição, país, tipo de anúncio, ordenação) são traduzidos corretamente para os parâmetros da Browse API",
+      "paginação, HTTP 429 e respostas de erro da API são tratados sem derrubar o programa",
+      "existe teste automatizado com a resposta da API dublada, cobrindo caminho feliz e ao menos dois erros"
+    ]
+  },
+  "restricoes": {
+    "teto_custo": 800.0,
+    "max_subagentes": 10,
+    "max_tentativas": 3
+  },
+  "subagentes": [
+    {
+      "id": "arquiteto",
+      "papel": "planner",
+      "objetivo": "Definir a arquitetura do sistema: módulos, responsabilidades, contrato de cada função pública e o mapeamento de cada filtro para o parâmetro correspondente da eBay Browse API",
+      "entradas": {
+        "api": "eBay Browse API — GET /buy/browse/v1/item_summary/search",
+        "auth": "OAuth2 client_credentials, escopo https://api.ebay.com/oauth/api_scope",
+        "filtros_pedidos": [
+          "termo de busca livre",
+          "faixa de preço (min, max)",
+          "condição (novo, usado, recondicionado)",
+          "país de origem",
+          "tipo de anúncio (leilão, preço fixo)",
+          "ordenação (preço, relevância, mais recente)"
+        ],
+        "entregavel": "CLI Python, saída em tabela e opcionalmente JSON"
+      },
+      "resultado_esperado": "Markdown com: (a) lista de módulos e a responsabilidade de cada um; (b) assinatura de cada função pública com tipos; (c) tabela mapeando cada filtro pedido ao parâmetro da Browse API, incluindo a sintaxe de `filter` e `sort`",
+      "rubrica": [
+        "separa autenticação, construção da query, chamada HTTP e formatação de saída em módulos distintos",
+        "cada função pública tem assinatura com tipos e descrição de uma linha",
+        "a tabela cobre os seis filtros pedidos, sem deixar nenhum sem mapeamento",
+        "a sintaxe de `filter` da Browse API está correta (pares chave:valor separados por vírgula, faixas entre colchetes)",
+        "declara explicitamente como as credenciais entram no processo, sem nada hardcoded"
+      ]
+    },
+    {
+      "id": "codificador",
+      "papel": "executor",
+      "objetivo": "Escrever o código Python completo do sistema, seguindo exatamente a arquitetura definida pelo arquiteto",
+      "depende_de": [
+        "arquiteto"
+      ],
+      "entradas": {
+        "arquitetura": "ver resultado do subagente 'arquiteto'",
+        "restricoes_tecnicas": [
+          "somente biblioteca padrão mais 'requests'",
+          "credenciais lidas de EBAY_CLIENT_ID e EBAY_CLIENT_SECRET",
+          "nenhum segredo em log ou mensagem de erro",
+          "timeout explícito em toda chamada HTTP",
+          "backoff ao receber HTTP 429"
+        ]
+      },
+      "resultado_esperado": "Código Python completo, em blocos identificados por nome de arquivo, pronto para rodar",
+      "rubrica": [
+        "implementa todos os módulos que o arquiteto definiu, sem omitir nenhum",
+        "o token OAuth2 é obtido e renovado quando expira, sem repetir a requisição a cada chamada",
+        "todos os seis filtros estão implementados e chegam à query da API",
+        "há tratamento explícito de HTTP 429 com backoff, e de resposta de erro da API",
+        "nenhuma credencial aparece hardcoded, em log ou em mensagem de exceção",
+        "toda chamada HTTP tem timeout explícito"
+      ]
+    },
+    {
+      "id": "testador",
+      "papel": "executor",
+      "objetivo": "Escrever a suíte de testes automatizados do sistema, com a resposta da API dublada",
+      "depende_de": [
+        "codificador"
+      ],
+      "entradas": {
+        "codigo": "ver resultado do subagente 'codificador'",
+        "exigencia": "sem chamada de rede real: o transporte HTTP é injetado ou dublado"
+      },
+      "resultado_esperado": "Arquivo de teste pytest completo, em bloco identificado por nome de arquivo",
+      "rubrica": [
+        "nenhum teste faz chamada de rede real",
+        "cobre o caminho feliz: busca com filtros devolve resultados formatados",
+        "cobre ao menos dois erros: HTTP 429 e resposta de erro da API",
+        "cobre a tradução dos filtros para os parâmetros da query",
+        "os testes falham se o comportamento asseverado for removido do código"
+      ]
+    },
+    {
+      "id": "revisor-seguranca",
+      "papel": "verifier",
+      "objetivo": "Revisar código e testes procurando vazamento de credencial, entrada não validada e falha que derrube o programa",
+      "depende_de": [
+        "codificador",
+        "testador"
+      ],
+      "entradas": {
+        "codigo": "ver resultado do subagente 'codificador'",
+        "testes": "ver resultado do subagente 'testador'",
+        "premissa": "todo input externo é hostil até validado — inclusive a resposta da própria API do eBay"
+      },
+      "resultado_esperado": "Markdown com uma lista de achados; cada um com severidade, arquivo, linha aproximada e a correção sugerida. Se não houver achado, dizer explicitamente que não houve e o que foi verificado.",
+      "rubrica": [
+        "verifica explicitamente se credencial pode vazar em log, exceção ou repr",
+        "verifica se a resposta da API é validada antes de ser indexada",
+        "verifica se entrada do usuário nos filtros pode injetar sintaxe na query",
+        "cada achado traz severidade e correção concreta, não conselho genérico",
+        "silêncio não conta: se não achou nada, declara o que foi verificado"
+      ]
+    }
+  ],
+  "sintese": {
+    "instrucao": "Consolide em um entregável único: visão geral da arquitetura, o código final por arquivo, os testes, e a lista de achados de segurança com o que foi corrigido. Termine com as instruções de uso — variáveis de ambiente necessárias e um exemplo de comando com filtros.",
+    "formato": "markdown"
+  }
+}
