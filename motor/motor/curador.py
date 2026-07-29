@@ -1575,10 +1575,41 @@ def _adicionar_run(
     eventos: list[dict[str, Any]],
     incluir_rascunho: bool,
 ) -> None:
+    eventos = _resolver_modelo_roteado(eventos)
     perfil = _perfil_run(eventos)
     if perfil == "rascunho" and not incluir_rascunho:
         return
     runs.append(_run(arquivo, indice, eventos, perfil))
+
+
+def _resolver_modelo_roteado(eventos: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Troca o modelo generico de `executor.chamado` pela rota que atendeu.
+
+    Sob OmniRoute, `executor.chamado` so consegue dizer `omniroute/roteado`: a
+    rota so e escolhida dentro de `chamar_orcado`, percorrendo o failover. O
+    curador perfila aptidao POR MODELO lendo esse campo, entao sem esta
+    resolucao Gemini, Opus e Codex caiam todos no mesmo balde e o perfil por
+    modelo -- a entrada do flywheel -- virava uma linha so. Descoberto rodando a
+    missao do eBay pelo Gemini em 2026-07-29.
+
+    O pareamento e posicional: `modelo.atendeu` e emitido dentro da chamada que
+    o `executor.chamado` imediatamente anterior abriu. Vale o PRIMEIRO ate o
+    proximo `executor.chamado`; log sem o evento novo passa intacto.
+    """
+    resolvidos = list(eventos)
+    pendente: int | None = None
+    for indice, ev in enumerate(resolvidos):
+        if not isinstance(ev, dict):
+            continue
+        tipo = ev.get("evento")
+        if tipo == "executor.chamado":
+            pendente = indice
+        elif tipo == "modelo.atendeu" and pendente is not None:
+            rota = _str(ev.get("modelo"))
+            if rota:
+                resolvidos[pendente] = {**resolvidos[pendente], "modelo": rota}
+            pendente = None
+    return resolvidos
 
 
 def _run(arquivo: Path, indice: int, eventos: list[dict[str, Any]], perfil: str) -> dict[str, Any]:

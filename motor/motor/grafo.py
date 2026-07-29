@@ -724,6 +724,17 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                 repositorio_orcamento, sessao, identidade, adaptador,
             )
             if resultado is not None and resultado.texto:
+                # Qual modelo REALMENTE atendeu. `executor.chamado` só consegue
+                # dizer "omniroute/roteado", porque a rota só é escolhida aqui,
+                # percorrendo a cadeia de failover.
+                #
+                # Não é cosmético: o curador perfila aptidão por modelo lendo o
+                # campo `modelo` do log. Sem este evento, Gemini, Opus e Codex
+                # caem todos no mesmo balde `omniroute/roteado` e o perfil por
+                # modelo -- a entrada do flywheel inteiro -- vira uma linha só.
+                log.evento("modelo.atendeu", papel=papel, fase=fase,
+                           modelo=route_id, provedor=provider_id,
+                           tentativa=indice)
                 return RespostaTentativaCusteada(resultado.texto, route_id, provider_id)
         return None
 

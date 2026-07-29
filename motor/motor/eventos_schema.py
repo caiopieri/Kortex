@@ -327,6 +327,17 @@ ESQUEMA: dict[str, dict[str, Any]] = {
             "indistinguivel de run aprovado para quem le o log de fora."
         ),
     },
+    "modelo.atendeu": {
+        "categoria": "modelo",
+        "campos": ["papel", "fase", "modelo", "provedor", "tentativa"],
+        "descricao": (
+            "Qual rota realmente atendeu a chamada, depois de percorrida a cadeia "
+            "de failover. Existe porque 'executor.chamado' so consegue dizer "
+            "'omniroute/roteado' -- a rota so e escolhida dentro de chamar_orcado. "
+            "Sem este evento o curador poe todo modelo no mesmo balde e o perfil "
+            "por modelo, que alimenta o flywheel, vira uma linha so."
+        ),
+    },
     "evidencia.cobertura": {
         "categoria": "missao",
         "campos": ["missao", "execucao", "artefatos"],
@@ -398,6 +409,7 @@ TIPOS_CAMPO: dict[str, Any] = {
     "reprovados": SEQUENCIA_OU_NULO,
     "escaladas": int,
     "execucao": int,
+    "fase": str,
     "artefatos": int,
     "evitando": str,
     "metricas": DICT_OU_NULO,

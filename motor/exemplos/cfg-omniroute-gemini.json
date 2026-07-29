@@ -25,8 +25,14 @@
       ],
       "executor": [
         {
-          "modelo": "codex/gpt-5.6-luna",
-          "provider_id": "openai",
+          "modelo": "agy/gemini-3.1-pro-high",
+          "provider_id": "google",
+          "max_input_tokens": 150000,
+          "max_completion_tokens": 32000
+        },
+        {
+          "modelo": "agy/gemini-3.5-flash-high",
+          "provider_id": "google",
           "max_input_tokens": 150000,
           "max_completion_tokens": 32000
         },
@@ -41,39 +47,27 @@
         {
           "modelo": "agy/claude-opus-4-6-thinking",
           "provider_id": "anthropic",
-          "max_input_tokens": 150000,
+          "max_input_tokens": 64000,
           "max_completion_tokens": 8000
         },
         {
           "modelo": "codex/gpt-5.6-luna",
           "provider_id": "openai",
-          "max_input_tokens": 150000,
-          "max_completion_tokens": 8000
-        },
-        {
-          "modelo": "agy/gemini-3.1-pro-high",
-          "provider_id": "google",
-          "max_input_tokens": 150000,
+          "max_input_tokens": 64000,
           "max_completion_tokens": 8000
         }
       ],
       "evaluator": [
         {
-          "modelo": "codex/gpt-5.6-luna",
-          "provider_id": "openai",
-          "max_input_tokens": 150000,
-          "max_completion_tokens": 8000
-        },
-        {
           "modelo": "agy/claude-opus-4-6-thinking",
           "provider_id": "anthropic",
-          "max_input_tokens": 150000,
+          "max_input_tokens": 64000,
           "max_completion_tokens": 8000
         },
         {
-          "modelo": "agy/gemini-3.1-pro-high",
-          "provider_id": "google",
-          "max_input_tokens": 150000,
+          "modelo": "codex/gpt-5.6-luna",
+          "provider_id": "openai",
+          "max_input_tokens": 64000,
           "max_completion_tokens": 8000
         }
       ],

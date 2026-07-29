@@ -1215,3 +1215,47 @@ def test_evidencia_do_runner_cli_nao_pode_ser_certificada() -> None:
     # o fix marca a PROVENIÊNCIA, não quebra a sombra.
     real = rodar_sombra(proposta, casos, _runner_cli_read_only)
     assert real["status"] == "sombra_concluida"
+
+
+def test_modelo_atendeu_resolve_o_modelo_generico_do_omniroute(tmp_path):
+    """Sob OmniRoute, `executor.chamado` só diz `omniroute/roteado`.
+
+    O curador perfila aptidão POR MODELO lendo esse campo. Sem resolver, Gemini,
+    Opus e Codex caem no mesmo balde e o perfil por modelo — a entrada do
+    flywheel — vira uma linha só. Descoberto rodando a missão do eBay pelo
+    Gemini em 2026-07-29; o log dizia um modelo e o ledger dizia outro.
+    """
+    log = _jsonl(tmp_path, "roteado.jsonl", [
+        {"t": 0.0, "evento": "executor.chamado", "executor": "a", "papel": "executor",
+         "tier": "simples", "tentativa": 1, "modelo": "omniroute/roteado"},
+        {"t": 0.1, "evento": "modelo.atendeu", "papel": "executor", "fase": "executor",
+         "modelo": "agy-gemini-3.1-pro-high", "provedor": "google", "tentativa": 1},
+        {"t": 1.0, "evento": "executor.respondeu", "executor": "a", "tentativa": 1},
+        {"t": 1.1, "evento": "modelo.atendeu", "papel": "verifier", "fase": "verifier",
+         "modelo": "agy-claude-opus-4-6-thinking", "provedor": "anthropic", "tentativa": 1},
+        {"t": 2.0, "evento": "executor.chamado", "executor": "b", "papel": "synthesizer",
+         "tentativa": 1, "modelo": "omniroute/roteado"},
+        {"t": 2.1, "evento": "modelo.atendeu", "papel": "synthesizer", "fase": "synthesizer",
+         "modelo": "codex-gpt-5.6-luna", "provedor": "openai", "tentativa": 1},
+        {"t": 3.0, "evento": "executor.respondeu", "executor": "b", "tentativa": 1},
+    ])
+
+    perfil = analisar([log])
+
+    assert set(perfil["por_modelo"]) == {"agy-gemini-3.1-pro-high", "codex-gpt-5.6-luna"}
+    assert perfil["por_slot_modelo"]["executor/simples"].keys() == {"agy-gemini-3.1-pro-high"}
+
+
+def test_log_sem_modelo_atendeu_passa_intacto(tmp_path):
+    """Log antigo não pode ser corrompido pela resolução.
+
+    O outro desfecho: sem isto, "resolveu tudo" seria indistinguível de
+    "apagou o modelo de todo log anterior ao evento novo".
+    """
+    log = _jsonl(tmp_path, "antigo.jsonl", [
+        {"t": 0.0, "evento": "executor.chamado", "executor": "a", "papel": "executor",
+         "tier": "simples", "tentativa": 1, "modelo": "modelo-antigo"},
+        {"t": 1.0, "evento": "executor.respondeu", "executor": "a", "tentativa": 1},
+    ])
+
+    assert set(analisar([log])["por_modelo"]) == {"modelo-antigo"}
