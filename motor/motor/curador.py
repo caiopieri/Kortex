@@ -481,18 +481,47 @@ def _executar_runner(
     modelo: str,
 ) -> dict[str, Any]:
     try:
-        resultado = runner(deepcopy(caso), modelo)
-    except Exception as exc:
+        entrada = _isolar(caso)
+    except (TypeError, ValueError) as exc:
+        return _reprovacao_por_excecao(exc)
+    try:
+        resultado = runner(entrada, modelo)
+    except KeyboardInterrupt:
+        # Ctrl-C e o operador mandando parar; engolir isso deixaria a sombra
+        # ininterrompivel. Todo o resto vira reprovacao do caso.
+        raise
+    except BaseException as exc:  # noqa: BLE001
+        # `Exception` deixava SystemExit passar, e ai um runner que chama
+        # `sys.exit` derrubava a sombra INTEIRA em vez de reprovar o proprio
+        # caso -- os casos seguintes nunca rodavam e a evidencia saia curta sem
+        # ninguem notar. O curador usa SystemExit nos proprios helpers de CLI,
+        # entao nao e hipotese remota.
         return _reprovacao_por_excecao(exc)
     if not isinstance(resultado, dict):
         return {"aprovado": False, "motivo": f"runner devolveu {type(resultado).__name__}, esperado dict"}
     try:
-        saida = deepcopy(resultado)
-    except Exception as exc:
+        saida = _isolar(resultado)
+    except (TypeError, ValueError) as exc:
         return _reprovacao_por_excecao(exc)
     saida.setdefault("aprovado", False)
     saida.setdefault("motivo", "")
     return saida
+
+
+def _isolar(valor: dict[str, Any]) -> dict[str, Any]:
+    """Copia por serializacao JSON, nao por `deepcopy`.
+
+    `deepcopy` respeita `__deepcopy__`, entao um valor aninhado que devolve `self`
+    entrega ao runner um ALIAS do caso held-out original -- e o runner, que e
+    read-only por contrato, muta a evidencia em memoria. O isolamento inteiro da
+    sombra dependia da boa vontade dos objetos copiados.
+
+    Ida e volta por JSON nao tem esse gancho: o que volta e sempre objeto novo.
+    E a restricao que isso impoe ja existia de outro jeito -- a evidencia e
+    selada com `json.dumps`, entao caso que nao serializa nunca poderia virar
+    evidencia. Aqui ele reprova cedo, com motivo, em vez de tarde e sem selo.
+    """
+    return cast(dict[str, Any], json.loads(json.dumps(valor)))
 
 
 def _evidencia_caso(
@@ -522,7 +551,7 @@ def _evidencia_caso(
         }
 
 
-def _reprovacao_por_excecao(exc: Exception) -> dict[str, Any]:
+def _reprovacao_por_excecao(exc: BaseException) -> dict[str, Any]:
     return {"aprovado": False, "motivo": f"{type(exc).__name__}: {exc}"}
 
 
@@ -1502,7 +1531,25 @@ def _item_ranking(
     custo_real: dict[str, float],
 ) -> dict[str, Any]:
     convergencia = metricas["taxa_convergencia_pos_escalada"] if metricas["escaladas"] else 1.0
-    score = round(metricas["taxa_aprovacao_primeira"] - metricas["taxa_erro"] - (1.0 - convergencia), 4)
+    # Denominador UNICO: a chamada.
+    #
+    # O score antigo subtraia `taxa_erro` (sobre `chamadas`) de
+    # `taxa_aprovacao_primeira` (sobre `verifier_julgados`) -- duas populacoes
+    # diferentes tratadas como comensuraveis. E ignorava `taxa_incompletas`
+    # inteiramente: um modelo que nunca respondia 40% das chamadas pontuava como
+    # se fossem 100% impecaveis, porque chamada que nao volta nao chega ao
+    # verifier e some do denominador que interessava.
+    #
+    # Aprovacoes POR CHAMADA resolve os dois: erro e chamada nao julgada ficam no
+    # denominador sem aprovar nada, entao pesam sozinhos, sem subtracao entre
+    # taxas de bases distintas.
+    chamadas = metricas["chamadas"] or metricas["verifier_julgados"]
+    qualidade = metricas["verifier_aprovados_primeira"] / chamadas if chamadas else 0.0
+    # `taxa_incompletas` entra explicita, ALEM de ja pesar no denominador. E
+    # deliberado: chamada que nunca volta queimou orcamento e prazo e nao
+    # entregou nada -- e pior que erro limpo, que ao menos falha rapido e libera
+    # a retentativa.
+    score = round(qualidade - metricas["taxa_incompletas"] - (1.0 - convergencia), 4)
     custo_usd_por_chamada = custo_real.get(modelo)
     item = {
         "modelo": modelo,

@@ -320,3 +320,115 @@ def test_C05_permissao_e_leitura_olham_o_mesmo_inode(tmp_path, monkeypatch) -> N
 
     assert trocado, "a troca nem chegou a acontecer; o teste não testou nada"
     assert lida == CHAVE, "leu a chave do atacante: permissão e leitura viram inodes diferentes"
+
+
+# ------------------------------------------------------------------ U1 / score
+def test_U1_isolamento_nao_depende_da_boa_vontade_do_objeto_copiado() -> None:
+    """`deepcopy` respeita `__deepcopy__`, e um objeto pode devolver `self`.
+
+    O isolamento inteiro da sombra dependia disso: bastava um valor aninhado
+    recusar a cópia para o runner receber um ALIAS do caso held-out e mutar a
+    evidência em memória. Ida e volta por JSON não tem esse gancho.
+    """
+    class DevolveSiMesmo:
+        def __init__(self) -> None:
+            self.valor = "original"
+
+        def __deepcopy__(self, _memo: dict[int, Any]) -> "DevolveSiMesmo":
+            return self
+
+    espiao = DevolveSiMesmo()
+    casos = _casos(1)
+    casos[0]["entrada"] = {"payload": espiao}
+
+    def runner(caso: dict[str, Any], _modelo: str) -> dict[str, Any]:
+        alvo = caso.get("entrada", {}).get("payload")
+        if hasattr(alvo, "valor"):
+            alvo.valor = "MUTADO"
+        return {"aprovado": True, "custo_usd": 1.0}
+
+    evidencia = rodar_sombra(
+        {**PROPOSTA, "politica": {"min_casos": 1}}, casos, runner, chave=CHAVE,
+    )
+
+    assert espiao.valor == "original"
+    # E o caso reprova com motivo, em vez de virar evidência silenciosa: o que
+    # não serializa nunca poderia ser selado de qualquer forma.
+    assert evidencia["casos"][0]["candidato"]["aprovado"] is False
+
+
+def test_U1_runner_que_chama_sys_exit_reprova_o_caso_e_nao_a_sombra() -> None:
+    """`except Exception` deixava SystemExit passar e matava a rodada inteira.
+
+    Os casos seguintes nunca rodavam e a evidência saía curta — sem ninguém
+    notar, porque uma sombra que aborta no meio se parece com uma que terminou.
+    """
+    def runner(caso: dict[str, Any], modelo: str) -> dict[str, Any]:
+        if caso["id"] == "3":
+            raise SystemExit("runner morreu")
+        return {"aprovado": modelo == "modelo-c", "custo_usd": 1.0}
+
+    evidencia = rodar_sombra(PROPOSTA, _casos(), runner, chave=CHAVE)
+
+    assert len(evidencia["casos"]) == PISO_CASOS
+    assert evidencia["casos"][3]["candidato"]["aprovado"] is False
+    assert "SystemExit" in evidencia["casos"][3]["candidato"]["motivo"]
+
+
+def test_U1_ctrl_c_continua_interrompendo() -> None:
+    """O limite do conserto acima: capturar BaseException não pode engolir Ctrl-C.
+
+    Sombra ininterrompível seria trocar um defeito por outro pior — o operador
+    perde o controle da máquina dele.
+    """
+    def runner(_caso: dict[str, Any], _modelo: str) -> dict[str, Any]:
+        raise KeyboardInterrupt
+
+    with pytest.raises(KeyboardInterrupt):
+        rodar_sombra(PROPOSTA, _casos(), runner, chave=CHAVE)
+
+
+def test_score_penaliza_chamada_que_nunca_volta() -> None:
+    """Modelo que some em 40% das chamadas não pode empatar com um que responde.
+
+    Incompleta não chega ao verifier, então sumia do denominador que o score
+    usava: silêncio saía de graça, e o curador recomendaria justamente o modelo
+    que trava a fábrica.
+    """
+    from motor.curador import _item_ranking  # noqa: PLC0415
+
+    def metricas(**kw: Any) -> dict[str, Any]:
+        base: dict[str, Any] = {
+            "chamadas": 10, "verifier_julgados": 10,
+            "verifier_aprovados_primeira": 8, "taxa_aprovacao_primeira": 0.8,
+            "taxa_erro": 0.0, "incompletas": 0, "taxa_incompletas": 0.0,
+            "escaladas": 0, "taxa_convergencia_pos_escalada": 0.0,
+            "latencia": {"amostras": 1, "mediana": 1.0, "p90": 1.0},
+        }
+        base.update(kw)
+        return base
+
+    bom = _item_ranking("bom", metricas(), {}, {})
+    some = _item_ranking("some", metricas(incompletas=4, taxa_incompletas=0.4), {}, {})
+
+    assert bom["score"] > some["score"]
+
+
+def test_score_usa_um_denominador_so() -> None:
+    """Antes o score subtraía taxa sobre `chamadas` de taxa sobre `julgados`.
+
+    Duas populações diferentes tratadas como comensuráveis. Aqui metade das
+    chamadas nem chegou ao verifier: com um denominador só, isso pesa.
+    """
+    from motor.curador import _item_ranking  # noqa: PLC0415
+
+    base: dict[str, Any] = {
+        "chamadas": 10, "verifier_julgados": 5, "verifier_aprovados_primeira": 5,
+        "taxa_aprovacao_primeira": 1.0, "taxa_erro": 0.0, "incompletas": 0,
+        "taxa_incompletas": 0.0, "escaladas": 0,
+        "taxa_convergencia_pos_escalada": 0.0,
+        "latencia": {"amostras": 1, "mediana": 1.0, "p90": 1.0},
+    }
+
+    # 5 aprovações em 10 chamadas = 0.5, e não 1.0 "de quem foi julgado".
+    assert _item_ranking("m", base, {}, {})["score"] == 0.5

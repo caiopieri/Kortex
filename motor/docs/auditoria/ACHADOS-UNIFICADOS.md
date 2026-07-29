@@ -50,9 +50,14 @@ sem contato entre eles. Dois olhares independentes na mesma linha — o sinal ma
 
 ## 🟡 Severidade média (15, resumidas)
 
-- **Curador:** held-out puramente declarativo (`meta.origem` serve de split *e* proveniência);
-  `de` nunca conferido contra catálogo vigente; U1 furável por `__deepcopy__` que devolve `self`;
-  score de `propor` ignora `taxa_incompletas` e subtrai taxas de denominadores diferentes.
+- **Curador:** held-out puramente declarativo (`meta.origem` serve de split *e* proveniência)
+  e `de` nunca conferido contra catálogo vigente — ambos ABERTOS.
+  ~~U1 furável por `__deepcopy__` que devolve `self`~~ e ~~score de `propor` ignora
+  `taxa_incompletas` e subtrai taxas de denominadores diferentes~~ — fechados em
+  2026-07-29: isolamento passou a ser por ida e volta em JSON (sem gancho de
+  `__deepcopy__`), `_executar_runner` captura `BaseException` reerguendo
+  `KeyboardInterrupt`, e o score virou aprovações POR CHAMADA menos
+  `taxa_incompletas`. Reprodutores em `tests/test_curador_rigor.py`.
 - **Kernel/Spec:** rubrica e `criterios_cobertura` em branco passam (`list[str]`, não `NonBlank`)
   — K3 vale sintaticamente e falha semanticamente; `validador`/`valida` em nó tipo `modelo` valida
   e nunca executa; `jsonschema` não declarado em `pyproject.toml` e o fallback ignora
