@@ -77,6 +77,36 @@ def test_evidencia_registra_engine_os_politica_e_digest_efetivo(runner) -> None:
 
 
 # --------------------------------------------------------------------------
+# Dependências assadas
+# --------------------------------------------------------------------------
+
+def test_dependencias_assadas_estao_presentes(runner, tmp_path) -> None:
+    """Sem rede em runtime, dependência que não foi assada não existe — e o
+    sintoma é o portão de processo falhando com ImportError, que parece defeito
+    do código gerado quando é defeito da imagem.
+
+    Só roda para a imagem do Kortex; a `python:slim` crua legitimamente não tem.
+    """
+    res = _py(runner, tmp_path, "import requests,pytest;print('DEPS-OK')")
+    if "DEPS-OK" not in res.stdout:
+        pytest.skip("imagem sem dependências assadas (base crua)")
+    assert res.returncode == 0
+
+
+def test_pip_install_nao_funciona_mesmo_com_dependencias_assadas(runner, tmp_path) -> None:
+    """Assar dependência NÃO pode ter aberto uma via de instalação em runtime.
+
+    Se `pip install` funcionasse aqui, o código gerado poderia puxar qualquer
+    coisa da internet durante um portão — e a evidência de execução deixaria de
+    dizer o que executou.
+    """
+    res = runner.run(CommandRequest(
+        (_PYTHON, "-m", "pip", "install", "--no-input", "six"), tmp_path, 60,
+    ))
+    assert res.returncode != 0
+
+
+# --------------------------------------------------------------------------
 # Sistema de arquivos
 # --------------------------------------------------------------------------
 

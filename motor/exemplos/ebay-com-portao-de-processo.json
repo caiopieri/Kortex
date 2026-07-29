@@ -1,0 +1,100 @@
+{
+  "versao": "0.1",
+  "padrao": "grafo_dependencias",
+  "missao": {
+    "id": "ebay-portao-de-processo",
+    "objetivo": "Cliente da eBay Browse API com filtros, verificado por um portão que EXECUTA os testes — não por um modelo que leu o código",
+    "contexto": "Mesma missão do eBay de antes, com uma diferença que é o ponto: o portão final é um processo com exit code, e o código usa dependência externa (requests), o que só é possível porque a imagem do sandbox as tem assadas.",
+    "criterios_cobertura": [
+      "a suíte de testes roda no sandbox e sai com exit code 0",
+      "os testes cobrem construção de filtros e tratamento de erro HTTP",
+      "nenhuma credencial aparece em código ou em mensagem de erro"
+    ]
+  },
+  "restricoes": {
+    "teto_custo": 120.0,
+    "max_subagentes": 4,
+    "max_tentativas": 3
+  },
+  "subagentes": [
+    {
+      "id": "codificador",
+      "papel": "executor",
+      "objetivo": "Escrever um módulo Python único com um cliente da eBay Browse API: obtenção de token OAuth2 client_credentials, construção da query com filtros, e chamada de busca",
+      "entradas": {
+        "api": "GET https://api.ebay.com/buy/browse/v1/item_summary/search",
+        "filtros": [
+          "termo de busca livre (q)",
+          "faixa de preço via filter=price:[min..max]",
+          "condição via filter=conditions:{NEW|USED|REFURBISHED}",
+          "tipo de anúncio via filter=buyingOptions:{AUCTION|FIXED_PRICE}",
+          "ordenação via sort"
+        ],
+        "restricoes_tecnicas": [
+          "usar a biblioteca `requests`, que ESTÁ disponível",
+          "credenciais lidas de EBAY_CLIENT_ID e EBAY_CLIENT_SECRET, nunca hardcoded",
+          "nenhum segredo em log, repr ou mensagem de excecao",
+          "timeout explicito em toda chamada HTTP",
+          "levantar excecao propria em erro HTTP, com o status mas sem o corpo cru",
+          "expor `construir_filtros(**kwargs) -> str` e `buscar(...)`, ambas testaveis isoladamente"
+        ],
+        "formato_de_saida": "APENAS codigo Python puro. Sem cercas de markdown, sem ``` , sem explicacao antes ou depois. O resultado e gravado direto num arquivo .py e importado."
+      },
+      "resultado_esperado": "Modulo Python puro, importavel",
+      "rubrica": [
+        "a saida e Python puro, sem cerca de markdown e sem texto explicativo",
+        "`construir_filtros` e `buscar` existem e sao testaveis sem rede",
+        "toda chamada HTTP tem timeout explicito",
+        "nenhuma credencial hardcoded e nenhum segredo em mensagem de erro"
+      ],
+      "produz_artefatos": [
+        {"nome": "ebay.py", "tipo": "python"}
+      ]
+    },
+    {
+      "id": "testador",
+      "papel": "executor",
+      "objetivo": "Escrever a suite pytest do modulo, cobrindo construcao de filtros e tratamento de erro HTTP",
+      "depende_de": ["codificador"],
+      "entradas": {
+        "modulo_alvo": "o modulo esta no MESMO diretorio, no arquivo `codificador__ebay.py`; importe com `import codificador__ebay as ebay`",
+        "restricoes_tecnicas": [
+          "SEM ACESSO A REDE: o sandbox roda com a rede desligada, entao NENHUM teste pode fazer chamada HTTP real",
+          "use `unittest.mock.patch` para simular `requests` — resposta 200, resposta 401 e timeout",
+          "credenciais entram via `monkeypatch.setenv`, nunca literais de credencial real",
+          "cobrir cada filtro da missao e ao menos dois caminhos de erro"
+        ],
+        "formato_de_saida": "APENAS codigo Python puro de testes pytest. Sem cercas de markdown, sem ``` , sem explicacao."
+      },
+      "resultado_esperado": "Suite pytest pura",
+      "rubrica": [
+        "a saida e Python puro, sem cerca de markdown",
+        "nenhum teste faz chamada de rede real; tudo mockado",
+        "cobre construcao de filtros e ao menos dois caminhos de erro"
+      ],
+      "produz_artefatos": [
+        {"nome": "testes.py", "tipo": "python"}
+      ]
+    },
+    {
+      "id": "prova",
+      "tipo": "validador",
+      "valida": "testador",
+      "depende_de": ["testador"],
+      "objetivo": "Executar a suite pytest dentro do sandbox",
+      "resultado_esperado": "exit code 0",
+      "validador": {
+        "kind": "comando",
+        "config": {
+          "comando": "/usr/local/bin/python3 -m pytest testador__testes.py -q",
+          "timeout": 180
+        }
+      }
+    }
+  ],
+  "gates": [],
+  "sintese": {
+    "instrucao": "Resuma o que foi construido, cole o veredito do validador de processo e diga como rodar. Se o validador reprovou, a primeira linha tem que dizer isso.",
+    "formato": "markdown"
+  }
+}
