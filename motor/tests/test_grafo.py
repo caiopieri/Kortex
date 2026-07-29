@@ -229,7 +229,7 @@ def test_rag_injeta_contexto_recuperado_e_emite_evento(tmp_path):
 
     resultado = grafo.invoke({"spec": spec_rag(dataset)}, {"configurable": {"thread_id": "rag"}})
 
-    assert resultado["resposta_final"] == "FINAL"
+    assert resultado["resposta_final"].endswith("FINAL")
     prompt = next(p for papel, p in cliente.chamadas if papel == "executor")
     assert "CONTEXTO RECUPERADO" in prompt
     assert "erro-move" in prompt
@@ -289,7 +289,7 @@ def test_fonte_rag_inexistente_nao_quebra_e_nao_injeta_bloco(tmp_path):
         {"configurable": {"thread_id": "rag-ausente"}},
     )
 
-    assert resultado["resposta_final"] == "FINAL"
+    assert resultado["resposta_final"].endswith("FINAL")
     prompt = next(p for papel, p in cliente.chamadas if papel == "executor")
     assert "CONTEXTO RECUPERADO" not in prompt
     evento = next(e for e in eventos_de(tmp_path) if e["evento"] == "rag.consultado")
@@ -301,7 +301,7 @@ def test_missao_dirigida_por_spec_serializada(tmp_path):
     """Critério de falsificação nº1: a missão roda inteira dirigida por uma spec
     serializada, sem código novo por missão."""
     _, _, _, resultado = roda(tmp_path, faz_roteador(), {"spec": SPEC})
-    assert resultado["resposta_final"] == "SÍNTESE FINAL DA MISSÃO"
+    assert resultado["resposta_final"].endswith("SÍNTESE FINAL DA MISSÃO")
     assert {r["id"] for r in resultado["resultados"]} == {"pesquisa-alfa", "pesquisa-beta"}
     assert all(r["aprovado"] for r in resultado["resultados"])
     tipos = [e["evento"] for e in eventos_de(tmp_path)]
@@ -310,7 +310,7 @@ def test_missao_dirigida_por_spec_serializada(tmp_path):
 
 def test_planner_cria_spec_a_partir_de_missao_texto(tmp_path):
     _, _, _, resultado = roda(tmp_path, faz_roteador(), {"missao_texto": "pesquise oportunidades de receita"})
-    assert resultado["resposta_final"] == "SÍNTESE FINAL DA MISSÃO"
+    assert resultado["resposta_final"].endswith("SÍNTESE FINAL DA MISSÃO")
     assert "spec.criada" in [e["evento"] for e in eventos_de(tmp_path)]
 
 
@@ -391,7 +391,9 @@ def test_gate_fundador_prosseguir(tmp_path):
     assert "__interrupt__" in resultado  # pausado no gate, sem resposta final
     assert resultado["__interrupt__"][0].value["portao"] == "cobertura"
     retomado = grafo.invoke(Command(resume="prosseguir"), config)
-    assert retomado["resposta_final"] == "SÍNTESE FINAL DA MISSÃO"
+    # Carimbado: cobertura liberada com lacunas nunca sai como entregável limpo.
+    assert retomado["resposta_final"].startswith("⚠️ RUN REPROVADO")
+    assert retomado["resposta_final"].endswith("SÍNTESE FINAL DA MISSÃO")
     assert retomado["avaliacao"]["prosseguir_parcial"] is True
     tipos = [e["evento"] for e in eventos_de(tmp_path)]
     assert "escalado" in tipos and "decisao.fundador" in tipos
@@ -406,16 +408,42 @@ def test_gate_fundador_abortar(tmp_path):
     assert "tarefa.abortada" in [e["evento"] for e in eventos_de(tmp_path)]
 
 
-def test_gate_auto_mode_nao_interrompe(tmp_path):
-    """Auto-mode (Corte C): cobertura reprova mas NÃO pausa — resolve 'prosseguir' e
-    completa a missão sozinho. Sem 'escalado', com 'gate.auto'."""
+def test_gate_auto_sem_juiz_independente_chama_o_fundador(tmp_path):
+    """MUDANÇA DE CONTRATO (2026-07-29). Antes, auto-mode resolvia 'prosseguir' e
+    nunca pausava — e foi assim que uma missão com cobertura REPROVADA saiu
+    apresentada como entregue. Portão que reprova e deixa passar não é portão.
+
+    Agora o default de cobertura é 'escalar'. Aqui não há juiz independente (o
+    Stub não tem cadeia de rotas), então a escalada é impossível — e a ausência
+    de segunda opinião NÃO vira aprovação: o motor degrada para humano.
+    """
     log = LogEventos(tmp_path / "log.jsonl")
     grafo = construir_grafo(ClienteStub(faz_roteador(evaluator_aprova=False)), log,
                             checkpointer=InMemorySaver(), politica=PoliticaGates(auto_mode=True))
     res = grafo.invoke({"spec": SPEC}, {"configurable": {"thread_id": "auto"}})
+    assert "__interrupt__" in res
+    assert res["__interrupt__"][0].value["portao"] == "cobertura"
+    tipos = [e["evento"] for e in eventos_de(tmp_path)]
+    assert "escalada.indisponivel" in tipos and "escalado" in tipos
+
+
+def test_prosseguir_cego_continua_possivel_mas_so_como_override_explicito(tmp_path):
+    """A porta insegura não é fechada — é obrigada a ter nome.
+
+    Quem quiser um automático que nunca pare escreve `cobertura=prosseguir` e
+    assume; o que não pode é isso ser o default e o operador descobrir depois,
+    lendo um relatório otimista de um run vermelho. E mesmo aqui o carimbo
+    entrega o estado real.
+    """
+    log = LogEventos(tmp_path / "log.jsonl")
+    grafo = construir_grafo(
+        ClienteStub(faz_roteador(evaluator_aprova=False)), log,
+        checkpointer=InMemorySaver(),
+        politica=PoliticaGates(auto_mode=True, overrides={"cobertura": "prosseguir"}))
+    res = grafo.invoke({"spec": SPEC}, {"configurable": {"thread_id": "auto"}})
     assert "__interrupt__" not in res
-    assert res["resposta_final"] == "SÍNTESE FINAL DA MISSÃO"
     assert res["avaliacao"]["prosseguir_parcial"] is True
+    assert res["resposta_final"].startswith("⚠️ RUN REPROVADO")
     tipos = [e["evento"] for e in eventos_de(tmp_path)]
     assert "gate.auto" in tipos and "escalado" not in tipos
 
@@ -474,7 +502,7 @@ def test_gate_cobertura_preencher_reexecuta_reprovado_uma_vez(tmp_path):
     resultado = grafo.invoke({"spec": SPEC}, {"configurable": {"thread_id": "preencher"}})
 
     assert "__interrupt__" not in resultado
-    assert resultado["resposta_final"] == "SÍNTESE FINAL DA MISSÃO"
+    assert resultado["resposta_final"].endswith("SÍNTESE FINAL DA MISSÃO")
     eventos = eventos_de(tmp_path)
     assert sum(1 for e in eventos if e["evento"] == "lacuna.preenchida") == 1
     assert any(e["evento"] == "lacuna.preenchida" and e["subagente"] == "pesquisa-alfa"
@@ -611,7 +639,7 @@ def test_gate_cobertura_preencher_teto_dois_prossegue_parcial(tmp_path):
 
     assert resultado["avaliacao"]["aprovado"] is False
     assert resultado["avaliacao"]["prosseguir_parcial"] is True
-    assert resultado["resposta_final"] == "FINAL"
+    assert resultado["resposta_final"].endswith("FINAL")
     assert estado["evaluator"] == 3
     assert estado["execucoes"] == {"A": 1, "B": 3, "C": 3}
     eventos = eventos_de(tmp_path)
@@ -677,7 +705,7 @@ def test_gate_cobertura_preencher_sem_no_nomeado_eh_inerte(tmp_path):
 
     resultado = grafo.invoke({"spec": SPEC}, {"configurable": {"thread_id": "inerte"}})
 
-    assert resultado["resposta_final"] == "FINAL"
+    assert resultado["resposta_final"].endswith("FINAL")
     assert estado == {"executor": len(SPEC["subagentes"]), "evaluator": 1}
     eventos = eventos_de(tmp_path)
     assert not any(e["evento"].startswith("reconciliacao.") for e in eventos)

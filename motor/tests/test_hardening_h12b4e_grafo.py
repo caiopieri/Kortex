@@ -62,7 +62,7 @@ def test_resume_manual_preserva_veredito_sem_recobrar_evaluator(tmp_path):
     retomado = grafo.invoke(Command(resume="prosseguir"), config)
     assert efeitos.count("evaluator") == 1
     assert retomado["avaliacao"]["lacunas"] == ["persistida"]
-    assert retomado["resposta_final"] == "final parcial"
+    assert retomado["resposta_final"].endswith("final parcial")
 
 
 def test_duas_reconciliacoes_nao_reusam_identidade_executor_verifier(tmp_path):

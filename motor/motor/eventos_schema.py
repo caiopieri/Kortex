@@ -296,6 +296,37 @@ ESQUEMA: dict[str, dict[str, Any]] = {
         "campos": ["motivo"],
         "descricao": "Sinaliza aborto da tarefa por decisão humana ou política.",
     },
+    "gate.escalado": {
+        "categoria": "gate",
+        "campos": ["portao", "evitando", "tentativa"],
+        "descricao": (
+            "Portao reprovado subiu para juiz independente. `evitando` e o provedor "
+            "que ja julgou: escalar para o mesmo provedor e pedir a mesma opiniao "
+            "mais alto, nao uma segunda opiniao."
+        ),
+    },
+    "escalada.esgotada": {
+        "categoria": "gate",
+        "campos": ["portao", "escaladas"],
+        "descricao": "Teto de escaladas atingido; o portao degrada para decisao humana.",
+    },
+    "escalada.indisponivel": {
+        "categoria": "gate",
+        "campos": ["portao"],
+        "descricao": (
+            "Nao havia juiz independente disponivel. Falta de segunda opiniao nao e "
+            "aprovacao: degrada para humano."
+        ),
+    },
+    "tarefa.reprovada": {
+        "categoria": "missao",
+        "campos": ["missao", "reprovados"],
+        "descricao": (
+            "Missao terminou com no reprovado ou cobertura liberada com lacunas. "
+            "Existe porque 'tarefa.concluida' sozinho fazia run reprovado ser "
+            "indistinguivel de run aprovado para quem le o log de fora."
+        ),
+    },
     "tarefa.concluida": {
         "categoria": "missao",
         "campos": ["missao"],
@@ -354,6 +385,9 @@ TIPOS_CAMPO: dict[str, Any] = {
     "k": int,
     "kind": str,
     "lacunas": SEQUENCIA_OU_NULO,
+    "reprovados": SEQUENCIA_OU_NULO,
+    "escaladas": int,
+    "evitando": str,
     "metricas": DICT_OU_NULO,
     "missao": str,
     "moeda": str,

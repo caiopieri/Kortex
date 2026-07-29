@@ -18,10 +18,17 @@ from typing import Optional
 
 # Decisão automática default por gate quando auto_mode liga e não há override.
 # "prosseguir" (nunca "abortar"): auto = "não me interrompa", não "mate a missão".
-AUTO_DEFAULT: dict[str, str] = {"plano": "prosseguir", "cobertura": "prosseguir"}
+#
+# Cobertura default = "escalar", NÃO "prosseguir". Um portão que reprova e deixa
+# passar não é portão: em 2026-07-28 o `--auto` liberou cobertura reprovada e a
+# missão saiu apresentada como entregue. "escalar" mantém a promessa de não
+# interromper sem abrir mão da prova — sobe para um modelo independente fazer o
+# papel do fundador, e só quando a escalada se esgota é que ele é chamado.
+# "prosseguir" continua existindo, mas agora só como override EXPLÍCITO.
+AUTO_DEFAULT: dict[str, str] = {"plano": "prosseguir", "cobertura": "escalar"}
 DECISOES_POR_GATE: dict[str, frozenset[str]] = {
     "plano": frozenset({"prosseguir", "abortar"}),
-    "cobertura": frozenset({"prosseguir", "preencher", "abortar"}),
+    "cobertura": frozenset({"escalar", "prosseguir", "preencher", "abortar"}),
     "promocao": frozenset({"aprovar", "rejeitar"}),
     "autorizacao": frozenset({"aprovar", "negar"}),
     "risco": frozenset({"aceitar", "rejeitar"}),

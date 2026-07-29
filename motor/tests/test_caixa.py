@@ -83,7 +83,7 @@ def test_interrupt_cria_nota_e_decisao_conclui(tmp_path):
     resultado = rodar_com_caixa(grafo, {"spec": SPEC}, config, caixa, log)
     t.join(timeout=5)
 
-    assert resultado["resposta_final"] == "SÍNTESE FINAL DA MISSÃO"
+    assert resultado["resposta_final"].endswith("SÍNTESE FINAL DA MISSÃO")
     assert resultado["avaliacao"]["prosseguir_parcial"] is True
 
     # a nota pendente foi arquivada como `decidida ... — cobertura.md`
@@ -139,7 +139,7 @@ def test_resume_pos_crash_sqlite(tmp_path):
     retomado = grafo2.invoke(Command(resume="prosseguir"), config)
     conn2.close()
 
-    assert retomado["resposta_final"] == "SÍNTESE FINAL DA MISSÃO"
+    assert retomado["resposta_final"].endswith("SÍNTESE FINAL DA MISSÃO")
     assert retomado["avaliacao"]["prosseguir_parcial"] is True
 
 
@@ -175,7 +175,7 @@ def test_resume_pos_crash_via_runner(tmp_path):
     retomado = rodar_com_caixa(grafo2, {"spec": SPEC}, config, caixa2, log)
     conn2.close()
 
-    assert retomado["resposta_final"] == "SÍNTESE FINAL DA MISSÃO"
+    assert retomado["resposta_final"].endswith("SÍNTESE FINAL DA MISSÃO")
     tipos = [e["evento"] for e in eventos_de(tmp_path / "log.jsonl")]
     assert "decisao.retomada" in tipos  # nota reaproveitada, não recriada
 

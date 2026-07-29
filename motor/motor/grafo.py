@@ -20,7 +20,7 @@ import shlex
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Annotated, Any, Callable, Optional, TypedDict, cast
+from typing import Annotated, Any, Callable, Mapping, Optional, TypedDict, cast
 from uuid import uuid4
 
 from langgraph.graph import END, START, StateGraph
@@ -76,6 +76,7 @@ class EstadoMotor(TypedDict, total=False):
     rodada_reconciliacao: int
     preenchimento_vazio: bool
     decisao_cobertura: str
+    escaladas_cobertura: int
 
 
 class _VereditoVerifier(BaseModel):
@@ -198,8 +199,61 @@ Instrução de síntese: {instrucao} (formato: {formato})
 
 Resultados verificados dos subagentes:
 {resultados}
-
+{reprovados}
 Produza a resposta final da missão."""
+
+# Bloco só presente quando algo reprovou. Antes ele não existia: o sintetizador
+# recebia SOMENTE os resultados aprovados e mesmo assim a spec lhe pedia para
+# declarar reprovação. Ele não mentiu — não tinha como saber. Sonegar a falha e
+# depois cobrar honestidade sobre ela é um jeito garantido de produzir relatório
+# otimista.
+BLOCO_REPROVADOS = """
+ATENÇÃO — estes subagentes REPROVARAM e a missão NÃO está pronta:
+{itens}
+A resposta precisa dizer isso explicitamente. Não apresente o trabalho como
+entregue."""
+
+
+def reprovados_de(state: Mapping[str, Any]) -> list[dict[str, str]]:
+    """Nós reprovados, do estado — não da narrativa de ninguém."""
+    return [
+        {"id": str(r.get("id", "")), "motivo": str(r.get("motivo", ""))}
+        for r in state.get("resultados", []) or []
+        if isinstance(r, dict) and not r.get("aprovado")
+    ]
+
+
+def carimbar_reprovacao(texto: str, state: Mapping[str, Any]) -> str:
+    """Prefixa a síntese com o veredito REAL, derivado do estado.
+
+    Existe porque instrução de prompt não segura isto. Em 2026-07-28 o
+    sintetizador apresentou como entrega pronta um run cujo validador havia
+    falhado, com a spec mandando, em português claro, declarar a reprovação na
+    primeira linha. Pedir a um modelo que seja honesto sobre o próprio fracasso
+    é pedir; carimbo montado a partir do log é fato.
+
+    O cabeçalho é montado aqui, não pelo modelo, então ele não tem como reescrevê-lo
+    nem omiti-lo. É isto que torna verdadeira a promessa de que nada vira "pronto"
+    sem prova que atravesse um portão.
+    """
+    avaliacao = state.get("avaliacao") or {}
+    reprovados = reprovados_de(state)
+    lacunas = [str(item) for item in (avaliacao.get("lacunas") or [])]
+    # `prosseguir_parcial` é o gate de cobertura tendo sido liberado APESAR de
+    # reprovado; sem ele o run pode ter nós reprovados e ainda assim ter passado.
+    parcial = bool(avaliacao.get("prosseguir_parcial"))
+    if not reprovados and not parcial:
+        return texto
+
+    linhas = ["⚠️ RUN REPROVADO — o conteúdo abaixo NÃO é entregável."]
+    if parcial:
+        linhas.append("portão de cobertura: liberado com lacunas, não aprovado")
+    for lacuna in lacunas:
+        linhas.append(f"lacuna: {lacuna}")
+    for item in reprovados:
+        motivo = item["motivo"].strip().splitlines()[0] if item["motivo"].strip() else "sem motivo"
+        linhas.append(f"subagente reprovado: {item['id']} — {motivo}")
+    return "\n".join(linhas) + "\n\n---\n\n" + texto
 
 
 ORDEM_TIER = ["simples", "media", "complexa"]
@@ -363,6 +417,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                     rotas: dict[str, dict[str, Any]] | None = None,
                     escalar_em_retry: bool = False,
                     max_rodadas_reconciliacao: int = 1,
+                    max_escaladas: int = 1,
                     perfil_execucao: str = "certificado",
                     ferramentas_permitidas: list[str] | None = None,
                     command_runner: CommandRunner | None = None,
@@ -375,6 +430,12 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
     """Compila o grafo. `cliente` e `log` são injetados — o grafo não conhece backends.
     `politica` decide quais gates pausam (manual) ou resolvem sozinhos (auto-mode);
     ausente = tudo manual (comportamento default).
+    `max_escaladas` limita quantas vezes um portao reprovado sobe para um juiz
+    independente. E a contencao principal do modo automatico: escalada e o
+    primeiro lugar do sistema onde uma falha gera trabalho sozinha, e sem teto um
+    portao teimoso consome a assinatura a noite inteira. Esgotado, o motor CHAMA
+    O FUNDADOR -- degrada para humano, nunca para liberacao silenciosa.
+
     `max_rodadas_reconciliacao` limita quantas rodadas de preenchimento de cobertura
     podem rodar antes de seguir parcial."""
     politica = politica or PoliticaGates()
@@ -1172,6 +1233,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
 
     def avaliar_cobertura(
         state: EstadoMotor, resultados: list[dict[str, Any]], ordinal: int,
+        evitar_provedor: str | None = None,
     ) -> dict[str, Any]:
         spec = state["spec"]
         reprovados = [r["id"] for r in resultados if not r["aprovado"]]
@@ -1192,6 +1254,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                 resultados=json.dumps(resultados, ensure_ascii=False),
             ),
             ordinal,
+            RequisitosTentativaCusteada(evitar_provedor=evitar_provedor),
         )
         if resposta is None:
             raise ErroOrcamento("evaluator orcado indisponivel")
@@ -1213,12 +1276,50 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         if not isinstance(nomes, list):
             nomes = []
         nos = list(dict.fromkeys([str(n) for n in nomes] + refazer_reprovados))
-        veredito = {**veredito, "nos_a_refazer": nos}
+        # `julgado_por` fica no veredito para a escalada poder EXCLUIR quem já
+        # julgou. Sem isso, escalar chamaria o mesmo provedor de novo — que é
+        # pedir a mesma opinião mais alto, não uma segunda opinião.
+        veredito = {**veredito, "nos_a_refazer": nos, "julgado_por": resposta.provider_id}
         return veredito
 
+    def escalar_cobertura(
+        state: EstadoMotor, veredito: dict[str, Any], escaladas: int,
+    ) -> dict[str, Any] | None:
+        """Sobe o portão reprovado para um juiz INDEPENDENTE fazer o papel do fundador.
+
+        Independente de verdade: exclui o provedor que acabou de julgar. Chamar o
+        mesmo provedor de novo é pedir a mesma opinião mais alto — e um segundo
+        veredito correlacionado com o primeiro dá aparência de revisão sem ser
+        revisão.
+
+        Devolve o novo veredito, ou None quando não há juiz independente
+        disponível ou o teto de escaladas se esgotou. None significa DEGRADAR
+        PARA HUMANO, nunca liberar: o modo automático pode chamar o fundador,
+        mas não pode enganá-lo.
+        """
+        if escaladas >= max_escaladas:
+            log.evento("escalada.esgotada", portao="cobertura", escaladas=escaladas)
+            return None
+        anterior = str(veredito.get("julgado_por") or "") or None
+        log.evento("gate.escalado", portao="cobertura",
+                   evitando=anterior or "", tentativa=escaladas + 1)
+        try:
+            novo = avaliar_cobertura(
+                state, state["resultados"],
+                state.get("rodada_reconciliacao", 0) + 1,
+                evitar_provedor=anterior,
+            )
+        except ErroOrcamento:
+            # Sem juiz independente disponível (papel com uma alternativa só, cota
+            # esgotada) o portão NÃO relaxa. Falta de segunda opinião não é
+            # aprovação.
+            log.evento("escalada.indisponivel", portao="cobertura")
+            return None
+        return novo
+
     def decidir_cobertura(veredito: dict[str, Any], permitir_preencher: bool) -> Any:
-        auto = _decisao_texto(politica.decisao_auto("cobertura", default="prosseguir"))
-        if auto not in {None, "prosseguir", "preencher", "abortar"}:
+        auto = _decisao_texto(politica.decisao_auto("cobertura", default="escalar"))
+        if auto not in {None, "escalar", "prosseguir", "preencher", "abortar"}:
             auto = None
         if auto == "preencher" and not permitir_preencher:
             auto = "prosseguir"
@@ -1355,6 +1456,44 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
             log.evento("reconciliacao.esgotada", rodadas=rodada)
         decisao = decidir_cobertura(veredito, permitir_preencher=permitir)
         texto = _decisao_texto(decisao) or "abortar"
+
+        escaladas = state.get("escaladas_cobertura", 0)
+        if texto == "escalar":
+            novo = escalar_cobertura(state, veredito, escaladas)
+            if novo is not None:
+                escaladas += 1
+                if novo.get("aprovado"):
+                    # Juiz independente aprovou: o portão passa de verdade, sem
+                    # `prosseguir_parcial` -- e portanto sem carimbo. Foi provado,
+                    # nao liberado.
+                    log.evento("portao.aprovado", portao="cobertura")
+                    return {"decisao_cobertura": "", "escaladas_cobertura": escaladas,
+                            "avaliacao": novo}
+                # Reprovou de novo. Se ainda da para reconciliar, reconcilia; foi
+                # o que o fundador faria.
+                if permitir and novo.get("nos_a_refazer"):
+                    return {"decisao_cobertura": "preencher",
+                            "escaladas_cobertura": escaladas, "avaliacao": novo}
+                veredito = novo
+            # Sem juiz independente, teto estourado, ou reprovado sem o que
+            # refazer: DEGRADA PARA HUMANO. Automatico pode chamar o fundador;
+            # nao pode liberar em silencio.
+            log.evento("escalado", para="fundador")
+            decisao = interrupt({
+                "portao": "cobertura",
+                "pergunta": ("Cobertura reprovada e a escalada automática não resolveu. "
+                             "Prosseguir com síntese parcial ou abortar?"),
+                "lacunas": veredito.get("lacunas", []),
+                "opcoes": "prosseguir · abortar",
+            })
+            log.evento("decisao.fundador", portao="cobertura", decisao=str(decisao))
+            texto = _decisao_texto(decisao) or "abortar"
+            return {
+                "decisao_cobertura": texto,
+                "escaladas_cobertura": escaladas,
+                "avaliacao": finalizar_cobertura(veredito, decisao),
+            }
+
         if permitir and texto == "preencher":
             return {"decisao_cobertura": texto}
         return {
@@ -1398,6 +1537,12 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                     resultados=json.dumps(
                         [r for r in state["resultados"] if r["aprovado"]], ensure_ascii=False,
                     ),
+                    reprovados=(
+                        BLOCO_REPROVADOS.format(itens="\n".join(
+                            f"- {item['id']}: {item['motivo'][:400]}"
+                            for item in reprovados_de(state)
+                        )) if reprovados_de(state) else ""
+                    ),
                 ),
                 1,
             )
@@ -1413,7 +1558,13 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                 **state.get("avaliacao", {}), "aprovado": False, "abortada": True,
                 "motivo": "synthesizer orcado indisponivel",
             }}
-        resposta = resposta_orcada.texto
+        resposta = carimbar_reprovacao(resposta_orcada.texto, state)
+        reprovados = reprovados_de(state)
+        if reprovados or (state.get("avaliacao") or {}).get("prosseguir_parcial"):
+            # Evento próprio: "tarefa.concluida" sozinho fazia run reprovado ser
+            # indistinguível de run aprovado para quem lê o log de fora.
+            log.evento("tarefa.reprovada", missao=spec["missao"]["id"],
+                       reprovados=[item["id"] for item in reprovados])
         log.evento("tarefa.concluida", missao=spec["missao"]["id"])
         return {"resposta_final": resposta}
 

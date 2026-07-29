@@ -345,11 +345,17 @@ def test_f3_gate_de_fluxo_e_automatizavel_mas_nunca_por_default(gate):
     outra: gate sensível (promocao/autorizacao/risco/dinheiro) trata de
     permissão, risco e dinheiro e é sempre manual; gate de fluxo só decide se o
     motor te acorda. Mesmo assim, o default é manual — `auto_mode` é opt-in
-    explícito — e "prosseguir" nunca significa "aprovado": o avaliador de
+    explícito — e a decisão automática nunca significa "aprovado": o avaliador de
     cobertura continua rodando e é ele que atesta qualidade.
+
+    ATUALIZADO 2026-07-29: o automático de `cobertura` passou de "prosseguir"
+    para "escalar". "prosseguir" liberava o portão REPROVADO e foi assim que uma
+    missão vermelha saiu apresentada como entregue. `plano` segue "prosseguir"
+    porque ele decide seguir com um plano, não declarar trabalho pronto.
     """
+    esperado = {"plano": "prosseguir", "cobertura": "escalar"}[gate]
     assert PoliticaGates().decisao_auto(gate) is None, "default tem que ser manual"
-    assert PoliticaGates(auto_mode=True).decisao_auto(gate) == "prosseguir"
+    assert PoliticaGates(auto_mode=True).decisao_auto(gate) == esperado
     # e o operador pode recravar manual mesmo com auto_mode ligado
     politica = PoliticaGates(auto_mode=True, overrides={gate: "manual"})
     assert politica.decisao_auto(gate) is None
