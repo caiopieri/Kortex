@@ -15,7 +15,7 @@ from motor.orcamento import (
     ResultadoTentativa,
     RotaTentativaCusteada,
 )
-from tests.audit_corpus import casos, executar_caso, materializar_corpus
+from tests.audit_corpus import casos, executar_lote, materializar_corpus
 
 CASOS = casos("H03")
 assert len(CASOS) == 4
@@ -26,9 +26,20 @@ def corpus_auditoria(tmp_path_factory: pytest.TempPathFactory) -> Path:
     return materializar_corpus(tmp_path_factory.mktemp("audit-corpus-h03"))
 
 
+@pytest.fixture(scope="module")
+def _lote_h03(corpus_auditoria) -> dict[str, str | None]:
+    """Roda os casos deste dono num subprocesso só.
+
+    Um subprocesso por caso pagava ~4,7s de arranque de interpretador para
+    milissegundos de trabalho útil. A atribuição por caso continua: cada
+    reprodutor abaixo lê o próprio veredito.
+    """
+    return executar_lote(corpus_auditoria, CASOS)
+
+
 @pytest.mark.parametrize("nodeid", CASOS, ids=lambda nodeid: nodeid.split("::", 1)[1])
-def test_reprodutor_h03(corpus_auditoria: Path, nodeid: str) -> None:
-    executar_caso(corpus_auditoria, nodeid)
+def test_reprodutor_h03(_lote_h03: dict[str, str | None], nodeid: str) -> None:
+    assert _lote_h03[nodeid] is None, _lote_h03[nodeid]
 
 
 def _sub(sid: str, depende_de: list[str] | None = None) -> dict[str, Any]:

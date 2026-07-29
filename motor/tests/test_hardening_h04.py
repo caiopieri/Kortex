@@ -9,7 +9,7 @@ from typing import Any, cast
 import pytest
 
 from tests.helpers_grafo import construir_grafo_teste as construir_grafo
-from tests.audit_corpus import casos, executar_caso, materializar_corpus
+from tests.audit_corpus import casos, executar_lote, materializar_corpus
 from tests.runner_fake import RunnerFake
 
 
@@ -18,9 +18,20 @@ def corpus_h04(tmp_path_factory: pytest.TempPathFactory):
     return materializar_corpus(tmp_path_factory.mktemp("audit-corpus-h04"))
 
 
+@pytest.fixture(scope="module")
+def _lote_h04(corpus_h04) -> dict[str, str | None]:
+    """Roda os casos deste dono num subprocesso só.
+
+    Um subprocesso por caso pagava ~4,7s de arranque de interpretador para
+    milissegundos de trabalho útil. A atribuição por caso continua: cada
+    reprodutor abaixo lê o próprio veredito.
+    """
+    return executar_lote(corpus_h04, casos("H04"), plugins=("tests.runner_fake",))
+
+
 @pytest.mark.parametrize("nodeid", casos("H04"))
-def test_reprodutor_h04(corpus_h04, nodeid: str) -> None:
-    executar_caso(corpus_h04, nodeid, plugins=("tests.runner_fake",))
+def test_reprodutor_h04(_lote_h04: dict[str, str | None], nodeid: str) -> None:
+    assert _lote_h04[nodeid] is None, _lote_h04[nodeid]
 
 
 class _Nulo:

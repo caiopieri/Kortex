@@ -5,7 +5,7 @@ import pytest
 
 from motor.caixa import CaixaFundador
 from motor.servico import _validar_job_id
-from tests.audit_corpus import casos, executar_caso, materializar_corpus
+from tests.audit_corpus import casos, executar_lote, materializar_corpus
 
 
 CASOS_H10A = casos("H10a")
@@ -20,9 +20,20 @@ def test_manifest_h10a_tem_sete_casos() -> None:
     assert len(CASOS_H10A) == 7
 
 
+@pytest.fixture(scope="module")
+def _lote_h10a(corpus_h10a) -> dict[str, str | None]:
+    """Roda os casos deste dono num subprocesso só.
+
+    Um subprocesso por caso pagava ~4,7s de arranque de interpretador para
+    milissegundos de trabalho útil. A atribuição por caso continua: cada
+    reprodutor abaixo lê o próprio veredito.
+    """
+    return executar_lote(corpus_h10a, CASOS_H10A)
+
+
 @pytest.mark.parametrize("nodeid", CASOS_H10A)
-def test_reprodutor_h10a(corpus_h10a: Path, nodeid: str) -> None:
-    executar_caso(corpus_h10a, nodeid)
+def test_reprodutor_h10a(_lote_h10a: dict[str, str | None], nodeid: str) -> None:
+    assert _lote_h10a[nodeid] is None, _lote_h10a[nodeid]
 
 
 class _Log:

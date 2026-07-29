@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 import pytest
 
 from motor.curador import certificar_sombra, preparar_promocao_gated, rodar_sombra
 from motor.eventos_schema import ESQUEMA, tipos, valido
-from tests.audit_corpus import casos, executar_caso, materializar_corpus
+from tests.audit_corpus import casos, executar_lote, materializar_corpus
 
 
 CONTRATOS_CURADOR = {
@@ -25,9 +24,23 @@ CONTRATOS_CURADOR = {
 }
 
 
-@pytest.mark.parametrize("nodeid", casos("H06b"))
-def test_reprodutores_h06b(tmp_path: Path, nodeid: str) -> None:
-    executar_caso(materializar_corpus(tmp_path), nodeid)
+CASOS_H06B = casos("H06b")
+
+
+@pytest.fixture(scope="module")
+def _lote_h06b(tmp_path_factory: pytest.TempPathFactory) -> dict[str, str | None]:
+    """Roda os casos deste dono num subprocesso só.
+
+    Este era o pior caso da suíte: além do arranque de interpretador por caso,
+    ele reextraía o tar do corpus INTEIRO a cada um.
+    """
+    corpus = materializar_corpus(tmp_path_factory.mktemp("corpus-h06b"))
+    return executar_lote(corpus, CASOS_H06B)
+
+
+@pytest.mark.parametrize("nodeid", CASOS_H06B)
+def test_reprodutores_h06b(_lote_h06b: dict[str, str | None], nodeid: str) -> None:
+    assert _lote_h06b[nodeid] is None, _lote_h06b[nodeid]
 
 
 def _eventos_emitidos() -> list[dict[str, Any]]:

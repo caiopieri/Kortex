@@ -7,7 +7,7 @@ from typing import Any, cast
 import pytest
 
 from motor.curador import certificar_sombra, preparar_promocao_gated, rodar_sombra
-from tests.audit_corpus import casos, executar_caso, materializar_corpus
+from tests.audit_corpus import casos, executar_lote, materializar_corpus
 
 
 CASOS_H09B = casos("H09b")
@@ -22,9 +22,20 @@ def test_manifest_h09b_tem_dois_casos_e_um_replacement() -> None:
     assert len(CASOS_H09B) == 2
 
 
+@pytest.fixture(scope="module")
+def _lote_h09b(corpus_h09b) -> dict[str, str | None]:
+    """Roda os casos deste dono num subprocesso só.
+
+    Um subprocesso por caso pagava ~4,7s de arranque de interpretador para
+    milissegundos de trabalho útil. A atribuição por caso continua: cada
+    reprodutor abaixo lê o próprio veredito.
+    """
+    return executar_lote(corpus_h09b, CASOS_H09B)
+
+
 @pytest.mark.parametrize("nodeid", CASOS_H09B)
-def test_reprodutor_h09b(corpus_h09b: Path, nodeid: str) -> None:
-    executar_caso(corpus_h09b, nodeid)
+def test_reprodutor_h09b(_lote_h09b: dict[str, str | None], nodeid: str) -> None:
+    assert _lote_h09b[nodeid] is None, _lote_h09b[nodeid]
 
 
 class RepoFake:

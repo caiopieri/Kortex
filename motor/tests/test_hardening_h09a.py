@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 
 from motor.curador import certificar_sombra, rodar_sombra
-from tests.audit_corpus import casos, executar_caso, materializar_corpus
+from tests.audit_corpus import casos, executar_lote, materializar_corpus
 
 
 CASOS_H09A = casos("H09a")
@@ -27,9 +27,20 @@ def test_manifest_h09a_tem_vinte_casos_autoritativos() -> None:
     assert len(CASOS_H09A) == 20
 
 
+@pytest.fixture(scope="module")
+def _lote_h09a(corpus_h09a) -> dict[str, str | None]:
+    """Roda os casos deste dono num subprocesso só.
+
+    Um subprocesso por caso pagava ~4,7s de arranque de interpretador para
+    milissegundos de trabalho útil. A atribuição por caso continua: cada
+    reprodutor abaixo lê o próprio veredito.
+    """
+    return executar_lote(corpus_h09a, CASOS_H09A)
+
+
 @pytest.mark.parametrize("nodeid", CASOS_H09A)
-def test_reprodutor_h09a(corpus_h09a: Path, nodeid: str) -> None:
-    executar_caso(corpus_h09a, nodeid)
+def test_reprodutor_h09a(_lote_h09a: dict[str, str | None], nodeid: str) -> None:
+    assert _lote_h09a[nodeid] is None, _lote_h09a[nodeid]
 
 
 def _sombra(

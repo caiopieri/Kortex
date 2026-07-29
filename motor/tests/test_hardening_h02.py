@@ -8,7 +8,7 @@ import pytest
 from pydantic import ValidationError
 
 from motor.spec import WorkflowSpec
-from tests.audit_corpus import casos, executar_caso, materializar_corpus
+from tests.audit_corpus import casos, executar_lote, materializar_corpus
 
 MOTOR = Path(__file__).parents[1]
 EXEMPLO = MOTOR / "exemplos/especialista-csv-json.json"
@@ -25,9 +25,20 @@ def corpus_auditoria(tmp_path_factory: pytest.TempPathFactory) -> Path:
     return materializar_corpus(tmp_path_factory.mktemp("audit-corpus-h02"))
 
 
+@pytest.fixture(scope="module")
+def _lote_h02(corpus_auditoria) -> dict[str, str | None]:
+    """Roda os casos deste dono num subprocesso só.
+
+    Um subprocesso por caso pagava ~4,7s de arranque de interpretador para
+    milissegundos de trabalho útil. A atribuição por caso continua: cada
+    reprodutor abaixo lê o próprio veredito.
+    """
+    return executar_lote(corpus_auditoria, CASOS)
+
+
 @pytest.mark.parametrize("nodeid", CASOS, ids=lambda nodeid: nodeid.split("::", 1)[1])
-def test_reprodutor_h02(corpus_auditoria: Path, nodeid: str) -> None:
-    executar_caso(corpus_auditoria, nodeid)
+def test_reprodutor_h02(_lote_h02: dict[str, str | None], nodeid: str) -> None:
+    assert _lote_h02[nodeid] is None, _lote_h02[nodeid]
 
 
 @pytest.mark.parametrize("capacidade", ["", "   "])

@@ -18,7 +18,7 @@ from typing_extensions import TypedDict
 
 from motor.caixa import CaixaFundador, LedgerCaixa, rodar_com_caixa
 from motor.modelos import ClienteStub
-from tests.audit_corpus import casos, executar_caso, materializar_corpus
+from tests.audit_corpus import casos, executar_lote, materializar_corpus
 from tests.helpers_grafo import GerenciadorJobsTeste as GerenciadorJobs
 from tests.test_grafo import SPEC, faz_roteador
 
@@ -51,9 +51,20 @@ def test_manifest_h11_tem_cinco_casos() -> None:
     assert len(CASOS_H11) == 5
 
 
+@pytest.fixture(scope="module")
+def _lote_h11(corpus_h11) -> dict[str, str | None]:
+    """Roda os casos deste dono num subprocesso só.
+
+    Um subprocesso por caso pagava ~4,7s de arranque de interpretador para
+    milissegundos de trabalho útil. A atribuição por caso continua: cada
+    reprodutor abaixo lê o próprio veredito.
+    """
+    return executar_lote(corpus_h11, CASOS_H11)
+
+
 @pytest.mark.parametrize("nodeid", CASOS_H11)
-def test_reprodutor_h11(corpus_h11: Path, nodeid: str) -> None:
-    executar_caso(corpus_h11, nodeid)
+def test_reprodutor_h11(_lote_h11: dict[str, str | None], nodeid: str) -> None:
+    assert _lote_h11[nodeid] is None, _lote_h11[nodeid]
 
 
 class _Estado(TypedDict):
