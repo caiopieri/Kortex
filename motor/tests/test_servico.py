@@ -475,7 +475,12 @@ def test_status_concluido_traz_refs_de_artefato_sem_blob(tmp_path):
 
     status = aguardar_estado(gerenciador, "artefato", "concluido")
 
-    assert status["resposta_final"] == "FINAL SEM BLOB"
+    # O rodapé de cobertura de evidência entra depois do texto do sintetizador:
+    # esta missão declara um artefato e nenhum portão de execução o cobre, então
+    # a resposta diz isso. Comparar o texto cru voltaria a permitir entregar
+    # artefato não provado com aparência de pronto.
+    assert status["resposta_final"].startswith("FINAL SEM BLOB")
+    assert "0 de 1 artefatos passaram por portão de execução" in status["resposta_final"]
     assert status["run"] == {
         "job_id": "artefato",
         "workspace": str(tmp_path / "runs" / "artefato"),

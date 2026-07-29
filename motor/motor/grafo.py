@@ -214,6 +214,102 @@ A resposta precisa dizer isso explicitamente. Não apresente o trabalho como
 entregue."""
 
 
+# Força da prova que cobre um artefato, do mais forte para o mais fraco.
+#
+# A distinção não é acadêmica: é o que a landing promete ("nada vira 'pronto' sem
+# prova que atravesse um portão") e o que separa o Kortex de encadear LLMs.
+#
+# - `execucao`: um processo rodou o artefato e o exit code decidiu. É prova de
+#   COMPORTAMENTO -- a suíte passou, o script rodou.
+# - `estrutural`: checagem determinística de forma (`schema_json`, `contem`).
+#   Prova que o artefato tem o formato certo, NÃO que ele funciona. JSON que
+#   valida contra schema pode estar inteiramente errado.
+# - `opiniao`: só um modelo leu e achou bom. É o default quando não há validador,
+#   porque o verifier sempre roda -- e é exatamente o que qualquer um consegue
+#   encadeando LLMs.
+FORCA_DA_PROVA = {"comando": "execucao", "schema_json": "estrutural",
+                  "contem": "estrutural"}
+ORDEM_DA_PROVA = ["execucao", "estrutural", "opiniao"]
+
+
+def cobertura_de_evidencia(spec: Mapping[str, Any]) -> dict[str, Any]:
+    """Que tipo de prova cobre cada artefato da missão. Lido da spec, não do log.
+
+    A razão execução/total é a métrica do produto: ela responde "quanto disto foi
+    provado e quanto foi só opinado". Sem medir, "portão de evidência" é slogan.
+    """
+    subagentes = spec.get("subagentes") or []
+    if not isinstance(subagentes, list):
+        return {"artefatos": [], "execucao": 0, "total": 0}
+
+    # Prova mais forte encontrada por alvo. Vários validadores no mesmo nó valem
+    # pelo melhor: quem roda a suíte E confere o schema está coberto por execução.
+    prova_por_alvo: dict[str, str] = {}
+    for sub in subagentes:
+        if not isinstance(sub, dict) or sub.get("tipo") != "validador":
+            continue
+        kind = str((sub.get("validador") or {}).get("kind") or "")
+        forca = FORCA_DA_PROVA.get(kind)
+        alvo = str(sub.get("valida") or "")
+        if not forca or not alvo:
+            continue
+        atual = prova_por_alvo.get(alvo)
+        if atual is None or ORDEM_DA_PROVA.index(forca) < ORDEM_DA_PROVA.index(atual):
+            prova_por_alvo[alvo] = forca
+
+    artefatos: list[dict[str, Any]] = []
+    for sub in subagentes:
+        if not isinstance(sub, dict) or sub.get("tipo") == "validador":
+            continue
+        produzidos = [
+            str(a.get("nome", "")) for a in (sub.get("produz_artefatos") or [])
+            if isinstance(a, dict)
+        ]
+        if not produzidos:
+            continue
+        node_id = str(sub.get("id", ""))
+        artefatos.append({
+            "id": node_id,
+            "artefatos": produzidos,
+            "prova": prova_por_alvo.get(node_id, "opiniao"),
+        })
+
+    return {
+        "artefatos": artefatos,
+        "execucao": sum(1 for a in artefatos if a["prova"] == "execucao"),
+        "total": len(artefatos),
+    }
+
+
+def carimbar_evidencia(texto: str, state: Mapping[str, Any]) -> str:
+    """Declara na resposta que tipo de prova cobriu os artefatos.
+
+    O buraco que isto fecha: até aqui, uma missão com ZERO portão de processo
+    terminava com uma resposta tão confiante quanto uma cujos testes passaram.
+    Ausência de prova era indistinguível de prova -- o pior modo de falha
+    possível para um produto cuja tese é justamente a prova.
+
+    Neutro de propósito, e não alarmista. Missão de texto não tem o que executar,
+    e carimbar aviso vermelho nela treinaria você a ignorar o carimbo -- que é
+    como se perde o carimbo de reprovação junto.
+    """
+    spec = state.get("spec") or {}
+    cobertura = cobertura_de_evidencia(spec)
+    if not cobertura["total"]:
+        return texto
+
+    linhas = [
+        f"Cobertura de evidência: {cobertura['execucao']} de {cobertura['total']} "
+        f"artefatos passaram por portão de execução."
+    ]
+    for item in cobertura["artefatos"]:
+        if item["prova"] != "execucao":
+            rotulo = ("verificado só por opinião de modelo" if item["prova"] == "opiniao"
+                      else "checado só na forma, não no comportamento")
+            linhas.append(f"- {item['id']} ({', '.join(item['artefatos'])}): {rotulo}")
+    return texto + "\n\n---\n\n" + "\n".join(linhas)
+
+
 def reprovados_de(state: Mapping[str, Any]) -> list[dict[str, str]]:
     """Nós reprovados, do estado — não da narrativa de ninguém."""
     return [
@@ -1558,7 +1654,13 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                 **state.get("avaliacao", {}), "aprovado": False, "abortada": True,
                 "motivo": "synthesizer orcado indisponivel",
             }}
-        resposta = carimbar_reprovacao(resposta_orcada.texto, state)
+        # Evidência primeiro, reprovação por cima: o veredito mais grave tem que
+        # ficar na primeira linha, e o rodapé de cobertura embaixo do texto.
+        resposta = carimbar_evidencia(resposta_orcada.texto, state)
+        resposta = carimbar_reprovacao(resposta, state)
+        cobertura = cobertura_de_evidencia(spec)
+        log.evento("evidencia.cobertura", missao=spec["missao"]["id"],
+                   execucao=cobertura["execucao"], artefatos=cobertura["total"])
         reprovados = reprovados_de(state)
         if reprovados or (state.get("avaliacao") or {}).get("prosseguir_parcial"):
             # Evento próprio: "tarefa.concluida" sozinho fazia run reprovado ser

@@ -77,6 +77,21 @@
       ]
     },
     {
+      "id": "contrato-do-modulo",
+      "tipo": "validador",
+      "valida": "codificador",
+      "depende_de": ["codificador"],
+      "objetivo": "Provar que o modulo importa e expoe a API prometida, independente do que a suite cobre",
+      "resultado_esperado": "exit code 0",
+      "validador": {
+        "kind": "comando",
+        "config": {
+          "comando": "/usr/local/bin/python3 -c \"import codificador__ebay as m; assert callable(m.construir_filtros) and callable(m.buscar)\"",
+          "timeout": 30
+        }
+      }
+    },
+    {
       "id": "prova",
       "tipo": "validador",
       "valida": "testador",

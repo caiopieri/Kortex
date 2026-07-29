@@ -69,6 +69,12 @@
         "há tratamento explícito de HTTP 429 com backoff, e de resposta de erro da API",
         "nenhuma credencial aparece hardcoded, em log ou em mensagem de exceção",
         "toda chamada HTTP tem timeout explícito"
+      ],
+      "produz_artefatos": [
+        {
+          "nome": "ebay.py",
+          "tipo": "python"
+        }
       ]
     },
     {
@@ -89,6 +95,12 @@
         "cobre ao menos dois erros: HTTP 429 e resposta de erro da API",
         "cobre a tradução dos filtros para os parâmetros da query",
         "os testes falham se o comportamento asseverado for removido do código"
+      ],
+      "produz_artefatos": [
+        {
+          "nome": "testes.py",
+          "tipo": "python"
+        }
       ]
     },
     {

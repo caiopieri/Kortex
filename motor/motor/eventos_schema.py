@@ -327,6 +327,16 @@ ESQUEMA: dict[str, dict[str, Any]] = {
             "indistinguivel de run aprovado para quem le o log de fora."
         ),
     },
+    "evidencia.cobertura": {
+        "categoria": "missao",
+        "campos": ["missao", "execucao", "artefatos"],
+        "descricao": (
+            "Quantos artefatos da missao passaram por portao de EXECUCAO, de um "
+            "total de artefatos produzidos. E a razao processo/opiniao medida no "
+            "log: sem ela, missao sem nenhum portao de processo era indistinguivel "
+            "de missao com a suite passando."
+        ),
+    },
     "tarefa.concluida": {
         "categoria": "missao",
         "campos": ["missao"],
@@ -387,6 +397,8 @@ TIPOS_CAMPO: dict[str, Any] = {
     "lacunas": SEQUENCIA_OU_NULO,
     "reprovados": SEQUENCIA_OU_NULO,
     "escaladas": int,
+    "execucao": int,
+    "artefatos": int,
     "evitando": str,
     "metricas": DICT_OU_NULO,
     "missao": str,

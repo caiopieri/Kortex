@@ -64,6 +64,21 @@
       ]
     },
     {
+      "id": "contrato-do-modulo",
+      "tipo": "validador",
+      "valida": "codificador",
+      "depende_de": ["codificador"],
+      "objetivo": "Provar que o modulo importa e expoe a funcao prometida, sem depender do que os testes fazem",
+      "resultado_esperado": "exit code 0",
+      "validador": {
+        "kind": "comando",
+        "config": {
+          "comando": "/usr/local/bin/python3 -c \"import codificador__solucao as m; assert callable(m.parse_faixa_preco)\"",
+          "timeout": 30
+        }
+      }
+    },
+    {
       "id": "prova",
       "tipo": "validador",
       "valida": "testador",
