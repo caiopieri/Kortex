@@ -5,7 +5,9 @@ from typing import Any
 
 import pytest
 
-from motor.curador import certificar_sombra, rodar_sombra
+from motor.curador import PISO_CASOS, certificar_sombra, rodar_sombra
+
+CHAVE = b"chave-de-teste-h09c-com-32-bytes!!"
 
 
 def test_media_de_custos_extremos_permanece_finita_ao_certificar() -> None:
@@ -13,21 +15,22 @@ def test_media_de_custos_extremos_permanece_finita_ao_certificar() -> None:
         "slot": "executor/t1",
         "titular": "modelo-t",
         "candidato": "modelo-c",
-        "politica": {"min_casos": 2},
+        "politica": {"min_casos": PISO_CASOS},
     }
     casos = [{
         "id": str(indice),
         "slot": proposta["slot"],
         "meta": {"split": "held-out", "proveniencia": "suite-h09c"},
-        "titular": {"aprovado": indice == 0, "custo_usd": 1e308},
-    } for indice in range(2)]
-    evidencia = rodar_sombra(
-        proposta,
-        casos,
-        lambda _caso, _modelo: {"aprovado": True, "custo_usd": 1e307},
-    )
+    } for indice in range(PISO_CASOS)]
 
-    resultado = certificar_sombra(evidencia)
+    def runner(caso: dict[str, Any], modelo: str) -> dict[str, Any]:
+        if modelo == "modelo-t":
+            return {"aprovado": caso["id"] == "0", "custo_usd": 1e308}
+        return {"aprovado": True, "custo_usd": 1e307}
+
+    evidencia = rodar_sombra(proposta, casos, runner, chave=CHAVE)
+
+    resultado = certificar_sombra(evidencia, chave=CHAVE)
 
     assert evidencia["titular"]["custo_medio_usd"] == 1e308
     assert resultado["status"] == "certificado"
@@ -50,18 +53,22 @@ def test_identidade_e_proveniencia_whitespace_sao_vetadas(campo: str, motivo: st
         "slot": "executor/t1",
         "titular": "modelo-t",
         "candidato": "modelo-c",
-        "politica": {"min_casos": 1},
+        "politica": {"min_casos": PISO_CASOS},
     }
-    caso: dict[str, Any] = {
-        "id": "caso-1",
+    # PISO_CASOS casos identicos no que importa: o veto testado e de identidade,
+    # nao de tamanho de amostra, e com menos que o piso a rejeicao viria pelo
+    # motivo errado -- o teste passaria medindo outra coisa.
+    casos: list[dict[str, Any]] = [{
+        "id": f"caso-{indice}",
         "slot": proposta["slot"],
         "meta": {"split": "held-out", "proveniencia": "suite-h09c"},
-        "titular": {"aprovado": False, "custo_usd": 2.0},
-    }
+    } for indice in range(PISO_CASOS)]
+    caso = casos[0]
     if campo in proposta:
         proposta[campo] = "   "
         if campo == "slot":
-            caso["slot"] = "   "
+            for outro in casos:
+                outro["slot"] = "   "
     elif campo == "id":
         caso["id"] = "   "
     else:
@@ -69,8 +76,9 @@ def test_identidade_e_proveniencia_whitespace_sao_vetadas(campo: str, motivo: st
 
     evidencia = rodar_sombra(
         proposta,
-        [caso],
-        lambda _caso, _modelo: {"aprovado": True, "custo_usd": 1.0},
+        casos,
+        lambda _caso, modelo: {"aprovado": modelo == "modelo-c", "custo_usd": 1.0},
+        chave=CHAVE,
     )
 
-    assert certificar_sombra(evidencia)["motivo"] == motivo
+    assert certificar_sombra(evidencia, chave=CHAVE)["motivo"] == motivo

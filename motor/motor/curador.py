@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import hmac
 import json
 import math
+import os
 import statistics
 import sys
 from collections import defaultdict
@@ -14,6 +16,19 @@ from typing import Any, Callable, Protocol, cast
 
 SEM_TIER = "sem-tier"
 DESCONHECIDO = "desconhecido"
+
+# Piso de casos held-out, e nivel de significancia para trocar de modelo.
+#
+# Ate 2026-07-29, `min_casos` era autodeclarado pelo proponente e a unica
+# checagem era `>= 1`: um auditor certificou troca de modelo com n=1. Com o
+# `>` estrito entre proporcoes arredondadas, 1 acerto contra 0 era "candidato
+# vence titular" -- ruido com aparencia de rigor, e ruido que reescreve o
+# catalogo do motor.
+#
+# 30 nao e magico; e o menor n em que o teste abaixo consegue distinguir sinal
+# de moeda honesta com folga, e ainda cabe numa rodada de sombra pagavel.
+PISO_CASOS = 30
+ALFA = 0.05
 
 
 class RepositorioCertificacoes(Protocol):
@@ -226,13 +241,23 @@ def rodar_sombra(
     emitir_evento: Callable[[str, Any], None] | None = None,
     *,
     runner_executa_modelo: bool = True,
+    chave: bytes | None = None,
 ) -> dict[str, Any]:
-    """Roda um modelo candidato em sombra sobre casos held-out, read-only.
+    """Roda titular E candidato em sombra sobre os mesmos casos held-out, read-only.
 
-    Recebe casos cujo campo ``titular`` carrega o resultado ja observado do modelo atual.
-    Executa o candidato via runner injetado e retorna evidencia comparativa serializavel,
-    sem alterar catalogo, config, roteamento ou logs originais. Se ``emitir_evento`` for
-    informado, emite ``curador.sombra`` com o resumo da sombra.
+    Executa OS DOIS modelos via runner injetado, caso a caso, e retorna evidencia
+    comparativa serializavel, sem alterar catalogo, config, roteamento ou logs
+    originais. Se ``emitir_evento`` for informado, emite ``curador.sombra``.
+
+    Ate 2026-07-29 o titular NAO era executado: seu resultado vinha de
+    ``caso["titular"]``, um dict do chamador. Quem montava os casos controlava os
+    dois lados da comparacao, entao "o candidato vence o titular" media a
+    honestidade de quem escreveu o arquivo, nao os modelos. Medir o titular custa
+    o dobro de chamadas e e o unico jeito de a comparacao ser uma medicao.
+
+    Rodar os dois nos MESMOS casos tambem torna o desenho pareado, que e o que
+    permite a `certificar_sombra` usar McNemar em vez de comparar proporcoes
+    soltas -- ganho de rigor E de poder estatistico pelo mesmo dado.
 
     ``runner_executa_modelo=False`` marca a evidencia como ``sombra_simulada``, que
     `certificar_sombra` RECUSA. Existe porque o runner do ``--sombra`` da CLI so ecoa
@@ -260,8 +285,10 @@ def rodar_sombra(
     evidencias: list[dict[str, Any]] = []
 
     for caso in casos_eval:
+        # O titular vem do runner, nao do arquivo: e o ponto inteiro de U-04.
+        resultado_tit = _executar_runner(runner, caso, modelo_titular)
         resultado_cand = _executar_runner(runner, caso, modelo_candidato)
-        evidencia_caso = _evidencia_caso(caso, modelo_titular, resultado_cand)
+        evidencia_caso = _evidencia_caso(caso, resultado_tit, resultado_cand)
         titular.registrar(evidencia_caso["titular"])
         candidato.registrar(evidencia_caso["candidato"])
         evidencias.append(evidencia_caso)
@@ -280,7 +307,13 @@ def rodar_sombra(
         "casos": evidencias,
         "casos_ignorados": casos_ignorados,
     }
-    evidencia["evidencia_sha256"] = _selo_sombra(evidencia)
+    # Nome mudou de `evidencia_sha256` para `evidencia_mac` de proposito: o campo
+    # antigo anunciava um hash publico, e evidencia v2 antiga passaria a ser lida
+    # como MAC valido se o nome tivesse ficado. Chave errada aqui vira `None`, e
+    # `_recomputar_sombra` rejeita -- falha fechada.
+    evidencia["evidencia_mac"] = _selo_sombra(
+        evidencia, chave if chave is not None else carregar_chave_selo(),
+    )
 
     if emitir_evento is not None:
         emitir_evento("curador.sombra", {
@@ -298,15 +331,25 @@ def rodar_sombra(
 def certificar_sombra(
     evidencia: dict[str, Any],
     emitir_evento: Callable[[str, Any], None] | None = None,
+    *,
+    chave: bytes | None = None,
 ) -> dict[str, Any]:
     """Compara titular vs candidato da evidencia de sombra e certifica ou rejeita.
 
-    Certifica somente se o candidato tem taxa de aprovacao estritamente maior E
-    custo medio estritamente menor que o titular. Custo ausente (None) em qualquer
-    lado veta por custo incomparavel. Empate de qualidade nao certifica.
+    Certifica somente se o candidato vence em qualidade com significancia
+    estatistica (McNemar exato, p < ALFA) E tem custo medio estritamente menor.
+    Custo ausente (None) em qualquer lado veta por custo incomparavel.
+
+    Os dois eixos usam criterios diferentes de proposito. Qualidade e proporcao
+    medida em amostra pequena, entao precisa de teste; custo por caso vem de
+    tabela de preco por token, que e determinista -- para ele, `<` basta.
     """
     slot = evidencia.get("slot") if isinstance(evidencia.get("slot"), str) else None
-    titular, candidato, erro = _recomputar_sombra(evidencia)
+    if chave is None:
+        chave = carregar_chave_selo()
+    titular, candidato, erro, discordantes = _recomputar_sombra(evidencia, chave)
+    so_candidato, so_titular = discordantes
+    p_valor = _p_mcnemar(so_candidato, so_titular)
 
     taxa_titular = titular.get("taxa_aprovacao")
     taxa_candidato = candidato.get("taxa_aprovacao")
@@ -319,10 +362,11 @@ def certificar_sombra(
     elif not all(_taxa_sombra_valida(valor) for valor in (taxa_titular, taxa_candidato)):
         motivo = "metricas recomputadas invalidas"
         status = "rejeitado"
-    elif float(cast(int | float, taxa_candidato)) <= float(cast(int | float, taxa_titular)):
+    elif p_valor >= ALFA:
         motivo = (
-            f"candidato nao vence titular em qualidade: "
-            f"aprovacao {taxa_candidato:.4f} vs {taxa_titular:.4f}"
+            f"candidato nao vence titular em qualidade com significancia: "
+            f"aprovacao {taxa_candidato:.4f} vs {taxa_titular:.4f}, "
+            f"discordantes {so_candidato}-{so_titular}, p={p_valor:.4f} >= {ALFA}"
         )
         status = "rejeitado"
     elif not all(_custo_sombra_valido(valor) for valor in (custo_titular, custo_candidato)):
@@ -330,8 +374,8 @@ def certificar_sombra(
         status = "rejeitado"
     elif float(cast(int | float, custo_candidato)) < float(cast(int | float, custo_titular)):
         motivo = (
-            f"candidato vence titular: aprovacao {taxa_candidato:.4f} > {taxa_titular:.4f}, "
-            f"custo {custo_candidato} < {custo_titular}"
+            f"candidato vence titular: aprovacao {taxa_candidato:.4f} > {taxa_titular:.4f} "
+            f"(p={p_valor:.4f} < {ALFA}), custo {custo_candidato} < {custo_titular}"
         )
         status = "certificado"
     else:
@@ -348,6 +392,11 @@ def certificar_sombra(
         "titular": titular,
         "candidato": candidato,
         "motivo": motivo,
+        "pareado": {
+            "so_candidato": so_candidato,
+            "so_titular": so_titular,
+            "p_valor": round(p_valor, 6),
+        },
     }
 
     if emitir_evento is not None:
@@ -407,7 +456,7 @@ def preparar_promocao_gated(
         "evidencia": {
             "titular": titular,
             "candidato": candidato,
-            "evidencia_sha256": evidencia.get("evidencia_sha256"),
+            "evidencia_mac": evidencia.get("evidencia_mac"),
             "motivo_certificacao": recomputada.get("motivo"),
         },
     }
@@ -448,7 +497,7 @@ def _executar_runner(
 
 def _evidencia_caso(
     caso: dict[str, Any],
-    modelo_titular: str,
+    resultado_titular: dict[str, Any],
     resultado_candidato: dict[str, Any],
 ) -> dict[str, Any]:
     try:
@@ -460,7 +509,7 @@ def _evidencia_caso(
             "proveniencia": deepcopy(
                 meta.get("proveniencia", origem) if isinstance(meta, dict) else None
             ),
-            "titular": _resumo_caso(caso.get("titular"), modelo_titular),
+            "titular": resultado_titular,
             "candidato": resultado_candidato,
         }
     except Exception as exc:
@@ -468,11 +517,7 @@ def _evidencia_caso(
             "id": None,
             "split": None,
             "proveniencia": None,
-            "titular": {
-                "modelo": modelo_titular,
-                "aprovado": False,
-                "motivo": "evidencia do caso indisponivel",
-            },
+            "titular": _reprovacao_por_excecao(exc),
             "candidato": _reprovacao_por_excecao(exc),
         }
 
@@ -488,10 +533,53 @@ def _copia_segura(valor: Any) -> Any:
         return None
 
 
-def _selo_sombra(evidencia: dict[str, Any]) -> str | None:
+def carregar_chave_selo(caminho: str | Path | None = None) -> bytes | None:
+    """Le a chave do selo de um arquivo fora do repositorio. `None` se ausente.
+
+    O caminho vem de ``KORTEX_CURADOR_CHAVE``. A chave em si nunca entra em
+    variavel de ambiente -- ambiente vaza em `ps`, em dump de crash e em log de
+    subprocesso; caminho de arquivo nao carrega segredo nenhum.
+
+    Chave curta ou legivel por grupo/outros e recusada: uma chave que qualquer
+    processo da maquina le nao autentica coisa alguma, e aceitar em silencio
+    seria pior que nao ter selo, porque pareceria protecao.
+    """
+    bruto = caminho if caminho is not None else os.environ.get("KORTEX_CURADOR_CHAVE")
+    if not bruto:
+        return None
+    arquivo = Path(bruto)
+    try:
+        modo = arquivo.stat().st_mode
+        chave = arquivo.read_bytes()
+    except OSError:
+        return None
+    if modo & 0o077 or len(chave) < 32:
+        return None
+    return chave
+
+
+def _selo_sombra(evidencia: dict[str, Any], chave: bytes | None) -> str | None:
+    """MAC da evidencia. Sem chave nao ha selo -- e sem selo nao ha certificacao.
+
+    Ate 2026-07-29 isto era um sha256 puro, recomputavel por qualquer um: provava
+    que a evidencia nao corrompeu no caminho, nao que o curador a produziu. Quem
+    escrevesse um JSON a mao computava o mesmo hash e certificava a propria
+    invencao.
+
+    O que o HMAC contem: evidencia que chega DE FORA -- de outra maquina, de um
+    diretorio de runs compartilhado, de um arquivo que um modelo escreveu -- nao
+    certifica. Esse e o caminho real do flywheel, e e o que passava.
+
+    O que ele NAO contem, e vale dizer sem enfeite: quem ja executa como o mesmo
+    usuario nesta maquina le a chave e forja o selo. Fechar isso exigiria separar
+    o processo que produz evidencia do que a assina, e essa separacao nao existe
+    hoje. Selo autentica origem no transporte, nao contra o dono da maquina.
+    """
+    if chave is None:
+        return None
     conteudo = {
-        chave: evidencia.get(chave)
-        for chave in ("versao", "status", "slot", "modelos", "politica", "casos")
+        campo: evidencia.get(campo)
+        for campo in ("versao", "status", "slot", "modelos", "politica", "casos")
     }
     try:
         serializado = json.dumps(
@@ -499,12 +587,12 @@ def _selo_sombra(evidencia: dict[str, Any]) -> str | None:
         )
     except (TypeError, ValueError):
         return None
-    return hashlib.sha256(serializado.encode("utf-8")).hexdigest()
+    return hmac.new(chave, serializado.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
 def _recomputar_sombra(
-    evidencia: dict[str, Any],
-) -> tuple[dict[str, Any], dict[str, Any], str | None]:
+    evidencia: dict[str, Any], chave: bytes | None = None,
+) -> tuple[dict[str, Any], dict[str, Any], str | None, tuple[int, int]]:
     modelos = evidencia.get("modelos")
     modelo_t = modelos.get("titular") if isinstance(modelos, dict) else None
     modelo_c = modelos.get("candidato") if isinstance(modelos, dict) else None
@@ -512,45 +600,83 @@ def _recomputar_sombra(
     candidato = _ContadorSombra(modelo_c if isinstance(modelo_c, str) else DESCONHECIDO)
 
     if evidencia.get("versao") != 2 or evidencia.get("status") != "sombra_concluida":
-        return titular.resumo(), candidato.resumo(), "evidencia de sombra invalida"
-    selo = evidencia.get("evidencia_sha256")
-    if not isinstance(selo, str) or selo != _selo_sombra(evidencia):
-        return titular.resumo(), candidato.resumo(), "evidencia de sombra nao selada"
+        return titular.resumo(), candidato.resumo(), "evidencia de sombra invalida", (0, 0)
+    selo = evidencia.get("evidencia_mac")
+    esperado = _selo_sombra(evidencia, chave)
+    # `compare_digest` porque o selo agora e segredo derivado: comparacao curta-
+    # circuito vaza o prefixo correto byte a byte para quem pode tentar de novo.
+    if esperado is None or not isinstance(selo, str) or not hmac.compare_digest(selo, esperado):
+        return titular.resumo(), candidato.resumo(), "evidencia de sombra nao selada", (0, 0)
     slot = evidencia.get("slot")
     if not (isinstance(slot, str) and slot.strip()) or not all(
         isinstance(modelo, str) and modelo.strip()
         for modelo in (modelo_t, modelo_c)
     ):
-        return titular.resumo(), candidato.resumo(), "identidade da sombra invalida"
+        return titular.resumo(), candidato.resumo(), "identidade da sombra invalida", (0, 0)
     politica = evidencia.get("politica")
     min_casos = politica.get("min_casos") if isinstance(politica, dict) else None
-    if isinstance(min_casos, bool) or not isinstance(min_casos, int) or min_casos < 1:
-        return titular.resumo(), candidato.resumo(), "politica min_casos invalida"
+    if isinstance(min_casos, bool) or not isinstance(min_casos, int) or min_casos < PISO_CASOS:
+        return (
+            titular.resumo(), candidato.resumo(),
+            f"politica min_casos invalida: piso e {PISO_CASOS}", (0, 0),
+        )
     casos = evidencia.get("casos")
     if not isinstance(casos, list) or len(casos) < min_casos:
-        return titular.resumo(), candidato.resumo(), "casos held-out insuficientes"
+        return titular.resumo(), candidato.resumo(), "casos held-out insuficientes", (0, 0)
 
     ids: set[str] = set()
+    # Discordantes de McNemar: `so_candidato` e caso que o titular errou e o
+    # candidato acertou; `so_titular`, o inverso. Caso em que os dois concordam
+    # nao carrega informacao sobre qual e melhor e sai da conta -- e por isso que
+    # o teste pareado tem mais poder que comparar as duas taxas soltas.
+    so_candidato = so_titular = 0
     for caso in casos:
         if not isinstance(caso, dict):
-            return titular.resumo(), candidato.resumo(), "caso held-out invalido"
+            return titular.resumo(), candidato.resumo(), "caso held-out invalido", (0, 0)
         caso_id = caso.get("id")
         if not isinstance(caso_id, str) or not caso_id.strip() or caso_id in ids:
-            return titular.resumo(), candidato.resumo(), "ids de casos invalidos ou duplicados"
+            return titular.resumo(), candidato.resumo(), "ids de casos invalidos ou duplicados", (0, 0)
         ids.add(caso_id)
         proveniencia = caso.get("proveniencia")
         if caso.get("split") != "held-out" or not (
             isinstance(proveniencia, str) and proveniencia.strip()
         ):
-            return titular.resumo(), candidato.resumo(), "proveniencia held-out invalida"
+            return titular.resumo(), candidato.resumo(), "proveniencia held-out invalida", (0, 0)
         resultado_t, resultado_c = caso.get("titular"), caso.get("candidato")
         if not isinstance(resultado_t, dict) or not isinstance(resultado_c, dict):
-            return titular.resumo(), candidato.resumo(), "resultado de caso invalido"
+            return titular.resumo(), candidato.resumo(), "resultado de caso invalido", (0, 0)
         if type(resultado_t.get("aprovado")) is not bool or type(resultado_c.get("aprovado")) is not bool:
-            return titular.resumo(), candidato.resumo(), "aprovado precisa ser bool"
+            return titular.resumo(), candidato.resumo(), "aprovado precisa ser bool", (0, 0)
+        aprovado_t = resultado_t.get("aprovado") is True
+        aprovado_c = resultado_c.get("aprovado") is True
+        so_candidato += int(aprovado_c and not aprovado_t)
+        so_titular += int(aprovado_t and not aprovado_c)
         titular.registrar(resultado_t)
         candidato.registrar(resultado_c)
-    return titular.resumo(), candidato.resumo(), None
+    return titular.resumo(), candidato.resumo(), None, (so_candidato, so_titular)
+
+
+def _p_mcnemar(so_candidato: int, so_titular: int) -> float:
+    """p unilateral do teste exato de McNemar: candidato e melhor que o titular?
+
+    Sob a hipotese nula "os dois modelos sao equivalentes", cada caso em que eles
+    DISCORDAM e uma moeda honesta -- tanto faz quem acertou. Entao a pergunta
+    vira: entre `n` discordancias, ver `so_candidato` a favor do candidato e
+    surpreendente demais para ser sorte?
+
+    Exato (binomial), nao a aproximacao qui-quadrado: com poucas discordancias a
+    aproximacao mente para o lado otimista, e e exatamente nesse regime -- sombra
+    pequena, cara de rodar -- que este teste vai viver.
+
+    Consequencia deliberada: com menos de 5 discordancias nenhum p alcanca 0.05,
+    entao nao ha como certificar. Isso nao e limitacao a contornar, e a resposta
+    certa -- 3 a 0 e o placar esperado de moeda em 1 de cada 8 tentativas.
+    """
+    n = so_candidato + so_titular
+    if n == 0:
+        return 1.0
+    cauda = sum(math.comb(n, k) for k in range(so_candidato, n + 1))
+    return float(cauda) / float(2 ** n)
 
 
 def _custo_sombra_valido(valor: Any) -> bool:
@@ -566,12 +692,6 @@ def _media_custos(valores: list[float]) -> float | None:
     for indice, valor in enumerate(valores, start=1):
         media += (valor - media) / indice
     return round(media, 6) if math.isfinite(media) else None
-
-
-def _resumo_caso(titular: Any, modelo: str) -> dict[str, Any]:
-    if not isinstance(titular, dict):
-        return {"modelo": modelo, "aprovado": False, "motivo": "titular ausente"}
-    return deepcopy(titular)
 
 
 class _ContadorSombra:

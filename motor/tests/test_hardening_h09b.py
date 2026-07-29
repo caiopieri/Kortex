@@ -6,7 +6,7 @@ from typing import Any, cast
 
 import pytest
 
-from motor.curador import certificar_sombra, preparar_promocao_gated, rodar_sombra
+from motor.curador import PISO_CASOS, certificar_sombra, preparar_promocao_gated, rodar_sombra
 from tests.audit_corpus import casos, executar_lote, materializar_corpus
 
 
@@ -38,6 +38,22 @@ def test_reprodutor_h09b(_lote_h09b: dict[str, str | None], nodeid: str) -> None
     assert _lote_h09b[nodeid] is None, _lote_h09b[nodeid]
 
 
+CHAVE = b"chave-de-teste-h09b-com-32-bytes!!"
+
+
+@pytest.fixture(autouse=True)
+def _chave_no_ambiente(tmp_path_factory, monkeypatch):
+    """`preparar_promocao_gated` le a chave do ambiente, que e o caminho real.
+
+    Passar chave por parametro aqui esconderia o carregamento -- e e justamente
+    ele que decide se a promocao acontece numa maquina de verdade.
+    """
+    arquivo = tmp_path_factory.mktemp("chave-h09b") / "curador.key"
+    arquivo.write_bytes(CHAVE)
+    arquivo.chmod(0o600)
+    monkeypatch.setenv("KORTEX_CURADOR_CHAVE", str(arquivo))
+
+
 class RepoFake:
     def __init__(self, registro: dict[str, Any] | None) -> None:
         self.registro = registro
@@ -53,23 +69,24 @@ def _registro(*, candidato_aprova: bool = True) -> dict[str, Any]:
         "slot": "executor/t1",
         "titular": "modelo-t",
         "candidato": "modelo-c",
-        "politica": {"min_casos": 2},
+        "politica": {"min_casos": PISO_CASOS},
     }
     casos_held_out = [{
         "id": str(indice),
         "slot": proposta["slot"],
         "meta": {"split": "held-out", "proveniencia": "suite-h09b"},
-        "titular": {"aprovado": indice == 0, "custo_usd": 2.0},
-    } for indice in range(2)]
-    evidencia = rodar_sombra(
-        proposta,
-        casos_held_out,
-        lambda _caso, _modelo: {"aprovado": candidato_aprova, "custo_usd": 1.0},
-    )
+    } for indice in range(PISO_CASOS)]
+
+    def runner(caso: dict[str, Any], modelo: str) -> dict[str, Any]:
+        if modelo == "modelo-t":
+            return {"aprovado": caso["id"] == "0", "custo_usd": 2.0}
+        return {"aprovado": candidato_aprova, "custo_usd": 1.0}
+
+    evidencia = rodar_sombra(proposta, casos_held_out, runner, chave=CHAVE)
     return {
         "certification_id": "cert-1",
         "evidencia": evidencia,
-        "decisao": certificar_sombra(evidencia),
+        "decisao": certificar_sombra(evidencia, chave=CHAVE),
     }
 
 

@@ -3,7 +3,7 @@ from math import inf, nan
 
 import pytest
 
-from motor.curador import certificar_sombra, preparar_promocao_gated, rodar_sombra
+from motor.curador import PISO_CASOS, certificar_sombra, preparar_promocao_gated, rodar_sombra
 from motor.eventos_schema import tipos
 
 
@@ -241,6 +241,17 @@ class _RepoCertificacoes:
         return self.registro
 
 
+CHAVE = b"chave-de-teste-gpt5f-com-32-byte!!"
+
+
+@pytest.fixture(autouse=True)
+def _chave_no_ambiente(tmp_path_factory, monkeypatch):
+    arquivo = tmp_path_factory.mktemp("chave-gpt5f") / "curador.key"
+    arquivo.write_bytes(CHAVE)
+    arquivo.chmod(0o600)
+    monkeypatch.setenv("KORTEX_CURADOR_CHAVE", str(arquivo))
+
+
 def test_promocao_valida_permanece_intencao_gateada_sem_evento_de_apply() -> None:
     """Promoção válida vira INTENÇÃO gateada — nunca aplicação automática.
 
@@ -256,26 +267,30 @@ def test_promocao_valida_permanece_intencao_gateada_sem_evento_de_apply() -> Non
         "slot": "executor/t1",
         "titular": "modelo-t",
         "candidato": "modelo-c",
-        "politica": {"min_casos": 2},
+        "politica": {"min_casos": PISO_CASOS},
     }
     casos = [
         {
             "id": str(indice),
             "slot": proposta["slot"],
             "meta": {"split": "held-out", "proveniencia": "suite-auditoria"},
-            "titular": {"aprovado": indice == 0, "custo_usd": 2.0},
         }
-        for indice in range(2)
+        for indice in range(PISO_CASOS)
     ]
+    # Os dois lados rodam no runner: o titular deixou de ser declarado no caso.
     evidencia = rodar_sombra(
         proposta,
         casos,
-        lambda _caso, _modelo: {"aprovado": True, "custo_usd": 1.0},
+        lambda _caso, modelo: {
+            "aprovado": modelo == "modelo-c",
+            "custo_usd": 1.0 if modelo == "modelo-c" else 2.0,
+        },
+        chave=CHAVE,
     )
     repositorio = _RepoCertificacoes({
         "certification_id": "cert-auditoria",
         "evidencia": evidencia,
-        "decisao": certificar_sombra(evidencia),
+        "decisao": certificar_sombra(evidencia, chave=CHAVE),
     })
     eventos: list[str] = []
     intencao = preparar_promocao_gated(

@@ -2,6 +2,8 @@ import json
 import subprocess
 import sys
 
+import pytest
+
 from motor.curador import analisar, carregar_runs, certificar_sombra, formatar_custo_markdown, formatar_markdown, preparar_promocao_gated, propor, rodar_sombra
 
 
@@ -768,30 +770,27 @@ def test_markdown_e_cli_json(tmp_path):
 def test_rodar_sombra_agrega_titular_e_candidato():
     proposta = {"slot": "executor/simples", "titular": "modelo-atual", "candidato": "modelo-novo"}
     casos = [
-        {
-            "id": "caso-1",
-            "slot": "executor/simples",
-            "entrada": {"prompt": "..."},
-            "titular": {"modelo": "modelo-atual", "aprovado": True, "custo_usd": 0.02},
-        },
-        {
-            "id": "caso-2",
-            "slot": "executor/simples",
-            "entrada": {"prompt": "..."},
-            "titular": {"modelo": "modelo-atual", "aprovado": False, "custo_usd": 0.02},
-        },
+        {"id": "caso-1", "slot": "executor/simples", "entrada": {"prompt": "..."}},
+        {"id": "caso-2", "slot": "executor/simples", "entrada": {"prompt": "..."}},
     ]
 
+    # Os DOIS modelos passam pelo runner, nos mesmos casos: o titular nao vem
+    # mais de um dict do chamador.
     respostas = {
-        "caso-1": {"aprovado": True, "custo_usd": 0.01, "saida": "ok", "motivo": ""},
-        "caso-2": {"aprovado": False, "custo_usd": 0.01, "saida": "n/d", "motivo": "raso"},
+        ("caso-1", "modelo-atual"): {"aprovado": True, "custo_usd": 0.02},
+        ("caso-2", "modelo-atual"): {"aprovado": False, "custo_usd": 0.02},
+        ("caso-1", "modelo-novo"): {"aprovado": True, "custo_usd": 0.01, "saida": "ok"},
+        ("caso-2", "modelo-novo"): {"aprovado": False, "custo_usd": 0.01, "motivo": "raso"},
     }
+    chamadas: list[tuple[str, str]] = []
 
     def runner(caso, modelo):
-        assert modelo == "modelo-novo"
-        return respostas[caso["id"]]
+        chamadas.append((caso["id"], modelo))
+        return dict(respostas[(caso["id"], modelo)])
 
     evidencia = rodar_sombra(proposta, casos, runner)
+
+    assert sorted(chamadas) == sorted(respostas)
 
     assert evidencia["status"] == "sombra_concluida"
     assert evidencia["slot"] == "executor/simples"
@@ -872,29 +871,55 @@ def test_rodar_sombra_emite_evento_read_only():
     assert evidencia["status"] == "sombra_concluida"
 
 
+# Chave de teste. A real mora fora do repo; o que importa aqui e que exista uma,
+# porque sem chave `certificar_sombra` recusa tudo -- e um teste que passasse sem
+# chave estaria provando o caminho errado.
+CHAVE = b"chave-de-teste-do-curador-32bytes!!"
+
+
+@pytest.fixture(autouse=True)
+def chave_no_ambiente(tmp_path_factory, monkeypatch):
+    """Publica a MESMA chave em `KORTEX_CURADOR_CHAVE`.
+
+    Autouse porque `preparar_promocao_gated` e a CLI nao recebem a chave por
+    parametro -- eles carregam do ambiente, que e o caminho de producao. Sem
+    isto, esses testes passariam a exercitar o caminho "sem chave" achando que
+    exercitam o caminho feliz.
+    """
+    arquivo = tmp_path_factory.mktemp("chave") / "curador.key"
+    arquivo.write_bytes(CHAVE)
+    arquivo.chmod(0o600)
+    monkeypatch.setenv("KORTEX_CURADOR_CHAVE", str(arquivo))
+    return arquivo
+
+
 def _evidencia(taxa_t, custo_t, taxa_c, custo_c, slot="executor/simples", titular="t", candidato="c"):
-    total = 10
+    # 40 casos: acima do PISO_CASOS de 30. Com 10 nao ha o que certificar, e essa
+    # e a mudanca -- amostra minuscula deixou de ser uma opcao do proponente.
+    total = 40
     casos = [{
         "id": str(i),
         "slot": slot,
         "meta": {"split": "held-out", "proveniencia": "suite-curador"},
-        "titular": {"modelo": titular, "aprovado": i < round(taxa_t * total), "custo_usd": custo_t},
     } for i in range(total)]
 
-    def runner(caso, _modelo):
-        return {"aprovado": int(caso["id"]) < round(taxa_c * total), "custo_usd": custo_c}
+    def runner(caso, modelo):
+        taxa, custo = (taxa_t, custo_t) if modelo == titular else (taxa_c, custo_c)
+        return {"aprovado": int(caso["id"]) < round(taxa * total), "custo_usd": custo}
 
     return rodar_sombra(
-        {"slot": slot, "titular": titular, "candidato": candidato, "politica": {"min_casos": 1}},
+        {"slot": slot, "titular": titular, "candidato": candidato,
+         "politica": {"min_casos": 30}},
         casos,
         runner,
+        chave=CHAVE,
     )
 
 
 def test_certificar_aprova_quando_candidato_melhor_em_qualidade_e_custo():
     evid = _evidencia(taxa_t=0.5, custo_t=0.02, taxa_c=0.8, custo_c=0.01)
 
-    resultado = certificar_sombra(evid)
+    resultado = certificar_sombra(evid, chave=CHAVE)
 
     assert resultado["status"] == "certificado"
     assert "candidato vence titular" in resultado["motivo"]
@@ -903,7 +928,7 @@ def test_certificar_aprova_quando_candidato_melhor_em_qualidade_e_custo():
 def test_certificar_rejeita_candidato_mais_barato_com_qualidade_menor():
     evid = _evidencia(taxa_t=0.8, custo_t=0.02, taxa_c=0.5, custo_c=0.01)
 
-    resultado = certificar_sombra(evid)
+    resultado = certificar_sombra(evid, chave=CHAVE)
 
     assert resultado["status"] == "rejeitado"
     assert "nao vence titular" in resultado["motivo"]
@@ -912,16 +937,19 @@ def test_certificar_rejeita_candidato_mais_barato_com_qualidade_menor():
 def test_certificar_rejeita_qualidade_igual_mesmo_com_custo_menor():
     evid = _evidencia(taxa_t=0.8, custo_t=0.02, taxa_c=0.8, custo_c=0.01)
 
-    resultado = certificar_sombra(evid)
+    resultado = certificar_sombra(evid, chave=CHAVE)
 
     assert resultado["status"] == "rejeitado"
     assert "nao vence titular" in resultado["motivo"]
 
 
 def test_certificar_rejeita_custo_ausente():
-    evid = _evidencia(taxa_t=0.8, custo_t=None, taxa_c=0.9, custo_c=0.01)
+    # Vantagem de qualidade grande de proposito: o veto por custo so e alcancado
+    # depois que a qualidade passa no teste, entao 0.8 vs 0.9 (p=0.0625) pararia
+    # antes e o teste estaria medindo outra coisa.
+    evid = _evidencia(taxa_t=0.5, custo_t=None, taxa_c=0.9, custo_c=0.01)
 
-    resultado = certificar_sombra(evid)
+    resultado = certificar_sombra(evid, chave=CHAVE)
 
     assert resultado["status"] == "rejeitado"
     assert resultado["motivo"] == "custo incomparavel"
@@ -930,7 +958,7 @@ def test_certificar_rejeita_custo_ausente():
 def test_certificar_rejeita_custo_candidato_ausente():
     evid = _evidencia(taxa_t=0.5, custo_t=0.02, taxa_c=0.8, custo_c=None)
 
-    resultado = certificar_sombra(evid)
+    resultado = certificar_sombra(evid, chave=CHAVE)
 
     assert resultado["status"] == "rejeitado"
     assert resultado["motivo"] == "custo incomparavel"
@@ -940,7 +968,10 @@ def test_certificar_emite_evento_certificou():
     eventos = []
     evid = _evidencia(taxa_t=0.5, custo_t=0.02, taxa_c=0.9, custo_c=0.01)
 
-    certificar_sombra(evid, emitir_evento=lambda nome, payload: eventos.append((nome, payload)))
+    certificar_sombra(
+        evid, emitir_evento=lambda nome, payload: eventos.append((nome, payload)),
+        chave=CHAVE,
+    )
 
     assert len(eventos) == 1
     assert eventos[0][0] == "curador.certificou"
@@ -951,7 +982,10 @@ def test_certificar_emite_evento_rejeitou():
     eventos = []
     evid = _evidencia(taxa_t=0.5, custo_t=None, taxa_c=0.9, custo_c=0.01)
 
-    certificar_sombra(evid, emitir_evento=lambda nome, payload: eventos.append((nome, payload)))
+    certificar_sombra(
+        evid, emitir_evento=lambda nome, payload: eventos.append((nome, payload)),
+        chave=CHAVE,
+    )
 
     assert len(eventos) == 1
     assert eventos[0][0] == "curador.rejeitou"

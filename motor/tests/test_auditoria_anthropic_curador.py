@@ -93,9 +93,14 @@ def test_U2_titular_e_fabricado_pelo_proponente_e_nunca_reexecutado() -> None:
 
 
 def test_U2_selo_nao_e_chaveado_evidencia_100pct_forjada_certifica() -> None:
-    """ACHADO 4: evidencia_sha256 e um hash publico recomputavel, nao um MAC.
+    """ACHADO 4: evidencia_sha256 era hash publico recomputavel, nao um MAC.
 
-    Uma evidencia inventada do zero (nenhuma sombra rodou) passa na certificacao.
+    Uma evidencia inventada do zero (nenhuma sombra rodou) passava na
+    certificacao, porque qualquer um computava o mesmo sha256 do proprio invento.
+
+    Corrigido em 2026-07-29: o selo virou HMAC. O forjador aqui e quem NAO tem a
+    chave -- que e o caso real, evidencia chegando de outra maquina ou de um
+    arquivo escrito por um modelo. Ele sela com o que consegue e nao passa.
     """
     from motor.curador import _selo_sombra  # noqa: PLC0415
 
@@ -116,12 +121,36 @@ def test_U2_selo_nao_e_chaveado_evidencia_100pct_forjada_certifica() -> None:
             for i in range(3)
         ],
     }
-    evidencia["evidencia_sha256"] = _selo_sombra(evidencia)
-    resultado = certificar_sombra(evidencia)
+    # O forjador sela com a chave que ele tem, que nao e a do curador.
+    evidencia["evidencia_mac"] = _selo_sombra(evidencia, b"chave-do-forjador-com-32-bytes!!!!")
+    resultado = certificar_sombra(evidencia, chave=b"chave-real-do-curador-32-bytes!!!!")
 
     assert resultado["status"] != "certificado", (
         "evidencia sintetica sem nenhuma execucao real passou na certificacao"
     )
+    assert resultado["motivo"] == "evidencia de sombra nao selada"
+
+
+def test_U2_sem_chave_nada_certifica_falha_fechada() -> None:
+    """Ausencia de chave nao pode virar "selo dispensado".
+
+    O modo de falha perigoso seria degradar para o comportamento antigo quando a
+    chave nao esta configurada -- que e justamente o estado de qualquer maquina
+    nova. Sem chave, nada certifica.
+    """
+    from motor.curador import _selo_sombra  # noqa: PLC0415
+
+    evidencia: dict[str, Any] = {
+        "versao": 2,
+        "status": "sombra_concluida",
+        "slot": "executor/t1",
+        "modelos": {"titular": "t", "candidato": "c"},
+        "politica": {"min_casos": 30},
+        "casos": [],
+    }
+    assert _selo_sombra(evidencia, None) is None
+    evidencia["evidencia_mac"] = None
+    assert certificar_sombra(evidencia, chave=None)["status"] == "rejeitado"
 
 
 # --------------------------------------------------------------------------- U1
@@ -208,7 +237,10 @@ def test_U3_repositorio_e_a_unica_autoridade_mas_nao_valida_nada() -> None:
                     }
                 ],
             }
-            evidencia["evidencia_sha256"] = _selo_sombra(evidencia)
+            # Repositorio hostil sela com a chave que ele tem, nao com a do curador.
+            evidencia["evidencia_mac"] = _selo_sombra(
+                evidencia, b"chave-do-repositorio-hostil-32by!!",
+            )
             return {
                 "certification_id": certification_id,
                 "evidencia": evidencia,

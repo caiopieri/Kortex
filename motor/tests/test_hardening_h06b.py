@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-from motor.curador import certificar_sombra, preparar_promocao_gated, rodar_sombra
+from motor.curador import PISO_CASOS, certificar_sombra, preparar_promocao_gated, rodar_sombra
 from motor.eventos_schema import ESQUEMA, tipos, valido
 from tests.audit_corpus import casos, executar_lote, materializar_corpus
 
@@ -43,6 +43,18 @@ def test_reprodutores_h06b(_lote_h06b: dict[str, str | None], nodeid: str) -> No
     assert _lote_h06b[nodeid] is None, _lote_h06b[nodeid]
 
 
+CHAVE = b"chave-de-teste-h06b-com-32-bytes!!"
+
+
+@pytest.fixture(autouse=True)
+def _chave_no_ambiente(tmp_path_factory, monkeypatch):
+    """`preparar_promocao_gated` carrega a chave do ambiente, nao por parametro."""
+    arquivo = tmp_path_factory.mktemp("chave-h06b") / "curador.key"
+    arquivo.write_bytes(CHAVE)
+    arquivo.chmod(0o600)
+    monkeypatch.setenv("KORTEX_CURADOR_CHAVE", str(arquivo))
+
+
 def _eventos_emitidos() -> list[dict[str, Any]]:
     eventos: list[dict[str, Any]] = []
 
@@ -54,22 +66,26 @@ def _eventos_emitidos() -> list[dict[str, Any]]:
         "slot": "redator/T1",
         "titular": "modelo-atual",
         "candidato": "modelo-novo",
-        "politica": {"min_casos": 1},
+        "politica": {"min_casos": PISO_CASOS},
     }
     evidencia = rodar_sombra(
         proposta,
         [
             {
-                "id": "caso-1",
+                "id": f"caso-{indice}",
                 "slot": "redator/T1",
                 "meta": {"split": "held-out", "proveniencia": "suite-h06b"},
-                "titular": {"aprovado": False, "custo_usd": 2.0},
             }
+            for indice in range(PISO_CASOS)
         ],
-        lambda _caso, modelo: {"modelo": modelo, "aprovado": True, "custo_usd": 1.0},
+        lambda _caso, modelo: {
+            "modelo": modelo, "aprovado": modelo == "modelo-novo", "custo_usd":
+            1.0 if modelo == "modelo-novo" else 2.0,
+        },
         emitir,
+        chave=CHAVE,
     )
-    certificacao = certificar_sombra(evidencia, emitir)
+    certificacao = certificar_sombra(evidencia, emitir, chave=CHAVE)
     certificar_sombra(
         {
             "slot": "redator/T1",

@@ -107,19 +107,17 @@ def test_falha_ao_copiar_caso_intermediario_nao_aborta_sombra() -> None:
 
     evidencia = rodar_sombra(PROPOSTA, casos_held_out, runner)
 
-    assert executados == ["a", "c"]
+    # Dois modelos por caso: o titular tambem passa pelo runner desde U-04.
+    assert executados == ["a", "a", "c", "c"]
+    reprovado = {"aprovado": False, "motivo": "RuntimeError: deepcopy bloqueado"}
     assert evidencia["casos"][1] == {
         "id": None,
         "split": None,
         "proveniencia": None,
-        "titular": {
-            "modelo": PROPOSTA["titular"],
-            "aprovado": False,
-            "motivo": "evidencia do caso indisponivel",
-        },
-        "candidato": {
-            "aprovado": False,
-            "motivo": "RuntimeError: deepcopy bloqueado",
-        },
+        # Os DOIS lados reprovam: com o caso incopiavel, nenhum dos modelos foi
+        # medido nele. Aproveitar o resultado de um so seria comparar coisas
+        # diferentes.
+        "titular": reprovado,
+        "candidato": reprovado,
     }
     assert evidencia["casos"][2]["candidato"]["aprovado"] is True

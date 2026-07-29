@@ -61,6 +61,37 @@ operacional exige uma integracao de deployment que:
 Este repositorio define o protocolo, mas nao fornece hoje esse backend. Portanto, promocao
 operacional esta indisponivel por default; um fake de teste nao remove essa restricao.
 
+## Chave do selo (obrigatoria para certificar)
+
+A evidencia de sombra e selada com HMAC. Sem chave, `certificar_sombra` recusa
+tudo -- de proposito: maquina sem chave configurada e o estado default, e
+degradar para "selo dispensado" ali reintroduziria o defeito inteiro.
+
+```sh
+umask 077
+head -c 64 /dev/urandom > ~/.config/kortex/curador.key
+export KORTEX_CURADOR_CHAVE=~/.config/kortex/curador.key   # o CAMINHO, nao a chave
+```
+
+A chave em si nunca entra em variavel de ambiente: ambiente vaza em `ps`, em dump
+de crash e em log de subprocesso. Arquivo legivel por grupo/outros, ou com menos
+de 32 bytes, e recusado como se nao existisse.
+
+**O que o selo protege, dito sem enfeite:** evidencia que chega de fora -- outra
+maquina, diretorio de runs compartilhado, arquivo escrito por um modelo -- nao
+certifica. Esse e o caminho real do flywheel e era o que passava.
+**O que ele nao protege:** quem ja executa como voce nesta maquina le a chave e
+forja o selo. Fechar isso exige separar o processo que produz evidencia do que a
+assina, e essa separacao nao existe hoje.
+
+## Tamanho de amostra
+
+Piso de **30 casos held-out** (`PISO_CASOS`), no codigo e nao na politica -- o
+proponente nao escolhe o proprio rigor. A vantagem de qualidade precisa passar no
+**McNemar exato unilateral com p < 0.05**; com menos de 5 discordancias nenhum
+placar alcanca isso, nem o perfeito. Custo continua sendo `<` estrito, porque vem
+de tabela de preco por token e nao de amostra.
+
 ## Invariantes
 
 - `motivo_certificacao` e texto opaco para auditoria/display; nao use regex nele como contrato.
@@ -69,8 +100,10 @@ operacional esta indisponivel por default; um fake de teste nao remove essa rest
   promocao.
 - Custo ausente (`null`/`None`) nao e zero.
 - JSON/CLI, dict, hash e `status="certificado"` fornecidos pelo chamador nao sao autoridade.
-- Custo menor nunca compensa qualidade igual ou pior; ambos os eixos precisam melhorar de
-  forma estrita.
+- Custo menor nunca compensa qualidade pior ou indistinguivel de sorte; os dois eixos precisam
+  melhorar, qualidade com significancia e custo de forma estrita.
+- Titular e candidato sao os dois MEDIDOS no mesmo runner e nos mesmos casos. Resultado de
+  titular declarado no arquivo de entrada e ignorado.
 
 ## Falhas operacionais
 

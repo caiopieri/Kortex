@@ -42,10 +42,10 @@ sem contato entre eles. Dois olhares independentes na mesma linha — o sinal ma
 | **U-01** | **Gate humano vaza entre jobs.** A nota se chama `PENDENTE — {portao}.md`, sem o job; `_decisao_arquivada` faz glob global no vault compartilhado. A aprovação dada para o job A é consumida pelo job B, sem interação humana. Só no caminho CLI (`--caixa`); o serviço responde gates por API. | `caixa.py:475`, `607`, `676` | F2 |
 | **U-02** | **Spec do usuário escapa do teto de custo.** A confrontação com `teto_bootstrap` existe só no ramo gerado pelo planner (`grafo.py:539`). Spec vinda da CLI/serviço — o entrypoint de produção — valida e segue direto, com `teto_custo` sem limite superior. É a única contenção monetária do sistema. | `grafo.py:497-500` vs `539`; `spec.py:78` | S4/S5 |
 | **U-03** | **Falha parcial derruba o motor.** Tudo após o veredito do verifier está fora de guarda: `KeyError` em artefato sem `nome`, `OSError` em nome com separador, `command_runner.run` sem `try`. Como é o planner (LLM) que gera a spec e `produz_artefatos` é `list[dict[str, Any]]`, a validação não protege. Sem evento, sem resultado reprovado. | `grafo.py:772-773`, `875`, `1110` | G4 |
-| **U-04** | **O curador nunca executa o titular.** `rodar_sombra` roda só o candidato; qualidade e custo do titular saem de `caso["titular"]`, um dict do chamador. Quem monta os casos controla os dois lados da comparação. O `_LedgerCusto` — única fonte de custo medido — nunca é consultado. | `curador.py:254-259`, `560-563` | U2 |
+| **U-04** ✅ RESOLVIDO 2026-07-29 (ADR-004) | **O curador nunca executava o titular.** `rodar_sombra` roda só o candidato; qualidade e custo do titular saem de `caso["titular"]`, um dict do chamador. Quem monta os casos controla os dois lados da comparação. O `_LedgerCusto` — única fonte de custo medido — nunca é consultado. | `curador.py:254-259`, `560-563` | U2 |
 | **U-05** | **Reconciliação descarta o nó culpado.** O veredito é reconstruído sem `nos_a_refazer` quando há reprovado, e a linha seguinte lê do dict mutilado. Com A→B, B reprovado e evaluator apontando A, refaz-se só o sintoma B — e queima uma rodada do teto. O loop de auto-correção corrige o lugar errado. **Achado por dois auditores independentes.** | `grafo.py:1147-1154` | G2 |
-| **U-06** | **Selo não prova autoria + a CLI fabrica evidência.** `evidencia_sha256` é sha256 público recomputável: detecta corrupção, não origem — evidência inventada passa na certificação. E `_runner_cli_read_only`, o runner de `--sombra`, ecoa `caso["candidato"]` do arquivo de entrada e sela como `sombra_concluida`, sem nenhuma chamada de modelo. | `curador.py:480-491`, `1293-1302` | U2/U3 |
-| **U-07** | **`min_casos` é autodeclarado pelo proponente**, sem piso e sem teste de significância — única validação é `>= 1`. Auditor certificou troca de modelo com **n=1**. Comparação `>` estrita entre proporções arredondadas; com n=2 (valor da própria suíte) é ruído com aparência de rigor. | `curador.py:514-520` | U2 |
+| **U-06** ✅ RESOLVIDO (U-06a fase C; U-06b 2026-07-29, ADR-004) | **Selo não provava autoria + a CLI fabrica evidência.** `evidencia_sha256` é sha256 público recomputável: detecta corrupção, não origem — evidência inventada passa na certificação. E `_runner_cli_read_only`, o runner de `--sombra`, ecoa `caso["candidato"]` do arquivo de entrada e sela como `sombra_concluida`, sem nenhuma chamada de modelo. | `curador.py:480-491`, `1293-1302` | U2/U3 |
+| **U-07** ✅ RESOLVIDO 2026-07-29 (ADR-004) | **`min_casos` era autodeclarado pelo proponente**, sem piso e sem teste de significância — única validação é `>= 1`. Auditor certificou troca de modelo com **n=1**. Comparação `>` estrita entre proporções arredondadas; com n=2 (valor da própria suíte) é ruído com aparência de rigor. | `curador.py:514-520` | U2 |
 | **U-08** | **`rodar_com_caixa` nunca renova o lease.** As duas chamadas de `ledger.consumir` omitem `lease_s`, e a thread de renovação só sobe se ele for passado. Retomada longa aplica o efeito e falha no ACK, deixando a outbox reelegível → redelivery e dois consumers no mesmo job. **Correção: uma linha em cada chamada.** | `caixa.py:647`, `715`, `366` | F1 |
 
 ## 🟡 Severidade média (15, resumidas)
@@ -94,8 +94,9 @@ Ranqueada por consequência, não por esforço. Cada item exige, pelo charter: t
 3. **U-08** (lease) — uma linha, consequência desproporcional ao esforço.
 4. **U-03** (motor cai em falha parcial) — disponibilidade.
 5. **U-05** (reconciliação) — o loop de auto-correção corrige o nó errado.
-6. **U-04, U-06, U-07** (curador) — bloqueiam o flywheel; U-04 é o mais profundo, exige medir o
-   titular de verdade.
+6. ~~**U-04, U-06, U-07** (curador)~~ — fechados em 2026-07-29; ver `ADR-004-curador-rigor.md`.
+   U-04 era mesmo o mais profundo: exigiu medir o titular de verdade, e foi isso que tornou o
+   desenho pareado e habilitou o teste de significância de U-07.
 
 **U-02 e U-05 podem ser decisão de design, não bug.** Se "a spec do usuário é soberana" for
 intencional, o `INVARIANTES.md` está redigido de forma enganosa e o texto de S5 precisa mudar —

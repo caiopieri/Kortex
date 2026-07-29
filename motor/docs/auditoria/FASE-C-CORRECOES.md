@@ -121,13 +121,12 @@ graça — o fix marca a **proveniência**, não quebra a sombra.
 `tests/test_curador.py` **assertava o comportamento defeituoso** (exigia `sombra_concluida` na
 saída da CLI): o teste travava o buraco. Corrigido, com o porquê no lugar.
 
-**A outra metade (U-06b) segue aberta** e é decisão do fundador: `evidencia_sha256` é sha256
-público recomputável, então evidência inventada do zero ainda certifica. Só um MAC com chave
-resolve, e não há gestão de chave no motor.
+**A outra metade (U-06b) foi fechada em 2026-07-29** junto com U-04 e U-07 — ver
+`ADR-004-curador-rigor.md`. O selo virou HMAC com chave em arquivo fora do repo, fail-closed.
 
 ## Ainda abertos
 
-🔴 U-04, U-06b, U-07 — os do curador, que bloqueiam o flywheel. 🟡 os 15, dos quais três
+🟡 os 15, dos quais três
 seguem vermelhos por design em
 `test_auditoria_anthropic_eventos_caixa.py` (E-01 sidecar, E-02 quarentena, E-03 guard
 anti-drift).
