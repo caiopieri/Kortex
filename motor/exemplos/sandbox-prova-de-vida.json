@@ -1,0 +1,87 @@
+{
+  "versao": "0.1",
+  "padrao": "grafo_dependencias",
+  "missao": {
+    "id": "sandbox-prova-de-vida",
+    "objetivo": "Provar que o motor executa o codigo que escreve, em vez de apenas ser julgado por um modelo que o leu",
+    "contexto": "Missao pequena de proposito. O valor dela nao e o software; e o portao 'testes' ser um processo real com exit code, nao um veredito textual.",
+    "criterios_cobertura": [
+      "o codigo gerado roda dentro do sandbox e sai com exit code 0",
+      "os testes gerados exercitam pelo menos um caso de borda"
+    ]
+  },
+  "restricoes": {
+    "teto_custo": 60.0,
+    "max_subagentes": 4,
+    "max_tentativas": 3
+  },
+  "subagentes": [
+    {
+      "id": "codificador",
+      "papel": "executor",
+      "objetivo": "Escrever um modulo Python autocontido com a funcao `parse_faixa_preco(texto)` que interpreta faixas como '10-50', '-50' (ate 50), '10-' (a partir de 10) e '35' (exato), devolvendo (minimo, maximo) com None para lado aberto",
+      "entradas": {
+        "restricoes_tecnicas": [
+          "somente biblioteca padrao",
+          "levantar ValueError com mensagem clara para entrada invalida",
+          "valores negativos sao invalidos",
+          "minimo maior que maximo e invalido"
+        ],
+        "formato_de_saida": "APENAS codigo Python puro. Sem cercas de markdown, sem ``` , sem explicacao antes ou depois. A primeira linha do resultado tem que ser codigo Python valido, porque o resultado e gravado direto em um arquivo .py e executado."
+      },
+      "resultado_esperado": "Arquivo Python puro, executavel, sem markdown",
+      "rubrica": [
+        "a saida e Python puro, sem cerca de markdown e sem texto explicativo",
+        "as quatro formas de faixa sao tratadas",
+        "entrada invalida levanta ValueError, nao devolve valor silencioso"
+      ],
+      "produz_artefatos": [
+        {"nome": "solucao.py", "tipo": "python"}
+      ]
+    },
+    {
+      "id": "testador",
+      "papel": "executor",
+      "objetivo": "Escrever testes que exercitam `parse_faixa_preco`, importando-a de `codificador__solucao`",
+      "depende_de": ["codificador"],
+      "entradas": {
+        "modulo_alvo": "o modulo fica no MESMO diretorio, no arquivo `codificador__solucao.py`; importe com `from codificador__solucao import parse_faixa_preco`",
+        "restricoes_tecnicas": [
+          "somente biblioteca padrao, usando unittest",
+          "terminar com `unittest.main()` para que rodar o arquivo produza exit code",
+          "cobrir os quatro formatos e pelo menos tres entradas invalidas"
+        ],
+        "formato_de_saida": "APENAS codigo Python puro. Sem cercas de markdown, sem ``` , sem explicacao. O resultado e gravado direto em um arquivo .py e executado."
+      },
+      "resultado_esperado": "Arquivo Python puro de testes unittest",
+      "rubrica": [
+        "a saida e Python puro, sem cerca de markdown",
+        "importa de `codificador__solucao`",
+        "cobre os quatro formatos validos e ao menos tres invalidos"
+      ],
+      "produz_artefatos": [
+        {"nome": "testes.py", "tipo": "python"}
+      ]
+    },
+    {
+      "id": "prova",
+      "tipo": "validador",
+      "valida": "testador",
+      "depende_de": ["testador"],
+      "objetivo": "Executar os testes gerados dentro do sandbox",
+      "resultado_esperado": "exit code 0",
+      "validador": {
+        "kind": "comando",
+        "config": {
+          "comando": "/usr/local/bin/python3 testador__testes.py",
+          "timeout": 120
+        }
+      }
+    }
+  ],
+  "gates": [],
+  "sintese": {
+    "instrucao": "Resuma em markdown o que foi construido e cole o veredito do validador. Se o validador reprovou, diga isso na primeira linha -- nao apresente entregavel de execucao que falhou como se estivesse pronto.",
+    "formato": "markdown"
+  }
+}

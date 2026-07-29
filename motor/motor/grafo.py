@@ -381,7 +381,12 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
     if (not isinstance(teto_bootstrap, Decimal) or not teto_bootstrap.is_finite()
             or teto_bootstrap <= 0):
         raise ErroOrcamento("teto bootstrap invalido")
-    workspace_base = Path(workspace_base)
+    # Absoluto desde a construcao: o sandbox monta o workspace como bind e recusa
+    # caminho relativo, entao `--workspace runs` fazia TODO validador de comando
+    # morrer em "workspace absoluto existente obrigatorio" -- com o portao
+    # reprovando pelo motivo certo e a causa parecendo do sandbox, nao da CLI.
+    # Caminho relativo tambem e ambiguo para qualquer runner que troque de cwd.
+    workspace_base = Path(workspace_base).resolve()
     ferramentas = ferramentas or {}
     command_runner = command_runner if command_runner is not None else DenyCommandRunner()
     perfil_execucao = "rascunho" if perfil_execucao == "rascunho" else "certificado"
