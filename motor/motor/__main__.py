@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -47,6 +48,7 @@ from .eventos import LogEventos
 from .grafo import construir_grafo
 from .modelos import ClienteClaudeCLI, ClienteModelo, ProvedorIndisponivel, cliente_de_config
 from .orcamento import ErroOrcamento, RepositorioOrcamento, publicar_um_pendente
+from .runner import compor_sandbox
 from .registro import (
     cliente_de_registro,
     ferramentas_de_registro,
@@ -117,6 +119,30 @@ def main() -> int:
     if "--caixa" in args:
         i = args.index("--caixa")
         dir_caixa = args[i + 1]
+        args = args[:i] + args[i + 2:]
+
+    # --sandbox <cfg.json>: habilita execução real de comando em container
+    # isolado. Sem a flag, `command_runner` continua sendo DenyCommandRunner e
+    # nenhum comando roda -- que é o default seguro, não um bug.
+    command_runner = None
+    if "--sandbox" in args:
+        i = args.index("--sandbox")
+        if i + 1 >= len(args):
+            print("erro: --sandbox exige o caminho de uma config.")
+            return 2
+        try:
+            command_runner, evidencia_sandbox = compor_sandbox(args[i + 1])
+        except (OSError, ValueError, json.JSONDecodeError,
+                subprocess.SubprocessError) as erro:
+            print(f"erro: sandbox indisponível: {erro}")
+            return 2
+        # A identidade efetiva vai para o operador ANTES da missão começar. Ela
+        # é evidência de deployment, não certificação: rodar em macOS/Docker
+        # Desktop satisfaz o preflight e ainda assim não é o runner Linux
+        # dedicado que `sandbox-conformance.md` exige.
+        print(f"sandbox: {evidencia_sandbox.engine_version} "
+              f"{evidencia_sandbox.os_type} {evidencia_sandbox.policy_version} "
+              f"{evidencia_sandbox.effective_repo_digest}")
         args = args[:i] + args[i + 2:]
 
     workspace_base = "runs"
@@ -303,7 +329,8 @@ def main() -> int:
                                         ferramentas_permitidas=ferramentas_permitidas,
                                         repositorio_orcamento=deps_orcamento.repositorio,
                                         fabrica_tentativas_orcadas=deps_orcamento.fabrica,
-                                        teto_bootstrap=deps_orcamento.teto_bootstrap)
+                                        teto_bootstrap=deps_orcamento.teto_bootstrap,
+                                        command_runner=command_runner)
                 caixa = CaixaFundador(dir_caixa, log)
                 resultado = rodar_com_caixa(grafo, entrada, config, caixa, log)
             finally:
@@ -319,7 +346,8 @@ def main() -> int:
                                     ferramentas_permitidas=ferramentas_permitidas,
                                     repositorio_orcamento=deps_orcamento.repositorio,
                                     fabrica_tentativas_orcadas=deps_orcamento.fabrica,
-                                    teto_bootstrap=deps_orcamento.teto_bootstrap)
+                                    teto_bootstrap=deps_orcamento.teto_bootstrap,
+                                    command_runner=command_runner)
             resultado = grafo.invoke(entrada, config)
             while "__interrupt__" in resultado:  # gate do fundador
                 pedido = resultado["__interrupt__"][0].value

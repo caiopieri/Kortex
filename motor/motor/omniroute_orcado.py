@@ -4,11 +4,15 @@ O OmniRoute expoe `/v1/chat/completions` com o formato da OpenAI e roteia para
 varios upstreams. Isso permite alcancar Gemini, GPT e Claude com uma credencial
 so -- ao custo de duas concessoes que precisam ficar explicitas:
 
-1. O MOTOR PERDE A CAPACIDADE DE VERIFICAR A INDEPENDENCIA. `provider_id` aqui e
-   declarado por config, nao observado: se o proxy for reconfigurado e mandar
-   executor e verifier para o mesmo modelo, o motor nao tem como perceber.
-   Produtor != juiz vira promessa do OmniRoute, nao garantia do kernel. Aceitavel
-   para MVP; NAO aceitavel para o curador decidir promocao de modelo.
+1. A INDEPENDENCIA E SO PARCIALMENTE VERIFICAVEL. `provider_id` e declarado por
+   config, nao observado na resposta. O que o kernel CONSEGUE checar e que a
+   declaracao nao contradiz o vendor code-owned em `PRECOS[...].vendor` -- isso
+   fecha o buraco de servir o mesmo modelo por duas assinaturas (`claude/` e
+   `agy/` entregam o mesmo Opus 4.6) e chamar isso de dois julgamentos. O que
+   ele NAO consegue checar e o proxy reescrever o roteamento por baixo e mandar
+   dois ids distintos para o mesmo upstream. Isso segue sendo promessa do
+   OmniRoute. Aceitavel para MVP; NAO aceitavel para o curador decidir promocao
+   de modelo.
 
 2. O CUSTO REPORTADO PELO PROXY E IGNORADO DE PROPOSITO. O header
    `x-omniroute-response-cost` observado em 2026-07-28 vinha `0.0000000000`, e
@@ -43,11 +47,21 @@ _MILHAO = Decimal(1_000_000)
 
 @dataclass(frozen=True)
 class PrecoModelo:
-    """USD por 1M tokens. `cached` e leitura de cache, nao escrita."""
+    """USD por 1M tokens. `cached` e leitura de cache, nao escrita.
+
+    `vendor` e QUEM TREINOU o modelo, nao quem fatura. A distincao existe porque
+    o OmniRoute serve o mesmo modelo por assinaturas diferentes: um Opus 4.6 vem
+    tanto por `claude/` quanto por `agy/`. Independencia protege contra executor
+    e juiz ERRAREM JUNTO, e dois Opus 4.6 erram identico -- quem paga a conta e
+    irrelevante para isso. Sem este campo, a config podia declarar `google` para
+    a rota `agy/` e o invariante passava achando que havia dois julgamentos
+    independentes onde ha um so.
+    """
 
     entrada: Decimal
     cached: Decimal
     saida: Decimal
+    vendor: str
 
 
 # Modelos habilitados, verificados respondendo pelo proxy em 2026-07-28.
@@ -62,50 +76,58 @@ PRECOS: dict[str, PrecoModelo] = {
     # sao os da API publica do modelo equivalente. Isso NAO e a fatura; e um
     # orcamento de USO, que impede uma missao de consumir a assinatura inteira.
     "claude/claude-opus-4-8": PrecoModelo(
-        Decimal("5"), Decimal("0.50"), Decimal("25"),
+        Decimal("5"), Decimal("0.50"), Decimal("25"), "anthropic",
     ),
     "claude/claude-opus-4-7": PrecoModelo(
-        Decimal("5"), Decimal("0.50"), Decimal("25"),
+        Decimal("5"), Decimal("0.50"), Decimal("25"), "anthropic",
     ),
     "claude/claude-opus-4-6": PrecoModelo(
-        Decimal("5"), Decimal("0.50"), Decimal("25"),
+        Decimal("5"), Decimal("0.50"), Decimal("25"), "anthropic",
     ),
     "agy/claude-sonnet-4-6": PrecoModelo(
-        Decimal("3"), Decimal("0.30"), Decimal("15"),
+        Decimal("3"), Decimal("0.30"), Decimal("15"), "anthropic",
+    ),
+    # Opus 4.6 servido pela assinatura do Antigravity. E o MESMO modelo de
+    # `claude/claude-opus-4-6` -- muda so quem paga. Por isso ele e declarado
+    # com `provider_id: anthropic` nas configs, e NAO `google`: independencia
+    # existe para evitar que executor e juiz errem junto, e dois Opus 4.6 erram
+    # identico. Declarar `google` aqui faria o invariante mentir.
+    "agy/claude-opus-4-6-thinking": PrecoModelo(
+        Decimal("5"), Decimal("0.50"), Decimal("25"), "anthropic",
     ),
     # Gemini 3.1 Pro nao tem tabela publica conferida; cotado pelo teto da
     # familia Pro (faixa longa) para nunca subestimar.
     "agy/gemini-3.1-pro-high": PrecoModelo(
-        Decimal("2.50"), Decimal("0.25"), Decimal("15"),
+        Decimal("2.50"), Decimal("0.25"), Decimal("15"), "google",
     ),
     "agy/gemini-3.1-pro-low": PrecoModelo(
-        Decimal("2.50"), Decimal("0.25"), Decimal("15"),
+        Decimal("2.50"), Decimal("0.25"), Decimal("15"), "google",
     ),
     "agy/gemini-3.5-flash-high": PrecoModelo(
-        Decimal("0.30"), Decimal("0.03"), Decimal("2.50"),
+        Decimal("0.30"), Decimal("0.03"), Decimal("2.50"), "google",
     ),
     # Codex pela assinatura ChatGPT. Ids canonicos (`codex/gpt-5.6-sol`), nao os
     # nomes de exibicao do catalogo ("GPT 5.6 Sol") -- estes o upstream recusa.
     # Precos da tabela publica de 2026-07-28; ver kortex-preco-modelo-perecivel.
     "codex/gpt-5.6-sol": PrecoModelo(
-        Decimal("5"), Decimal("0.50"), Decimal("30"),
+        Decimal("5"), Decimal("0.50"), Decimal("30"), "openai",
     ),
     "codex/gpt-5.6-luna": PrecoModelo(
-        Decimal("1"), Decimal("0.10"), Decimal("6"),
+        Decimal("1"), Decimal("0.10"), Decimal("6"), "openai",
     ),
     "codex/gpt-5.5": PrecoModelo(
-        Decimal("5"), Decimal("0.50"), Decimal("30"),
+        Decimal("5"), Decimal("0.50"), Decimal("30"), "openai",
     ),
 
     # --- rotas via openrouter (pay-as-you-go; sem credito em 2026-07-28) ---
     "openrouter/google/gemini-3.5-flash": PrecoModelo(
-        Decimal("0.30"), Decimal("0.03"), Decimal("2.50"),
+        Decimal("0.30"), Decimal("0.03"), Decimal("2.50"), "google",
     ),
     "openrouter/openai/gpt-5.4": PrecoModelo(
-        Decimal("2.50"), Decimal("0.25"), Decimal("15"),
+        Decimal("2.50"), Decimal("0.25"), Decimal("15"), "openai",
     ),
     "openrouter/anthropic/claude-sonnet-4.5": PrecoModelo(
-        Decimal("3"), Decimal("0.30"), Decimal("15"),
+        Decimal("3"), Decimal("0.30"), Decimal("15"), "anthropic",
     ),
 }
 

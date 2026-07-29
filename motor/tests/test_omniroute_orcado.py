@@ -283,6 +283,53 @@ def test_a_cadeia_inteira_e_devolvida_para_o_motor_poder_cair_na_proxima(
     assert [r.provider_id for r in podada] == ["anthropic"]
 
 
+def test_provider_id_que_contradiz_o_vendor_do_modelo_recusa(credencial, tmp_path) -> None:
+    """O mesmo modelo e servido por assinaturas diferentes: `claude/claude-opus-4-6`
+    e `agy/claude-opus-4-6-thinking` sao o MESMO Opus 4.6, muda so quem paga.
+
+    Declarar a rota `agy/` como "google" faria executor e verifier passarem na
+    independencia sendo o mesmo modelo -- dois julgamentos que erram identico
+    contados como dois. O vendor e code-owned; a config nao pode contradize-lo.
+    """
+    cfg = _cfg()
+    cfg["omniroute"]["papeis"]["verifier"] = [{
+        "modelo": "agy/claude-opus-4-6-thinking", "provider_id": "google",
+        "max_input_tokens": 24000, "max_completion_tokens": 4000,
+    }]
+    with pytest.raises(ErroOrcamento, match="contradiz o vendor"):
+        compor_orcamento_omniroute(cfg, tmp_path)
+
+
+def test_todo_modelo_precificado_declara_vendor_conhecido() -> None:
+    """Vendor errado nao quebra nada visivelmente -- so afrouxa a independencia
+    em silencio. Por isso o conjunto e fechado e conferido aqui."""
+    assert {p.vendor for p in PRECOS.values()} <= {"anthropic", "google", "openai"}
+
+
+def test_config_de_producao_passa_na_independencia(credencial, tmp_path) -> None:
+    """A config versionada em exemplos/ e o que roda missao de verdade. Se ela
+    parar de compor, o motor nao arranca -- e melhor descobrir no gate."""
+    import json as _json
+    from pathlib import Path as _Path
+
+    cfg = _json.loads(
+        (_Path(__file__).resolve().parents[1] / "exemplos" / "cfg-omniroute.json")
+        .read_text(encoding="utf-8")
+    )
+    cfg["omniroute"]["api_key_env"] = _ENV
+    cfg["fx"]["capturado_em"] = int(time.time())
+    deps = compor_orcamento_omniroute(cfg, tmp_path)
+    validar_independencia_orcada(deps.rotas_certificadas)
+
+    # E o essencial para o failover: nenhum papel pode ficar sem rota quando o
+    # produtor do no coincide com a primeira alternativa.
+    for papel in ("executor", "verifier", "evaluator", "synthesizer", "planner"):
+        for evitado in ("anthropic", "openai", "google"):
+            assert deps.fabrica(
+                papel, "p", 1, RequisitosTentativaCusteada(evitar_provedor=evitado)
+            ), f"{papel} fica sem rota evitando {evitado}"
+
+
 def test_route_ids_da_cadeia_sao_distintos(credencial, tmp_path) -> None:
     """`validar_independencia_orcada` rejeita `route_id` duplicado, e o motor usa
     o índice na cadeia para compor a identidade da reserva."""

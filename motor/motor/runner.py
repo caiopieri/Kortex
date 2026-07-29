@@ -55,13 +55,25 @@ class DockerSandboxEvidence:
 
 
 class CommandRunner(Protocol):
-    """Contrato a certificar em H05b; sua implementação não é validada por este tipo."""
+    """Contrato a certificar em H05b; sua implementação não é validada por este tipo.
+
+    `namespace_proprio` diz se o runner executa em um sistema de arquivos que
+    NÃO é o do host. Quando é o caso, o grafo não pode validar o executável
+    contra o host: `/usr/local/bin/python3` existe dentro da imagem e não fora
+    dela, então `resolve(strict=True)` reprovaria todo comando e o sandbox
+    ficaria ligado sem nunca executar nada -- uma contenção que parece funcionar
+    porque nada passa por ela.
+    """
+
+    namespace_proprio: bool
 
     def run(self, request: CommandRequest) -> CommandResult: ...
 
 
 class DenyCommandRunner:
     """Default seguro: comando indisponível sem runner externo composto."""
+
+    namespace_proprio = False
 
     def run(self, request: CommandRequest) -> CommandResult:
         del request
@@ -71,8 +83,34 @@ class DenyCommandRunner:
         )
 
 
+_ESPERADOS_SANDBOX = {"image_digest", "executaveis"}
+
+
+def compor_sandbox(caminho: str | Path) -> tuple["DockerSandboxRunner", DockerSandboxEvidence]:
+    """Compõe o runner a partir de config e PROVA o preflight antes de devolver.
+
+    Falha fechado de propósito: pedir `--sandbox` e receber DenyCommandRunner
+    porque o daemon caiu seria o pior dos mundos -- a missão roda inteira, todos
+    os portões "aprovam" o que ninguém executou, e o operador acredita que houve
+    execução. Sem sandbox utilizável, o motor não arranca.
+    """
+    dados = json.loads(Path(caminho).read_text(encoding="utf-8"))
+    if not isinstance(dados, dict) or set(dados) != _ESPERADOS_SANDBOX:
+        raise ValueError("config de sandbox invalida")
+    executaveis = dados["executaveis"]
+    if (type(executaveis) is not list or not executaveis
+            or any(type(item) is not str for item in executaveis)):
+        raise ValueError("allowlist de executaveis invalida")
+    runner = DockerSandboxRunner(str(dados["image_digest"]), tuple(executaveis))
+    return runner, runner.deployment_evidence()
+
+
 class DockerSandboxRunner:
     """Backend Docker estrito; a conformidade de deployment continua externa."""
+
+    # A allowlist é de caminhos absolutos DENTRO da imagem selada por digest --
+    # é ela quem responde pelo executável, não o host.
+    namespace_proprio = True
 
     def __init__(self, image_digest: str, executaveis: tuple[str, ...], docker_bin: str = "docker") -> None:
         if not _IMAGE_DIGEST.fullmatch(image_digest):
@@ -139,7 +177,11 @@ class DockerSandboxRunner:
             self.docker_bin, "run", "--init", "--pull", "never", "--network", "none",
             "--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
             "--pids-limit", "64",
-            "--mount", f"type=bind,src={request.workspace},dst=/workspace,rw",
+            # `readonly=false`, nao `rw`: `--mount` so aceita pares chave=valor e
+            # rejeita a flag solta com exit 125 antes de subir o container. O
+            # defeito passou despercebido ate 2026-07-28 porque nenhum ponto de
+            # entrada compunha este runner -- todos recebiam DenyCommandRunner.
+            "--mount", f"type=bind,src={request.workspace},dst=/workspace,readonly=false",
             "--workdir", "/workspace", "--user", f"{os.getuid()}:{os.getgid()}",
             "--entrypoint", request.argv[0], self.image_digest, *request.argv[1:],
         ]

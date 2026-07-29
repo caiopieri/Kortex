@@ -1,9 +1,21 @@
 # Command Sandbox Conformance
 
-Status: **adapter present; no production backend certified**
+Status: **causal suite passing on a developer workstation; no production backend certified**
 
-The repository adapter is `motor.runner.DockerSandboxRunner`. Its local tests prove only
-fail-closed preflight and policy construction; they do not satisfy this conformance suite.
+The repository adapter is `motor.runner.DockerSandboxRunner`, composed into the CLI by
+`--sandbox <cfg.json>` (`motor.runner.compor_sandbox`, fail-closed: no usable sandbox, no run).
+`tests/test_sandbox_causal.py` implements the causal suite below and executes real containers;
+it is skipped unless `KORTEX_SANDBOX_IMAGE` names a locally provisioned immutable digest.
+
+That suite passing is evidence, NOT certification. It was first run on macOS/Docker Desktop on
+2026-07-28, which satisfies the preflight (`OSType == linux`, from the engine VM) while being
+exactly the deployment this document says nothing may be inferred from.
+
+Two defects were found only by executing, after both had survived the preconditions tests:
+the adapter passed `--mount ...,rw`, which Docker rejects with exit 125 before starting the
+container; and the graph resolved the executable allowlist against the HOST, so a path that
+exists only inside the image failed `resolve(strict=True)` and every command was refused.
+Both were invisible because no entrypoint composed the runner at all.
 
 A command backend may be enabled only for the exact adapter, engine, policy and image digest
 that pass this conformance suite. Unit-test fakes cannot satisfy it.
@@ -52,6 +64,7 @@ immutable digest whose image is already provisioned, runs the local H05b causal 
 uploads the adapter's observed deployment identity as JSON.
 
 A successful run records engine, OS, adapter, policy, requested/effective digest and causal probes
-for isolation, output, timeout and cleanup. The pre-provisioned image must expose
-`/usr/bin/python3`; absence fails the job. The report remains evidence rather than certification
+for isolation, output, timeout and cleanup. The interpreter path is operator-supplied via `KORTEX_SANDBOX_PYTHON` and must appear in the
+sealed allowlist; absence fails the job. (`python:3.13-slim` ships it at `/usr/local/bin/python3`,
+not `/usr/bin/python3`.) The report remains evidence rather than certification
 and may become a human promotion-gate input only after independent review on the target deployment.

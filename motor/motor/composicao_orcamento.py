@@ -435,6 +435,16 @@ def compor_orcamento_omniroute(
             provider_id = _texto(item, "provider_id")
             if re.fullmatch(r"[a-z0-9][a-z0-9_.-]{0,63}", provider_id) is None:
                 raise ErroOrcamento(f"provider_id invalido: {provider_id}")
+            # O `provider_id` da config nao pode contradizer quem TREINOU o
+            # modelo. O OmniRoute serve o mesmo Opus 4.6 por `claude/` e por
+            # `agy/`; sem esta checagem, declarar a rota `agy/` como "google"
+            # fazia executor e verifier passarem na independencia sendo o mesmo
+            # modelo -- dois julgamentos que erram identico contados como dois.
+            vendor = omniroute_orcado.PRECOS[modelo].vendor
+            if provider_id != vendor:
+                raise ErroOrcamento(
+                    f"provider_id {provider_id} contradiz o vendor de {modelo}"
+                    f" ({vendor})")
             alternativas.append((
                 modelo, provider_id,
                 _inteiro(item, "max_completion_tokens"),

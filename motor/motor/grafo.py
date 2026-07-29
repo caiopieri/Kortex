@@ -385,17 +385,28 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
     ferramentas = ferramentas or {}
     command_runner = command_runner if command_runner is not None else DenyCommandRunner()
     perfil_execucao = "rascunho" if perfil_execucao == "rascunho" else "certificado"
+    # Quando o runner tem sistema de arquivos proprio (sandbox), quem responde
+    # pelo executavel e a allowlist selada JUNTO COM A IMAGEM, e nao a config de
+    # ferramentas do host: `/usr/local/bin/python3` existe dentro da imagem e nao
+    # fora dela. Resolver contra o host aqui reprovaria todo comando, e o sandbox
+    # ficaria ligado sem nunca executar nada.
+    namespace_proprio = bool(getattr(command_runner, "namespace_proprio", False))
     executaveis_permitidos: set[Path] = set()
-    for executavel_bruto in ferramentas_permitidas or []:
-        executavel = Path(str(executavel_bruto).strip())
-        if not executavel.is_absolute():
-            continue
-        try:
-            identidade = executavel.resolve(strict=True)
-        except OSError:
-            continue
-        if identidade.is_file() and os.access(identidade, os.X_OK):
-            executaveis_permitidos.add(identidade)
+    if namespace_proprio:
+        executaveis_permitidos = {
+            Path(item) for item in getattr(command_runner, "executaveis", ())
+        }
+    else:
+        for executavel_bruto in ferramentas_permitidas or []:
+            executavel = Path(str(executavel_bruto).strip())
+            if not executavel.is_absolute():
+                continue
+            try:
+                identidade = executavel.resolve(strict=True)
+            except OSError:
+                continue
+            if identidade.is_file() and os.access(identidade, os.X_OK):
+                executaveis_permitidos.add(identidade)
 
     def run_id_de(state: EstadoMotor) -> str:
         return state.get("run_id") or f"{datetime.now():%Y%m%d-%H%M%S}-{uuid4().hex[:6]}"
@@ -874,19 +885,24 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                 "motivo": f"executável não permitido: {partes[0]}",
                 "saida": "",
             }
-        try:
-            identidade = candidato.resolve(strict=True)
-        except OSError:
-            return {
-                "ok": False,
-                "erro": "executavel_ausente",
-                "motivo": f"executável ausente: {partes[0]}",
-                "saida": "",
-            }
-        if (
-            identidade not in executaveis_permitidos
-            or not identidade.is_file()
-            or not os.access(identidade, os.X_OK)
+        if namespace_proprio:
+            # Sem `resolve`/`access`: o caminho vive na imagem, nao aqui. A
+            # comparacao e literal contra a allowlist selada, o que continua
+            # sendo fail-closed -- so muda qual sistema de arquivos manda.
+            identidade = candidato
+        else:
+            try:
+                identidade = candidato.resolve(strict=True)
+            except OSError:
+                return {
+                    "ok": False,
+                    "erro": "executavel_ausente",
+                    "motivo": f"executável ausente: {partes[0]}",
+                    "saida": "",
+                }
+        if identidade not in executaveis_permitidos or (
+            not namespace_proprio
+            and (not identidade.is_file() or not os.access(identidade, os.X_OK))
         ):
             return {
                 "ok": False,
