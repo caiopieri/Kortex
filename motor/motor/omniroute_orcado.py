@@ -132,6 +132,41 @@ PRECOS: dict[str, PrecoModelo] = {
 }
 
 
+def _horas(segundos: int) -> str:
+    return f"{segundos / 3600:.1f}h"
+
+
+def exigir_snapshot_fresco(
+    rotulo: str, versao: str, capturado_em: int, max_age_s: int, agora: int,
+) -> None:
+    """Recusa snapshot velho DIZENDO o que venceu, de quanto, e o que fazer.
+
+    A recusa em si sempre esteve certa -- nao se precifica em BRL com cotacao
+    velha, e o teto vira ficcao. O que estava errado era a mensagem: um
+    `ErroOrcamento("snapshot FX stale")` engolido por um `except Exception`
+    chegava ao operador como "(missao abortada)". Custou um ciclo inteiro de
+    debug numa run real em 2026-07-29.
+
+    A ultima frase da mensagem nao e enfeite. A tentacao ao ver "vencido" e
+    adiantar `capturado_em` e seguir; isso mantem a data fresca e o NUMERO velho,
+    que e o pior dos dois mundos -- o motor passa a confiar num cambio errado
+    justamente por ter parado de desconfiar.
+    """
+    if capturado_em > agora:
+        raise ErroOrcamento(
+            f"snapshot {rotulo} com data no futuro ({versao}): "
+            f"capturado_em={capturado_em} > agora={agora}"
+        )
+    idade = agora - capturado_em
+    if idade > max_age_s:
+        raise ErroOrcamento(
+            f"snapshot {rotulo} vencido: capturado ha {_horas(idade)}, "
+            f"limite {_horas(max_age_s)} (versao {versao}). "
+            f"Recapture a cotacao real e atualize o bloco `{rotulo.lower()}` da "
+            f"config -- adiantar so a data mantem o numero velho."
+        )
+
+
 @dataclass(frozen=True)
 class SnapshotFX:
     versao: str
@@ -210,14 +245,14 @@ class ClienteOmniRouteCusteado:
             raise ErroOrcamento("janela de snapshot invalida")
         if type(fx) is not SnapshotFX or not fx.versao or type(fx.capturado_em) is not int:
             raise ErroOrcamento("snapshot FX invalido")
-        if fx.capturado_em > agora or agora - fx.capturado_em > fx_max_age_s:
-            raise ErroOrcamento("snapshot FX stale")
+        exigir_snapshot_fresco("FX", fx.versao, fx.capturado_em, fx_max_age_s, agora)
         if (type(pricing) is not SnapshotPricing
                 or pricing.versao != PRICING_VERSION or pricing.fonte != PRICING_SOURCE
                 or type(pricing.capturado_em) is not int):
             raise ErroOrcamento("snapshot pricing invalido")
-        if pricing.capturado_em > agora or agora - pricing.capturado_em > pricing_max_age_s:
-            raise ErroOrcamento("snapshot pricing stale")
+        exigir_snapshot_fresco(
+            "pricing", pricing.versao, pricing.capturado_em, pricing_max_age_s, agora,
+        )
         self.fx, self.pricing = fx, pricing
         self.margem = _decimal_positivo(margem, "margem")
         _decimal_positivo(fx.cotacao_venda, "cotacaoVenda")

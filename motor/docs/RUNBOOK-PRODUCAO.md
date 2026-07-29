@@ -18,6 +18,31 @@
 A preferência é **ordenada** e o motor passa `evitar_provedor`. É isso que faz a
 independência produtor↔juiz valer nos dois caminhos, e não só no caso fácil.
 
+## Snapshot de câmbio vencido
+
+Sintoma, agora explícito na saída da CLI:
+
+```
+erro: orçamento indisponível: snapshot FX vencido: capturado ha 25.9h,
+limite 24.0h (versao awesomeapi-usdbrl-2026-07-29). Recapture a cotacao real
+e atualize o bloco `fx` da config -- adiantar so a data mantem o numero velho.
+```
+
+O motor recusa arrancar, e está certo: precificar em BRL com câmbio velho torna
+o teto ficção. Conserto:
+
+```sh
+curl -s "https://economia.awesomeapi.com.br/json/last/USD-BRL"
+```
+
+Use o `ask` como `cotacao_venda`, o `timestamp` como `capturado_em`, e a data em
+`versao`. **Aproveite para reconferir a tabela de preço dos modelos em uso** —
+preço de modelo é perecível, e adiantar só a data mantém números velhos com cara
+de novos.
+
+O frescor é conferido duas vezes: na composição (antes de planejar ou gastar) e
+a cada chamada (uma run longa pode vencer no meio dela).
+
 ## Bloqueio 1 — config de orçamento · RESOLVIDO
 
 `exemplos/cfg-orcada-multi.json`. Uso:

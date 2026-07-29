@@ -992,12 +992,21 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                     int(payload.get("ciclo_reconciliacao", 0)),
                 )
                 ultima = resposta_executor.texto if resposta_executor is not None else None
-            except Exception:
+            except Exception as erro:
+                # O modelo continua recebendo texto genérico -- devolver a
+                # exceção crua para dentro do prompt é entregar detalhe interno
+                # a quem só precisa saber que falhou.
+                #
+                # O LOG, não. Até 2026-07-29 o `except` descartava a exceção e
+                # gravava a mesma frase fixa, então "snapshot FX vencido",
+                # "credencial ausente" e "upstream fora do ar" eram
+                # indistinguíveis para quem operava. Diagnóstico e prompt têm
+                # públicos diferentes.
                 feedback = "falha externa do executor"
                 log.evento(
                     "executor.erro",
                     executor=sub["id"],
-                    motivo=feedback,
+                    motivo=f"{feedback}: {type(erro).__name__}: {erro}"[:400],
                     tentativa=tentativa,
                 )
                 continue

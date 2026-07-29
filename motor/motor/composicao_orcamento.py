@@ -466,6 +466,18 @@ def compor_orcamento_omniroute(
     fx_capturado = _inteiro(fx_bruto, "capturado_em")
     fx_cotacao = _decimal(fx_bruto, "cotacao_venda")
     fx_max_age = _inteiro(bloco_raiz, "fx_max_age_s", maximo=FX_MAX_AGE_LIMITE_S)
+    # Frescor conferido AQUI, e não só na primeira chamada. O cliente é
+    # construído por chamada, dentro de `fabricar`, então snapshot vencido só
+    # aparecia depois de o motor já ter planejado e começado a executar -- e
+    # aparecia como "falha externa do executor", três vezes, sem o motivo. A
+    # checagem por chamada continua: uma run longa pode vencer no meio dela.
+    omniroute_orcado.exigir_snapshot_fresco(
+        "FX", fx_versao, fx_capturado, fx_max_age, relogio(),
+    )
+    omniroute_orcado.exigir_snapshot_fresco(
+        "pricing", omniroute_orcado.PRICING_VERSION, PRICING_CAPTURADO_EM,
+        PRICING_MAX_AGE_S, relogio(),
+    )
     timeout = _inteiro(bloco_raiz, "timeout", maximo=600)
     margem = _decimal(bloco_raiz, "margem")
     teto_bootstrap = _decimal(bloco_raiz, "teto_bootstrap_brl")
