@@ -9,6 +9,16 @@ Declara-se produção quando, ao mesmo tempo:
 1. **Gate de máquina verde** (lint · mypy · pytest · SAST · secrets · build), <5 min, determinístico.
 2. **Todo invariante do `INVARIANTES.md` tem teste que o prova** (as dívidas `⚠️ SEM TESTE` viraram testes verdes).
 3. **Dois cadeados:** Claude E GPT-5.6, em auditorias independentes, não produzem nenhum achado novo de severidade ≥ **média**.
+
+   **Estado em 2026-07-29 — parcial.** A trava GPT-5/Codex rodou sobre o trabalho
+   da Fase D (escalada+carimbo, sandbox, curador U-04/06b/07, cobertura de
+   evidência): 4 rodadas, 9 achados, 6 confirmados e corrigidos com reprodutor,
+   3 rejeitados com motivo. Ver `auditoria/ACHADOS-GPT5-CODEX-FASE-D.md`.
+   O cadeado NÃO está fechado: (a) o auditor viu diff e trechos, não o
+   repositório — área 2 (sandbox) voltou "nenhum achado" por falta de material,
+   o que é ausência de evidência e não evidência de ausência; (b) resta um
+   achado aceito em aberto (runner de sombra não autenticado); (c) as 4 rodadas
+   usaram um único prompt, então saturação do prompt não é ausência de defeito.
 4. **Zero dívida silenciosa:** todo "frágil mas deixei" está escrito em ADR/LOG, não escondido.
 
 ## Protocolo — 4 fases

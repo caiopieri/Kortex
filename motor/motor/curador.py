@@ -547,15 +547,26 @@ def carregar_chave_selo(caminho: str | Path | None = None) -> bytes | None:
     bruto = caminho if caminho is not None else os.environ.get("KORTEX_CURADOR_CHAVE")
     if not bruto:
         return None
-    arquivo = Path(bruto)
+    # Um `stat()` seguido de `read_bytes()` checa a permissao de um inode e le
+    # outro: quem controla o diretorio troca o arquivo na janela entre os dois e
+    # a chave lida nunca passou por checagem nenhuma. Abrir uma vez e perguntar
+    # ao PROPRIO descritor fecha a janela -- achado da segunda rodada da trava
+    # GPT-5 (C-05).
     try:
-        modo = arquivo.stat().st_mode
-        chave = arquivo.read_bytes()
+        fd = os.open(str(Path(bruto)), os.O_RDONLY)
     except OSError:
         return None
-    if modo & 0o077 or len(chave) < 32:
+    try:
+        modo = os.fstat(fd).st_mode
+        if modo & 0o077:
+            return None
+        with os.fdopen(fd, "rb", closefd=False) as handle:
+            chave = handle.read()
+    except OSError:
         return None
-    return chave
+    finally:
+        os.close(fd)
+    return chave if len(chave) >= 32 else None
 
 
 def _selo_sombra(evidencia: dict[str, Any], chave: bytes | None) -> str | None:
@@ -575,7 +586,11 @@ def _selo_sombra(evidencia: dict[str, Any], chave: bytes | None) -> str | None:
     o processo que produz evidencia do que a assina, e essa separacao nao existe
     hoje. Selo autentica origem no transporte, nao contra o dono da maquina.
     """
-    if chave is None:
+    # Chave curta e fraca venha de onde vier. `carregar_chave_selo` ja recusa
+    # arquivo curto; sem esta linha, `chave=b"x"` passado direto burlava a regra
+    # -- achado da 4a rodada da trava GPT-5 (C-07). Nao impede quem executa
+    # codigo aqui, mas impede chave fraca entrar por descuido.
+    if chave is None or len(chave) < 32:
         return None
     conteudo = {
         campo: evidencia.get(campo)

@@ -11,10 +11,14 @@ um que funciona quando o normal é aprovar.
 """
 from __future__ import annotations
 
+import inspect
+import os
+from pathlib import Path
 from typing import Any
 
 import pytest
 
+from motor import curador
 from motor.curador import (
     ALFA,
     PISO_CASOS,
@@ -239,3 +243,80 @@ def test_menos_de_cinco_discordantes_nunca_certifica() -> None:
     for n in range(5):
         assert _p_mcnemar(n, 0) >= ALFA
     assert _p_mcnemar(5, 0) < ALFA
+
+
+def test_C03_caminho_autoritativo_nunca_passa_chave_do_chamador() -> None:
+    """`chave=` é costura de teste; produção tem que carregar do ambiente.
+
+    Achado da trava GPT-5 (2026-07-29, C-03): quem chama pode inventar uma chave,
+    selar com ela e certificar com ela — a ausência de chave configurada deixa de
+    barrar. Não é explorável hoje (exige editar o código), mas é o degrau exato
+    para o defeito voltar: basta um caller futuro repassar chave.
+
+    Este teste trava o caminho autoritativo. `preparar_promocao_gated` é o único
+    ponto que produz intenção de promoção, e ele não pode ter essa liberdade.
+    """
+    fonte = inspect.getsource(curador.preparar_promocao_gated)
+
+    assert "certificar_sombra(evidencia)" in fonte
+    assert "chave=" not in fonte
+
+
+def test_C03_certificar_sem_chave_configurada_recusa_de_verdade(monkeypatch) -> None:
+    """O outro desfecho de C-03, pelo caminho de produção.
+
+    Sem `chave=` e sem `KORTEX_CURADOR_CHAVE`, evidência legítima e bem formada
+    não certifica. Se este teste ficar verde por acidente algum dia, o piso
+    inteiro do selo terá evaporado.
+    """
+    monkeypatch.delenv("KORTEX_CURADOR_CHAVE", raising=False)
+    evidencia = _sombra(lambda i: i == 0, lambda _i: True)
+
+    assert certificar_sombra(evidencia)["motivo"] == "evidencia de sombra nao selada"
+
+
+def test_C05_permissao_e_leitura_olham_o_mesmo_inode(tmp_path, monkeypatch) -> None:
+    """A chave lida tem que ser a chave cuja permissão foi checada.
+
+    Achado da 2ª rodada da trava GPT-5: checar permissão por caminho e depois ler
+    por caminho são dois inodes diferentes se alguém trocar o arquivo na janela.
+
+    A troca é disparada pela PRIMEIRA checagem de permissão, seja ela
+    `Path.stat` (implementação antiga, por caminho) ou `os.fstat` (atual, pelo
+    descritor). Assim o teste reprova a versão vulnerável em vez de só exercitar
+    a corrigida — reprodutor que só passa na correção não prova nada.
+    """
+    alvo = tmp_path / "curador.key"
+    alvo.write_bytes(CHAVE)
+    alvo.chmod(0o600)
+
+    intruso = tmp_path / "intruso.key"
+    intruso.write_bytes(b"chave-do-atacante-com-32-bytes!!!!")
+    intruso.chmod(0o600)
+
+    stat_real, fstat_real = Path.stat, os.fstat
+    trocado: list[bool] = []
+
+    def trocar() -> None:
+        if not trocado:
+            trocado.append(True)
+            alvo.unlink()
+            intruso.replace(alvo)
+
+    def stat_espiao(self, **kwargs):  # implementação por caminho
+        resultado = stat_real(self, **kwargs)
+        trocar()
+        return resultado
+
+    def fstat_espiao(fd):  # implementação por descritor
+        resultado = fstat_real(fd)
+        trocar()
+        return resultado
+
+    monkeypatch.setattr(Path, "stat", stat_espiao)
+    monkeypatch.setattr(os, "fstat", fstat_espiao)
+
+    lida = carregar_chave_selo(alvo)
+
+    assert trocado, "a troca nem chegou a acontecer; o teste não testou nada"
+    assert lida == CHAVE, "leu a chave do atacante: permissão e leitura viram inodes diferentes"

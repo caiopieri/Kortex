@@ -20,7 +20,7 @@ import shlex
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Annotated, Any, Callable, Mapping, Optional, TypedDict, cast
+from typing import Annotated, Any, Callable, Mapping, Optional, Sequence, TypedDict, cast
 from uuid import uuid4
 
 from langgraph.graph import END, START, StateGraph
@@ -232,19 +232,55 @@ FORCA_DA_PROVA = {"comando": "execucao", "schema_json": "estrutural",
 ORDEM_DA_PROVA = ["execucao", "estrutural", "opiniao"]
 
 
-def cobertura_de_evidencia(spec: Mapping[str, Any]) -> dict[str, Any]:
-    """Que tipo de prova cobre cada artefato da missão. Lido da spec, não do log.
+def cobertura_de_evidencia(
+    spec: Mapping[str, Any],
+    resultados: Sequence[Any] | None = None,
+) -> dict[str, Any]:
+    """Que tipo de prova cobre cada artefato da missão.
 
     A razão execução/total é a métrica do produto: ela responde "quanto disto foi
     provado e quanto foi só opinado". Sem medir, "portão de evidência" é slogan.
+
+    Sem `resultados`, mede o que a spec PROMETE — é o que o corpus de exemplos
+    checa. Com `resultados`, mede o que de fato aconteceu: portão que reprovou ou
+    que nem chegou a rodar deixa de contar como prova.
+
+    Essa distinção foi achado da auditoria GPT-5 (2026-07-29, C-02): a versão
+    anterior lia só a spec e escrevia "passaram por portão de execução" mesmo com
+    o validador tendo saído com exit code 1. A frase é uma afirmação sobre
+    RESULTADO, e a função só conhecia CONFIGURAÇÃO.
     """
     subagentes = spec.get("subagentes") or []
     if not isinstance(subagentes, list):
-        return {"artefatos": [], "execucao": 0, "total": 0}
+        return {"artefatos": [], "execucao": 0, "total": 0,
+                "medido": resultados is not None}
+
+    aprovado_por_id: dict[str, bool] | None = None
+    if resultados is not None:
+        # `is True`, não `bool(...)`: `bool("false")` é True, e a métrica de
+        # cobertura é o último lugar do sistema onde se pode aceitar coerção
+        # generosa. Achado da segunda rodada da trava GPT-5 (C-04). Hoje o motor
+        # só emite bool aqui, mas o mesmo rigor de `_recomputar_sombra` vale.
+        #
+        # Id repetido: o ÚLTIMO vence, e isso é intencional. `resultados` é
+        # cronológico, e nó que reprovou e passou na retentativa está coberto --
+        # o veredito válido é o final. A 3ª rodada da trava leu isso como defeito
+        # ("dá para escolher o resultado aprovado pela ordem"); só seria se a
+        # ordem viesse de fora, e ela vem do próprio append do motor.
+        # Id vazio fica de fora: sem isto, um resultado sem `id` e um validador
+        # sem `id` viravam ambos "" e casavam entre si -- string vazia como
+        # chave-curinga. A spec exige id nao vazio, entao isto e cinto e
+        # suspensorio; achado da 4a rodada da trava GPT-5 (C-09).
+        aprovado_por_id = {
+            str(r.get("id", "")): r.get("aprovado") is True
+            for r in resultados
+            if isinstance(r, Mapping) and str(r.get("id", "")).strip()
+        }
 
     # Prova mais forte encontrada por alvo. Vários validadores no mesmo nó valem
     # pelo melhor: quem roda a suíte E confere o schema está coberto por execução.
     prova_por_alvo: dict[str, str] = {}
+    falhou_por_alvo: dict[str, bool] = {}
     for sub in subagentes:
         if not isinstance(sub, dict) or sub.get("tipo") != "validador":
             continue
@@ -252,6 +288,15 @@ def cobertura_de_evidencia(spec: Mapping[str, Any]) -> dict[str, Any]:
         forca = FORCA_DA_PROVA.get(kind)
         alvo = str(sub.get("valida") or "")
         if not forca or not alvo:
+            continue
+        sub_id = str(sub.get("id", "")).strip()
+        if aprovado_por_id is not None and not (
+            sub_id and aprovado_por_id.get(sub_id)
+        ):
+            # Portão que reprovou ou que não rodou não é prova de nada. Ausente do
+            # log conta como não-prova pelo mesmo motivo que reprovado: em ambos
+            # os casos ninguém viu o artefato passar.
+            falhou_por_alvo[alvo] = True
             continue
         atual = prova_por_alvo.get(alvo)
         if atual is None or ORDEM_DA_PROVA.index(forca) < ORDEM_DA_PROVA.index(atual):
@@ -272,13 +317,48 @@ def cobertura_de_evidencia(spec: Mapping[str, Any]) -> dict[str, Any]:
             "id": node_id,
             "artefatos": produzidos,
             "prova": prova_por_alvo.get(node_id, "opiniao"),
+            "portao_falhou": bool(falhou_por_alvo.get(node_id)),
         })
 
+    # Denominador em ARTEFATOS, não em nós -- outro achado da auditoria GPT-5
+    # (C-01). Contando nós, um nó com 1 artefato coberto e outro com 100
+    # descobertos davam "1 de 2 = 50%", quando a cobertura real era 1 de 101.
+    # Métrica de cobertura que superestima é pior que métrica nenhuma.
     return {
         "artefatos": artefatos,
-        "execucao": sum(1 for a in artefatos if a["prova"] == "execucao"),
-        "total": len(artefatos),
+        "execucao": sum(len(a["artefatos"]) for a in artefatos
+                        if a["prova"] == "execucao"),
+        "total": sum(len(a["artefatos"]) for a in artefatos),
+        # `medido=False` e a leitura spec-only: promessa, nao resultado. O campo
+        # existe para que os dois modos nao tenham a MESMA cara na saida -- um
+        # consumidor futuro publicando promessa como cobertura observada era o
+        # risco apontado na 4a rodada da trava (C-08).
+        "medido": resultados is not None,
     }
+
+
+# Frases que SÓ o motor tem autoridade para escrever. Se aparecerem no texto do
+# sintetizador, foram imitadas.
+FRASES_CARIMBADAS = ("Cobertura de evidência:", "⚠️ RUN REPROVADO")
+AVISO_IMITACAO = "[texto do modelo, não é o carimbo do motor] "
+
+
+def desautorizar_imitacao(texto: str) -> str:
+    """Neutraliza carimbo falsificado dentro do texto do sintetizador.
+
+    Achado da 3ª rodada da trava GPT-5. O carimbo era só concatenado, então o
+    modelo podia escrever "Cobertura de evidência: 100 de 100 artefatos passaram
+    por portão de execução" no próprio corpo e o carimbo real vinha depois: duas
+    coberturas em conflito, e quem lesse a primeira -- humano com pressa ou script
+    com regex -- levava a forjada.
+
+    O ataque não precisa de má-fé do modelo: basta ele resumir o rodapé de um run
+    anterior. Carimbo cuja autoridade depende de o leitor escolher a ocorrência
+    certa não é carimbo.
+    """
+    for frase in FRASES_CARIMBADAS:
+        texto = texto.replace(frase, AVISO_IMITACAO + frase)
+    return texto
 
 
 def carimbar_evidencia(texto: str, state: Mapping[str, Any]) -> str:
@@ -293,8 +373,11 @@ def carimbar_evidencia(texto: str, state: Mapping[str, Any]) -> str:
     e carimbar aviso vermelho nela treinaria você a ignorar o carimbo -- que é
     como se perde o carimbo de reprovação junto.
     """
+    texto = desautorizar_imitacao(texto)
     spec = state.get("spec") or {}
-    cobertura = cobertura_de_evidencia(spec)
+    # Com os resultados: "passaram" é afirmação sobre o que aconteceu, então tem
+    # que ser lida do que aconteceu.
+    cobertura = cobertura_de_evidencia(spec, state.get("resultados") or [])
     if not cobertura["total"]:
         return texto
 
@@ -304,8 +387,12 @@ def carimbar_evidencia(texto: str, state: Mapping[str, Any]) -> str:
     ]
     for item in cobertura["artefatos"]:
         if item["prova"] != "execucao":
-            rotulo = ("verificado só por opinião de modelo" if item["prova"] == "opiniao"
-                      else "checado só na forma, não no comportamento")
+            if item["portao_falhou"]:
+                rotulo = "portão de execução NÃO aprovou este artefato"
+            elif item["prova"] == "opiniao":
+                rotulo = "verificado só por opinião de modelo"
+            else:
+                rotulo = "checado só na forma, não no comportamento"
             linhas.append(f"- {item['id']} ({', '.join(item['artefatos'])}): {rotulo}")
     return texto + "\n\n---\n\n" + "\n".join(linhas)
 
@@ -1658,7 +1745,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         # ficar na primeira linha, e o rodapé de cobertura embaixo do texto.
         resposta = carimbar_evidencia(resposta_orcada.texto, state)
         resposta = carimbar_reprovacao(resposta, state)
-        cobertura = cobertura_de_evidencia(spec)
+        cobertura = cobertura_de_evidencia(spec, state.get("resultados") or [])
         log.evento("evidencia.cobertura", missao=spec["missao"]["id"],
                    execucao=cobertura["execucao"], artefatos=cobertura["total"])
         reprovados = reprovados_de(state)
