@@ -611,7 +611,30 @@ def test_servico_real_concorrente_persiste_decision_id_e_ack(tmp_path: Path) -> 
 
     with ThreadPoolExecutor(max_workers=2) as pool:
         respostas = list(pool.map(responder, (jobs_a, jobs_b)))
-    assert all(resposta["estado"] == "em_execucao" for resposta in respostas)
+
+    # Os dois desfechos da corrida são legítimos, e exigir só um deles tornava
+    # este teste intermitente (3 falhas na suíte cheia em 2026-07-29, sempre
+    # verde isolado):
+    #
+    # - SIMULTÂNEO: ambos leem o gate ainda pendente e ambos seguem para aplicar.
+    #   É o cenário que H11 existe para cobrir, e os dois voltam "em_execucao".
+    # - SEQUENCIAL: sob carga, o primeiro aplica e termina antes de o segundo
+    #   ler. O segundo acha `gate is None` e, SEM `decision_id`, não tem chave de
+    #   idempotência para reconhecer que é a mesma decisão — então recusa. Qual
+    #   das duas recusas ele dá depende de o run já ter terminado ou não, e as
+    #   duas são corretas: em ambas o gate que ele quer responder não existe mais.
+    #
+    # O invariante não é o rótulo de estado: é UMA aplicação, aconteça a corrida
+    # como acontecer. Isso continua exigido logo abaixo, e o conjunto aceito aqui
+    # é FECHADO — qualquer outro erro, ou erro de outro tipo, segue reprovando.
+    RECUSAS_LEGITIMAS = {"gate já respondido", "job não está em gate_pendente"}
+    for resposta in respostas:
+        if resposta["estado"] == "erro":
+            assert resposta["erro"]["tipo"] == "EstadoInvalido", resposta
+            assert resposta["erro"]["mensagem"] in RECUSAS_LEGITIMAS, resposta
+        else:
+            assert resposta["estado"] == "em_execucao", resposta
+    assert any(resposta["estado"] == "em_execucao" for resposta in respostas)
     fim = time.time() + 3
     while True:
         ledger = LedgerCaixa(db_path)
