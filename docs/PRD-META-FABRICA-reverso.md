@@ -6,6 +6,14 @@
 > e de base para red-team.
 > Fonte: `docs/LEIA-PRIMEIRO.md`, `docs/ROADMAP.md`, `motor/docs/EVOLUCAO.md`, `LOG-VERIFICACAO.md`.
 > Data do retrato: 2026-07-03.
+>
+> ⚠️ **Retrato datado — não é o estado atual.** Este documento é um instantâneo de auditoria e
+> **não foi reescrito**: seus números (48 eventos, suíte ~292) e sua leitura de maturidade valiam
+> naquela data e hoje são falsos. Mantido como registro, não como estrela-guia. Para o estado
+> corrente use `LEIA-PRIMEIRO.md` §5, `../motor/specs/001-hardening-producao/verification.md` e
+> `../motor/docs/INVARIANTES.md`. Decisões posteriores que mudam este PRD:
+> `DECISAO-conhecimento-e-julgamento.md` (2026-08-07) e `DECISAO-provedores-e-computacao.md`
+> (2026-08-07). Antes de fatiar spec a partir daqui, reconstrua o retrato.
 
 ## Problema
 Construir artefatos intelectuais complexos com IA (software, specs, design, pesquisa, patente)

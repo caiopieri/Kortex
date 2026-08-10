@@ -148,6 +148,46 @@ tocam o motor:
 - **Limite de topologia inalterado:** workflow novo = spec nova (livre); **padrão novo** (topologia/controle
   novo) = versão de spec certificada (raro). O editor visual oferece só a gramática válida.
 
+### V8 — Backends de execução plugáveis e capacidade de computação
+
+Decidido em 2026-08-07; canônico em `../../docs/DECISAO-provedores-e-computacao.md`. Resumo dos
+pontos que tocam o motor:
+
+- **Inferência se aluga, computação se constrói.** Há padrão de fato para inferência
+  (`/v1/chat/completions`) e o plugue já existe (`ClienteOpenAICompat`) — não construir gateway de
+  provedor é decisão, não omissão. Para *executar comando* não há agregador que satisfaça
+  `../specs/001-hardening-producao/sandbox-conformance.md`; essa camada é nossa.
+- **`CommandRunner` é o ponto de extensão, e já é um `Protocol`.** `DenyCommandRunner` (default) e
+  `DockerSandboxRunner` são implementações; um backend de nuvem com container isolado, imagem por
+  digest e cobrança por segundo (ex.: Modal) seria a terceira, sem o kernel saber a diferença.
+  Certificar **um** backend fecha C2/C3 e faz o motor rodar o que escreve.
+- **A mesma primitiva serve ao V6.** Fine-tuning, destilação e eval de held-out são consumidores de
+  computação com GPU. O runner certificado evita construir duas camadas de computação — sem
+  antecipar o V6, que segue gated pelo grader.
+- **Capacidade deixa de ser só habilidade de modelo.** Hoje `capacidades_requeridas` fala
+  `redacao`/`codigo`/`analise`; passa a poder falar `gpu`/`container`/`armazenamento`, mantendo
+  requisito estrito e fail-closed (S3). Aditivo: a spec continua sendo a dinâmica.
+- **Três formas de computação, não uma.** *Comando* (`argv` → exit code) é o que existe e dá
+  `execucao` de graça. *Trabalho* (submeter → poll → artefatos; GPU, horas) não passa por `run()`
+  síncrono: modela-se como submeter → checkpoint → retomar, idempotente por id de job, sob o contrato
+  de durabilidade do outbox. *Sessão* (processo vivo observável: FreeCAD, browser, simulador) é classe
+  de isolamento própria e mais fraca, e sua evidência nasce mais fraca — isso vai no carimbo.
+- **Duas classes de isolamento na conformance:** *selada* (`--network none`, evidência `execucao`
+  plena) e *egress restrito* (allowlist explícita, para teste de integração e chamada de API,
+  evidência com ressalva de rede na proveniência). Nunca egress livre. A classe usada é dado do
+  carimbo.
+- **`workspace` é bind mount local.** `CommandRequest.workspace: Path` assume mesma máquina; backend
+  remoto exige volume persistente sincronizado **por run**, não por comando. Medir o tamanho real do
+  workspace é pré-requisito da decisão.
+- **Guarda:** se o roteador precisar consultar disponibilidade **em tempo real** (quota, região,
+  cold start, GPU livre) para decidir, ele deixa de ser função pura sobre config e vira orquestrador
+  de recurso — isso é da casa, não do kernel (V4).
+- **Atestação de rota.** Rota ganha nível de atestação: verificável (vendor direto, credencial
+  própria) pode ser verifier e alimentar o curador; declarada (agregador opaco) serve como executor
+  com evidência carimbada mais fraca. Não bloquear — carimbar, no mesmo espírito de
+  `cobertura_de_evidencia`. **Consequência obrigatória:** rota só-declarada não promove e não entra
+  no corpus do curador.
+
 ## Sequência sugerida (depende, não importância)
 
 1. **V2 (esquema de eventos)** — EM CURSO. Barato, destrava interface/controle e instrumenta tudo. Primeiro tijolo.
@@ -163,10 +203,23 @@ tocam o motor:
    editor visual na interface, marca de run não-certificado, contrato de composição entre casas). Casa com
    V5 (spec v0.2) e V3 fatia 3 (o guardrail da medição).
 7. **V4** é guarda permanente, não tarefa: vale em toda decisão ("isso é músculo ou autoridade?").
+8. **V8 (backends de execução + capacidade de computação)** — **o desbloqueador**. Certificar um
+   backend de sandbox é o que tira C2/C3 de indisponível e faz o motor rodar o que escreve; sem
+   isso, o verificador mais barato da vertical de software fica desligado e a alça
+   experiência→conhecimento não fecha. Vem antes de qualquer coisa nova, inclusive de tela.
 
 ## O que NÃO fazer (guardas)
 
 - Não meter company/orçamento/org-chart/permissão no motor (vive na casa).
+- **Não construir gateway de inferência.** Cliente para N provedores é commodity com padrão de fato
+  e o plugue já existe (`ClienteOpenAICompat`, `base_url`). Agregador externo entra como *uma*
+  conexão de tier baixo, nunca como a porta de entrada. Ver V8.
+- **Não deixar a independência executor↔verifier repousar sobre um único agregador.** Dois
+  `route_id` distintos atrás do mesmo proxy é independência **declarada**, não observada — e
+  auto-fallback, que é a feature de vitrine desse tipo de produto, a quebraria em silêncio.
+- **Não aceitar compressão de prompt com perda no caminho do motor.** Quebra replay do corpus
+  endereçado por conteúdo e faz o selo do curador (U5) carimbar comparação que não foi sobre a mesma
+  entrada (U4).
 - Não trocar fan_out_sintese por padrão novo sem certificar; padrão novo = spec v0.2.
 - Não fazer o motor classificar/decidir gate; ele sobe cru.
 - Não criar parser mágico pra prosa de LLM; ajustar prompt, não topologia.

@@ -35,6 +35,30 @@ Dispatch can incur external cost and therefore requires all of the following:
 5. Process creation through a fixed executable and validated `argv`, never a shell command.
 6. Failure responses that preserve evidence without claiming the mission started.
 
+## Canvas and operation surface
+
+The panel evolves into an infinite-canvas operation surface organized in floors. The full decision is
+`docs/DECISAO-canvas-e-operacao.md`; the clauses that bind this spec are:
+
+- Nothing exists because it is on the canvas. It exists because it is in the ledger or in a spec. The
+  canvas is a projection and a spec editor, never a second source of truth.
+- The surface has two visually unmistakable zones. **Draft** is free-form, carries no authority, and
+  never feeds the curator. **Score** accepts only valid grammar and emits a `WorkflowSpec`. Promotion
+  from draft to score is explicit and one-directional; a draft that produced a good score is attached
+  to the spec version as provenance, never as evidence.
+- Floors are houses. A link between floors is a typed artifact with provenance, chained by the
+  orchestrator — never a free-hand line.
+- Failure indicators must resolve to a station. A localized failure points at floor, run and node; a
+  systemic failure (composition, stale pricing/FX, missing credential, uncovered capability, denied
+  runner) points at a fixed pre-flight station. The surface never invents a location, and says so when
+  a failure has none — the same three-state honesty already used for connection credentials.
+- Live projection is served incrementally over the ledger `seq`. The client tracks the last `seq`,
+  detects discontinuity and rebuilds the fold; while a projection is suspect it is rendered as
+  suspect. A gap is never resolved by displaying a state that never existed.
+- A desktop shell is justified only by capabilities the browser lacks — native notification of an open
+  gate or a raised andon, operation state in the menu bar, click-through to the station. The browser
+  remains a first-class path; the shell wraps the same surface rather than forking a second product.
+
 ## Verification
 
 - `motor/tests/test_painel.py` covers deterministic read projections and HTTP endpoints.

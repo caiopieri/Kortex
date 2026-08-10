@@ -11,7 +11,14 @@ Repository instructions for automated contributors.
 - Preserve the boundary that promotion is an intent requiring a human gate, never an
   automatic catalog mutation.
 - Command execution is denied unless an explicitly configured runner enforces the
-  documented sandbox contract.
+  documented sandbox contract. `CommandRunner` is the extension point; a new backend is
+  certified against `motor/specs/001-hardening-producao/sandbox-conformance.md`, never by
+  self-report.
+- Provider identity is evidence, not configuration. Do not treat distinct route identifiers
+  behind a single aggregator as independent executor and verifier, and do not introduce lossy
+  prompt compression on any path feeding the reproducer corpus or the curator.
+- Do not build clients for additional inference providers. The OpenAI-compatible plug already
+  exists; aggregation of inference is a configuration concern, execution of commands is not.
 
 ## Verification
 

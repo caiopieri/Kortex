@@ -4,7 +4,7 @@
 > inteiro antes de mexer em qualquer coisa. Ele diz **o que estamos construindo, por quê, onde está, e
 > como não ir na direção errada.** Os detalhes vivem nos documentos canônicos listados na §7.
 >
-> De: Caio (dono e arquiteto da visão) + revisão de arquitetura. Atualizado: 2026-07-03.
+> De: Caio (dono e arquiteto da visão) + revisão de arquitetura. Atualizado: 2026-08-10.
 > Mantenha este documento vivo: quando a realidade mudar, atualize-o. Documento desatualizado mente.
 
 ---
@@ -107,30 +107,62 @@ direção errada — pare e releia.
    um avaliador objetivo. **O gate é o grader.** A régua é o gargalo de tudo.
 4. **Validação primeiro.** Nada vira método antes do primeiro uso real. **Logisti é a fornalha.** Cada
    capacidade nova estreia num uso real, não no abstrato.
-5. **Conhecimento antes de peso.** Boa parte da "maestria" vem de RAG + boas ferramentas + grafo de
-   conhecimento — mais barato, sem treino, sem risco de collapse. Fine-tuning é o último recurso (os
-   últimos 10%), só quando uma tarefa provar volume + estabilidade + grader confiável.
+5. **Conhecimento antes de peso — e verificador antes de conhecimento.** Boa parte da "maestria" vem
+   de RAG + boas ferramentas + grafo de conhecimento — mais barato, sem treino, sem risco de
+   collapse. Fine-tuning é o último recurso (os últimos 10%), só quando uma tarefa provar volume +
+   estabilidade + grader confiável. **O gerador de hipótese (conhecimento público) é commodity que
+   se compra; o seletor (verificação) é o que ninguém vende — e é onde o investimento rende.**
+   Construir conhecimento próprio só onde a cegueira do gerador foi *medida*. Ver
+   `DECISAO-conhecimento-e-julgamento.md` §2.
 6. **Só dado gate-verificado treina (anti-collapse).** Flywheel que treina no próprio output cru degrada em
    silêncio. Mantenha âncoras de ouro pra detectar deriva.
 7. **Imposto de complexidade.** Toda peça nova paga com ganho real em qualidade, custo ou segurança —
    senão fica no Later. O maior risco do projeto é **largura sobre profundidade** (cobrir tudo na
    superfície, dominar nada).
 8. **Catálogo federado, não armazém.** O "universo conectado" de dados é ponteiros + metadados com
-   proveniência/licença, não um banco gigante central.
+   proveniência/licença, não um banco gigante central. **Dado externo estocado é passivo, não
+   ativo:** cada fonte ingerida é obrigação de frescor perpétua, e RAG vencido é pior que RAG
+   nenhum — troca "não sei" por "sei errado". O ativo que compõe é o traço de execução com veredito,
+   que a fábrica **produz**; não o documento que ela **estoca**.
 9. **Primitivas nomeadas de forma agnóstica.** "reviewer", não "reviewer de código"; "evidência", não
    "teste" — pra outras verticais virarem config, não reescrita.
 10. **Falsificável-primeiro, inerte-por-default.** Toda extensão entra atrás de flag/registro sem quebrar o
     que existe; cada passo tem um critério de falha claro e barato antes de virar fundação.
+11. **Humano é input externo.** "Todo input externo é hostil até validado" vale para o fundador
+    também. Achado de sênior, relatório de pentest e observação do dono entram como **hipótese com
+    prior alto, não como veredito** — prior alto significa "testar primeiro", nunca "pular o teste".
+    O humano é autoridade sobre **fins** (intenção, gosto, risco, dinheiro), não sobre **meios**:
+    gate de correção sem verificador é sintoma de verificador faltando, não solução. Ver
+    `DECISAO-conhecimento-e-julgamento.md` §3.
+12. **Agnóstico sobre quem serve, nunca sobre saber quem serviu.** Liberdade total de provedor —
+    assinaturas, créditos, free tier, GPU por segundo, tudo aproveitável. Mas rota carrega
+    **atestação**: identidade verificável habilita julgar (verifier, curador, promoção); identidade
+    só declarada serve para executar em volume, com evidência carimbada mais fraca. **Inferência se
+    aluga** (há padrão de fato e o plugue já existe); **computação se constrói** (não há agregador
+    que satisfaça a conformance de sandbox). Ver `DECISAO-provedores-e-computacao.md`.
+13. **Spec rígida não é interface rígida.** O `WorkflowSpec` estrito é a qualidade do sistema;
+    experiência engessada é defeito de UI, não requisito de disciplina. As duas coisas vivem em
+    camadas diferentes e não se pagam mutuamente — a superfície pode ser inteiramente fluida e emitir
+    spec rigorosamente validada. E vale a trava: **nada existe por estar no canvas; existe por estar
+    no ledger ou numa spec.** Ver `DECISAO-canvas-e-operacao.md`.
 
 ---
 
-## 5. Estado atual (fotografia honesta — 2026-07-03)
+## 5. Estado atual (fotografia honesta — 2026-08-07)
+
+> **Cabeçalho:** motor **v0.5 em hardening T2 — não certificado para produção**. O programa H00–H13
+> e a extensão H12b fecharam a maior parte dos achados da auditoria defensiva. Suíte na branch
+> `refatoracao-painel`: **1121 passaram · 15 falharam · 35 pulados** (1171 coletados) — a branch
+> **não está verde**; as 15 falhas são snapshot de pricing vencido no fixture e reprodutores de
+> auditoria obsoletos, detalhados no `README.md`. Os três bloqueios de produção continuam abertos e
+> são de ambiente/deployment, não de código faltando (ver `motor/docs/INVARIANTES.md`, "Dívidas
+> conhecidas").
 
 **O que JÁ funciona (validado em run real, não aspiracional):**
 
 - **Motor v0.5** — grafo LangGraph fixo interpretando WorkflowSpec dinâmica. Padrão `fan_out_sintese` +
   rota `grafo_dependencias` (construção). Verificação adversarial por subagente, avaliador de cobertura,
-  gate do fundador (`interrupt()`), jobs duráveis (SQLite checkpointer), telemetria JSONL. Suíte ~244 verde.
+  gate do fundador (`interrupt()`), jobs duráveis (SQLite checkpointer), telemetria JSONL.
 - **Fase C completa** (loop de auto-correção) — os três pilares funcionando juntos: **prevenção** (rota de
   dependência em ondas: cada etapa vê a anterior), **escalada de tier** (subtarefa difícil reprovada sobe
   de degrau e converge), **reconciliação na fonte em loop bounded** (avaliador nomeia o nó culpado, motor
@@ -139,10 +171,15 @@ direção errada — pare e releia.
 - **Provider-agnóstico** — `ClienteOpenAICompat` (NVIDIA/Ollama/OpenRouter/Together/Groq, só muda
   `base_url`), `ClienteCodex`, `ClienteOpenCode`, `ClienteClaudeCLI`. Roteamento por papel/tier/pin/
   capacidade + **failover por custo** (`auto_esgotar`). Trocar de provedor = editar JSON, não reescrever.
-- **Curador — fundação completa** (read-only): **observador** (telemetria → perfil), **telemetria por
-  modelo**, **propositor por slot** (ranqueia modelo por papel/tier, com **piso de qualidade** e ciente de
-  **travas/timeouts** — não recomenda modelo que trava nem fraco demais), e **livro-razão de custo**
-  (tokens + tempo + $ via tabela de preço). É o cérebro de medição e alocação.
+- **Curador — fatia 3 landada** (a "sombra + certificação" que era aspiracional em julho): **observador**
+  (telemetria → perfil), **telemetria por modelo**, **propositor por slot** (piso de qualidade, ciente de
+  travas/timeouts), **livro-razão de custo**, e agora o rigor: **sombra read-only isolada por cópia
+  profunda** (U1), **os dois lados medidos no mesmo runner** (U4), **certificação anti-Goodhart** que só
+  aprova vantagem estatisticamente significativa (McNemar exato, p < 0.05, piso de 30 casos held-out)
+  **e** custo médio estritamente menor (U2), **selo MAC com chave** — sem chave nada certifica (U5).
+  **Promoção continua sendo só intenção `promocao_pendente` sujeita a gate humano** (U3/K4, ADR-003):
+  sem `RepositorioCertificacoes` autoritativo, falha fechado. **Não há revogação** — certificação não
+  tem prazo nem rebaixamento (ver `DECISAO-conhecimento-e-julgamento.md` §4).
 - **Validadores determinísticos (V1)** — `schema_json`/`contem` como primitiva da spec (test/compile = nó ferramenta via subprocess): gate que
   passa/falha por **algoritmo**, não por opinião de LLM (o salto anti-alucinação, "Enforced Outcomes").
   Reprovação re-dispara o alvo via reconciliação.
@@ -153,18 +190,34 @@ direção errada — pare e releia.
   RAG irrelevante 0/5, RAG relevante 5/5 — critério pré-registrado batido. Escopo honesto: prova
   **recuperação** numa config (codex/gpt-5.4-mini, n=5); **síntese** segue não medida (Frente C:
   números crus, sem veredito). "Conhecimento antes de peso" tem 1º sinal real agora. `LOG-VERIFICACAO.md`.
-- **Eventos tipados + superfície MCP** — **48 eventos tipados** (`eventos_schema.py`, guard anti-drift)
+  **Ressalva registrada, não reaberta:** a Frente E rodou a mesma spec/modelo e deu 2/5 onde a B deu
+  5/5 — o lift segue provado (coleta auditada da B), mas a **magnitude é instável entre harnesses**.
+  Esse trio `1/5 · 0/5 · 5/5` mede **recuperação por RAG** e nada mais; não é número de durabilidade,
+  de retomada nem de qualidade de entrega.
+- **Eventos tipados + superfície MCP** — **63 eventos tipados** (`eventos_schema.py`, guard anti-drift)
   instrumentando tudo; `metafabrica.despachar_missao / status_missao / responder_gate / resumo_missao /
-  eventos`. É o gancho da interface viva. (Veredito por handoff em `LOG-VERIFICACAO.md`.)
+  eventos`, com input e resposta serializada limitados (64 KiB) e identidade de gate exposta.
+  Ledger JSONL v2 append-only com writer único, `seq` contígua, recovery com quarentena.
+- **Caixa do Fundador e livro-razão de orçamento** — decisão humana durável em SQLite com
+  claim/lease/ack, replay, reserva exclusiva e recovery de crash; relay at-least-once para o ledger
+  JSONL preservando `event_id` e deduplicando após reabertura. Todo efeito de modelo alcançável no
+  grafo **reserva teto conservador antes do transporte**; custo desconhecido vira `UNKNOWN_COST` e
+  bloqueia novas reservas.
+- **Interface própria — construída** (era "em curso" em julho): painel React 19 + Vite sobre
+  `painel.py`, ~20 telas (Dashboard, Grafo 2D/3D, Board, Runs, Caixa do Fundador, Custos, Curador,
+  Datahouse, Nova Missão…), servindo projeções determinísticas do ledger. Contrato de honestidade
+  operacional em `motor/specs/002-painel-operacional/spec.md`: nada de progresso, custo ou saúde
+  simulados; controle ou faz a ação documentada ou fica visivelmente desabilitado.
 
-**Em curso:** a **interface viva própria** (brief de design v2 travado em `docs/design/`; construção
-iniciando sobre os eventos já emitidos).
+**Em curso:** refatoração do painel (branch `refatoracao-painel`, 96 commits à frente do origin);
+adapter OmniRoute custeado, buscando as duas rotas independentes que o preflight de topologia exige.
 
-**Aspiracional (desenhado, ainda não construído):** curador que **age** (fatia 3: sombra + certificação);
-fábrica de especialistas (fine-tuning/destilação governados); **data-house** (aquisição de dataset, repo
-separado — **despausada em 2026-07-04**: o medidor v3 provou lift de recuperação com régua honesta;
-entra no **Next** do ROADMAP, não no Now); casas além da softwarehouse; ponte física.
-Ver §6 e o ROADMAP.
+**Aspiracional (desenhado, ainda não construído):** fábrica de especialistas (fine-tuning/destilação
+governados); **revogação de certificação** no curador; **calibração do gate humano** (medir se a
+aprovação carrega informação); casas além da softwarehouse; ponte física. A **data-house** permanece
+condicionada: o lift de *recuperação* foi provado numa config única (n=5) e com magnitude instável
+entre harnesses — e a `DECISAO-conhecimento-e-julgamento.md` reordena o problema (executar →
+ler o instalado → buscar ao vivo → só então cachear). Ver §6 e o ROADMAP.
 
 **Projetos SEPARADOS que consomem a meta-fábrica (não fazem parte dela, não são dependência):**
 **Jarvis** (assistente local; consome a meta-fábrica como motor headless), **Flint** (app de notas do
@@ -178,16 +231,31 @@ dono; pode *integrar* a meta-fábrica como cliente externo opcional — a meta-f
 
 Resumo; o detalhe Now/Next/Later está no `ROADMAP.md`.
 
-- **Curto:** construir a **interface viva** sobre os 48 eventos tipados (já emitidos) — incluindo o
-  **board de missões** (intake→planejamento→produção→concluída) e o **editor de workflow** (edita a
-  WorkflowSpec dentro dos padrões certificados); **catálogo de workflows versionados** + autoria-como-run;
-  data-house no Next (o medidor v3 provou o lift de recuperação em 2026-07-04 — a régua veio antes do
-  investimento, como manda o princípio 3); gate externo de CI (tira o
-  gate da mão do agente, estreia no Logisti). *(Eventos tipados e validadores determinísticos: **feitos**.
-  Detalhe do ciclo de vida do workflow em `DECISAO-ciclo-de-vida-workflow.md`.)*
-- **Médio:** curador **age** (fatia 3 — testa modelo novo em sombra + certifica antes de mudar o catálogo);
-  spec-kit rodando no Logisti (validação real); semente da camada de conhecimento (grafo md com
-  proveniência/confiança/licença, ontologia emergente, "gap map").
+- **Curto (o que destrava tudo):** **certificar um backend de sandbox** contra
+  `motor/specs/001-hardening-producao/sandbox-conformance.md`. É o bloqueio nº 1 e é o único
+  verificador barato de verdade que temos — enquanto o motor não roda o que escreve, "garantia de
+  entrega" é afirmação não-verificável e a alça experiência→conhecimento não fecha. `CommandRunner`
+  já é um `Protocol`: o caminho mais curto pode não ser um runner Linux dedicado, e sim um backend
+  de nuvem com container isolado, imagem por digest e cobrança por segundo (**Modal** é o candidato
+  óbvio, e a mesma primitiva serve depois ao fine-tuning do V6). Pré-requisito: ler a conformance
+  contra a doc do provedor **antes** de codar — egress, limite de output por streaming e cleanup
+  determinístico decidem. Em paralelo: **duas rotas de provedor independentes e custeadas**
+  (bloqueio nº 2 — hoje todos os papéis passam pelo mesmo proxy, ver dívida 8) e **rodar a primeira
+  missão real ponta a ponta** — não para entregar produto, para medir onde o processo vaza.
+  *(Interface viva, eventos tipados e validadores determinísticos: **feitos**. Detalhe do ciclo de
+  vida do workflow em `DECISAO-ciclo-de-vida-workflow.md`.)*
+- **Interface (paralelo, não concorrente ao Curto):** a superfície de operação vira **canvas infinito
+  por andares** com **andon** — o sinal de defeito leva o operador à estação exata, e o curador aprende
+  para não repetir. Dois itens valem mesmo sem canvas nenhum e vêm primeiro: **streaming incremental
+  sobre `seq`** (com detecção de buraco) e **coordenada de estação nos eventos de falha**. Depois:
+  vista → zona de rascunho sem autoridade → autoria emitindo spec → casca com notificação nativa. Ver
+  `DECISAO-canvas-e-operacao.md`.
+- **Médio:** fechar a alça do curador — **`RepositorioCertificacoes` autoritativo** (bloqueio nº 3) é
+  o que faz processo que deu certo virar conhecimento reutilizável; é o "data" que a tese realmente
+  pede, e vem acompanhado de **revogação** (certificação sem prazo vira tradição, não conhecimento).
+  Junto: **calibrar o gate humano** — tratar aprovação como predição e medir poder discriminante, o
+  detector empírico de "gate cerimonial". Spec-kit rodando no Logisti (validação real); semente da
+  camada de conhecimento só onde a cegueira do gerador for medida (princípio 5).
 - **Longo (a fábrica de especialistas):** o curador como supervisor que **cria monstrinhos** — modelos
   pequenos, baratos, super-especializados por papel (backend, CAD…), via RAG + ferramentas primeiro e
   fine-tuning/destilação depois. **Disciplina inegociável:** (a) a régua/grader vem antes — rollout
@@ -225,6 +293,26 @@ Leia nesta ordem para entender o sistema:
    **versionado com evidência**, executado (inclusive **parcialmente / modo MVP**), **composto
    entre casas** e melhorado pelo curador. Autoria de workflow **é uma run do motor**; catálogo de
    templates; o guardrail "melhor/pior é dado, não opinião". Canônico no tema workflow.
+4c. **`docs/DECISAO-conhecimento-e-julgamento.md`** — onde entra dado e onde entra humano. Por que o
+   gerador de hipótese se compra e o seletor se constrói; a ordem executar → ler o instalado →
+   buscar ao vivo → cachear; o gate tipado pela **pergunta** (autoridade / fim / gosto / correção) e
+   não só pelo risco; humano como input externo (hipótese, não veredito); revogação de certificação.
+   Canônico no tema conhecimento e julgamento.
+4d. **`docs/DECISAO-provedores-e-computacao.md`** — quem serve o poder de processamento. Inferência
+   se aluga (padrão de fato, plugue já existe); computação se constrói (`CommandRunner` plugável,
+   backend de nuvem como candidato ao bloqueio nº 1, e a mesma primitiva serve ao fine-tuning);
+   capacidade estendida de "o que o modelo sabe" para "o que a rota executa"; atestação de rota —
+   verificável julga, declarada só executa. Canônico no tema provedor, roteamento e execução.
+4e. **`docs/DECISAO-canvas-e-operacao.md`** — a superfície de operação: canvas infinito por andares,
+   o **andon** (o sinal leva você à estação exata do defeito), zona de rascunho sem autoridade vs.
+   zona de roteiro que emite `WorkflowSpec`, streaming incremental sobre `seq`, LOD e a escolha de
+   casca. Canônico no tema interface de operação, junto com
+   `../motor/specs/002-painel-operacional/spec.md`.
+4f. **`docs/DECISAO-manutencao-e-custodia.md`** — o que acontece depois da entrega. O **dossiê**
+   (contexto durável sobre um sujeito, com carimbo de evidência por entrada — o mecanismo geral de dar
+   contexto a agente); gatilho invertido (evento do mundo, não objetivo humano); a escada
+   **mitigar → corrigir → causa raiz**; autonomia por reversibilidade; o flywheel de segurança, cujo
+   grader é quase de graça; e o risco de monocultura na carteira. Canônico no tema manutenção.
 5. **`motor/docs/ARQUITETURA-MCP.md`** — a **fronteira**: como o motor vira MCP, e a linha entre
    o que o motor faz e o que o porteiro/orquestrador faz. Decisões travadas.
 6. **`motor/README.md`** — entrada técnica do motor (como rodar, testar, Studio).
@@ -272,6 +360,14 @@ documentos são o mapa operacional versionado.
 - **Interface antes do sinal** — não se visualiza uma fábrica que não emite eventos. O esquema de eventos
   vem antes da tela bonita.
 - **Centralizar dado cedo** — catálogo federado, não armazém.
+- **Independência que só existe na config** — dois `route_id` distintos atrás do mesmo agregador é
+  independência **declarada**, não observada. Auto-fallback, que é a feature de vitrine desse tipo
+  de gateway, faria executor e verifier caírem no mesmo upstream em silêncio, e o motor registraria
+  dois julgamentos onde houve um. Atestação por resposta ou um papel fora do proxy.
+- **Reimplementar transporte** — cliente para N provedores de inferência é commodity com padrão de
+  fato; o esforço rende em execução atestada (sandbox, capacidade de computação), não em gateway.
+- **Fundação sobre crédito promocional** — GPU barata por crédito que expira é hipoteca. A
+  abstração precisa aguentar o provedor sair.
 - **Reinventar o control-plane** — o Paperclip (MIT) já resolveu o encanamento; copiá-lo/reusá-lo libera
   tempo pro que é nosso diferencial.
 - **Reinventar organização que o grafo já dá** — dar checklist/to-do a um nó do motor duplica o grafo (que
@@ -282,3 +378,18 @@ documentos são o mapa operacional versionado.
   reconciliação, não "caderno" comum).
 - **Não substitui julgamento** — os gates pegam o conhecido. Escala nova e fluxo que toca dinheiro/dado
   pessoal ainda exigem um humano olhando.
+- **Gate humano que carimba sem ler** — o modo de falha mais silencioso. Fora da sua faixa de
+  competência o humano não devolve silêncio: devolve **ruído com selo de aprovação**, e uma
+  reprovação legítima carimbada como "aprovado" entra no catálogo como processo que funciona. É
+  contaminação do ativo composto, não só gate inútil. Duas defesas: perguntar só o que é respondível
+  dentro da competência e do orçamento de atenção do humano, e **medir** se a aprovação carrega
+  informação.
+- **Gate humano satura** — se a fábrica gerar cem intenções por dia, o humano carimba sem ler e a
+  autoridade migra *de fato* para a máquina sem migrar *de direito*. Escalar produção sem escalar
+  julgamento é o modo de falha estrutural da regra pétrea, e ele não aparece em teste nenhum.
+- **Certificação sem prazo fossiliza** — conhecimento consolidado também carrega prática que
+  funcionou pelo motivo errado e regra cujo contexto evaporou. Sem revogação, a fábrica de processo
+  vira burocracia por acumulação: o risco "gate cerimonial" um nível acima.
+- **Documento desatualizado mente** — este arquivo passou ~5 semanas afirmando "suíte ~244 verde",
+  "48 eventos" e "curador fatia 3 aspiracional" quando os três já eram falsos. Número em documento
+  narrativo apodrece; a matriz de invariantes e os testes têm precedência.
