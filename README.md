@@ -56,7 +56,7 @@ harness-mecanico/      semente da vertical mecânica
 ```bash
 cd motor
 python -m pip install -e ".[dev]"
-pytest -q                                       # sem rede; 965 verdes + 7 pulados (ver H05b abaixo)
+pytest -q                                       # sem rede; ver "Estado da suíte" abaixo
 python -m motor --modelos /caminho/modelos-orcados.json "pesquise oportunidades de aumento de receita"  # fail-closed
 ```
 
@@ -82,17 +82,51 @@ integração fail-closed dos callsites de modelo. O estado comprovado hoje é:
 - planner, executor, verifier, evaluator, reconciliação e synthesizer reservam antes do efeito e
   bloqueiam custo desconhecido; a composição OpenAI exige pricing/FX versionados e frescos.
 
+### Estado da suíte (branch `refatoracao-painel`, 2026-08-10)
+
+`1129 passaram · 7 falharam · 35 pulados` (1171 coletados). **A branch não está verde.**
+
+As 8 falhas por snapshot vencido foram resolvidas em 2026-08-10 recapturando FX e reconferindo as
+quatro tabelas de pricing contra os `PRICING_SOURCE` (nenhum preço subiu; toda entrada verificável
+está igual ou acima do mercado, então a tabela segue sendo teto conservador). Renovação de FX agora
+tem ferramenta: `python3 scripts/recapturar_fx.py`.
+
+As **7 falhas restantes são achados ABERTOS da auditoria Anthropic**, não reprodutores obsoletos.
+Cada uma tem referência de arquivo:linha na docstring e todas descrevem **portão que não porteia**:
+
+| Achado | Defeito |
+|---|---|
+| A-03 | `spec.py` usa `list[str]` e não `list[NonBlank]`: rubrica `["   "]` passa na validação e o verifier julga contra critério vazio |
+| A-04 | validador declarado em nó de modelo é silenciosamente ignorado |
+| A-05 | `grafo.py` faz `max(0, min(minimo, len(requer)))`: `min: 0` — proibido por `ConfigContem` — vira aprovação incondicional no runtime |
+| A-06 | sem `jsonschema` instalado o mesmo payload é aprovado; o portão depende de dependência não declarada |
+| E-01 | removido o sidecar `.<nome>.lock`, um segundo writer abre no mesmo inode e a `seq` deixa de ser contígua |
+| E-02 | linha corrompida no meio do log não é quarentenada |
+| E-03 | guard anti-drift é cego para tipo de evento não literal |
+
+Estes contradizem parcialmente o parágrafo "Auditoria dual-frontier" abaixo, escrito quando a triagem
+concluiu que não havia defeito aberto. A conclusão não vale para estes sete: eles reprovam hoje, em
+isolamento, contra o código atual.
+
+Contagem é evidência daquela revisão apenas. Um release deve rerodar todo gate de um checkout limpo.
+
 As fronteiras abaixo impedem declarar o gate global fechado:
 
 1. **H05b depende do ambiente, não de código faltando:** o backend Docker fail-closed existe
    (`motor/motor/runner.py`), com identidade OCI selada, limite de output e limpeza de execução. O que
    falta é *rodá-lo e certificá-lo*: o default composto continua sendo `DenyCommandRunner`, e o harness
-   de conformance é Linux. Fora de um ambiente certificado, C2/C3 permanecem indisponíveis — por
+   de conformance é Linux. `CommandRunner` é um `Protocol` — o caminho mais curto até a certificação
+   pode ser um backend de nuvem com container isolado, imagem por digest e cobrança por segundo, e não
+   um runner Linux dedicado. Ver `docs/DECISAO-provedores-e-computacao.md` §2.2. Fora de um ambiente certificado, C2/C3 permanecem indisponíveis — por
    desenho, não por omissão. Os testes de auditoria que exigem execução real ficam explicitamente
    pulados (`MOTOR_RUNNER_CERTIFICADO=1` os liga); a segurança de `argv` que eles cobriam é provada
    sem execução em `test_auditoria_gpt5_d.py::test_c4_metacaractere_vira_exatamente_um_argv`.
 2. **Composição real ainda não é operacional:** uma única rota OpenAI não satisfaz a independência
-   entre executor e verifier. O teto bootstrap agora é governado por configuração e limita a spec
+   entre executor e verifier. A composição via OmniRoute alcança vários vendors com uma credencial,
+   mas roteia **todos os papéis pelo mesmo proxy**: `vendor` code-owned impede contar o mesmo modelo
+   duas vezes sob assinaturas diferentes, e nada observa qual upstream de fato atendeu. Isso é
+   independência **declarada**, não observada — ver dívida 8 em `motor/docs/INVARIANTES.md` e
+   `docs/DECISAO-provedores-e-computacao.md`. O teto bootstrap agora é governado por configuração e limita a spec
    gerada, mas o deployment deve dimensioná-lo para a reserva conservadora. Studio e experimentos
    reais falham fechados até receberem composição custeada durável.
 3. **Autoridade do curador é externa:** sem `RepositorioCertificacoes` autoritativo, promoção continua
