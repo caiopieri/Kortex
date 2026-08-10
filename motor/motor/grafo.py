@@ -481,54 +481,6 @@ def _formatar_contexto_rag(fonte: str, registros: list[dict[str, Any]]) -> str:
     )
 
 
-def _validar_schema_minimo(dados: Any, schema: dict[str, Any], caminho: str = "$") -> str | None:
-    tipo = schema.get("type")
-    if tipo:
-        tipos = tipo if isinstance(tipo, list) else [tipo]
-
-        def confere(tipo_json: str) -> bool:
-            if tipo_json == "object":
-                return isinstance(dados, dict)
-            if tipo_json == "array":
-                return isinstance(dados, list)
-            if tipo_json == "string":
-                return isinstance(dados, str)
-            if tipo_json == "integer":
-                return isinstance(dados, int) and not isinstance(dados, bool)
-            if tipo_json == "number":
-                return isinstance(dados, (int, float)) and not isinstance(dados, bool)
-            if tipo_json == "boolean":
-                return isinstance(dados, bool)
-            if tipo_json == "null":
-                return dados is None
-            return False
-
-        if not any(isinstance(t, str) and confere(t) for t in tipos):
-            return f"{caminho}: esperado {tipo}"
-    if isinstance(dados, dict):
-        required = schema.get("required") or []
-        for campo in required:
-            if campo not in dados:
-                return f"{caminho}: campo obrigatório ausente '{campo}'"
-        propriedades = schema.get("properties") or {}
-        if isinstance(propriedades, dict):
-            for campo, sub_schema in propriedades.items():
-                if campo in dados and isinstance(sub_schema, dict):
-                    erro = _validar_schema_minimo(dados[campo], sub_schema, f"{caminho}.{campo}")
-                    if erro:
-                        return erro
-        if schema.get("additionalProperties") is False:
-            extras = set(dados) - set(propriedades)
-            if extras:
-                return f"{caminho}: campos extras {sorted(extras)}"
-    if isinstance(dados, list) and isinstance(schema.get("items"), dict):
-        for indice, item in enumerate(dados):
-            erro = _validar_schema_minimo(item, schema["items"], f"{caminho}[{indice}]")
-            if erro:
-                return erro
-    return None
-
-
 def _validar_schema_json(saida: str, config: dict[str, Any]) -> tuple[bool, str, dict[str, Any]]:
     schema = config.get("schema")
     if not isinstance(schema, dict):
@@ -537,19 +489,22 @@ def _validar_schema_json(saida: str, config: dict[str, Any]) -> tuple[bool, str,
         dados = json.loads(saida)
     except json.JSONDecodeError as ex:
         return False, f"JSON inválido: {ex.msg}", {"erro": ex.msg}
-    if validar_jsonschema is not None:
-        try:
-            validar_jsonschema(instance=dados, schema=schema)
-        except Exception as ex:
-            if JsonSchemaValidationError is not None and isinstance(ex, JsonSchemaValidationError):
-                caminho = ".".join(str(p) for p in ex.path)
-                local = f" em {caminho}" if caminho else ""
-                return False, f"schema_json falhou{local}: {ex.message}", {"erro": ex.message}
-            return False, f"schema_json falhou: {ex}", {"erro": str(ex)}
-    else:
-        erro = _validar_schema_minimo(dados, schema)
-        if erro:
-            return False, f"schema_json falhou: {erro}", {"erro": erro}
+    if validar_jsonschema is None:
+        # A-06: aqui existia um fallback que ignorava enum/minimum/pattern/oneOf
+        # e devolvia o MESMO "schema_json aprovado". O portao ficava mais fraco
+        # conforme o ambiente, sem evento que distinguisse os dois modos -- e o
+        # carimbo saia `estrutural` sobre algo que ninguem checou. Portao que
+        # nao consegue checar reprova; nao aprova com menos rigor.
+        motivo = "schema_json indisponivel: jsonschema ausente no ambiente"
+        return False, motivo, {"erro": "jsonschema ausente"}
+    try:
+        validar_jsonschema(instance=dados, schema=schema)
+    except Exception as ex:
+        if JsonSchemaValidationError is not None and isinstance(ex, JsonSchemaValidationError):
+            caminho = ".".join(str(p) for p in ex.path)
+            local = f" em {caminho}" if caminho else ""
+            return False, f"schema_json falhou{local}: {ex.message}", {"erro": ex.message}
+        return False, f"schema_json falhou: {ex}", {"erro": str(ex)}
     return True, "schema_json aprovado", {"json": dados}
 
 

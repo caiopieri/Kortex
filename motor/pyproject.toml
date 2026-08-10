@@ -13,6 +13,10 @@ requires-python = ">=3.10,<3.14"
 dependencies = [
     "langgraph>=1.0,<2",
     "pydantic>=2.7,<3",
+    # Portao, nao conveniencia: o validador `schema_json` reprova fechado sem
+    # ela (grafo.py::_validar_schema_json). Ficou anos como import opcional com
+    # fallback silencioso mais fraco -- achado A-06 da auditoria Anthropic.
+    "jsonschema>=4,<5",
     # Checkpointer durável (resume pós-crash, T3). sqlite-saver 2.x exige
     # langgraph-checkpoint<3, que conflita
     # com langgraph 1.x (exige checkpoint>=4.1). Só a linha 3.x do sqlite-saver
