@@ -23,9 +23,9 @@ MODELO = "claude-sonnet-5"
 VERSAO_API = "2023-06-01"
 MAX_INPUT_TOKENS = 200_000
 MAX_OUTPUT_TOKENS = 64_000
-PRICING_VERSION = "anthropic-sonnet5-standard-verified-2026-07-28"
+PRICING_VERSION = "anthropic-sonnet5-standard-verified-2026-08-10"
 PRICING_SOURCE = "https://platform.claude.com/docs/en/about-claude/pricing"
-# Verificado em 2026-07-28 contra PRICING_SOURCE.
+# Verificado em 2026-08-10 contra PRICING_SOURCE.
 #
 # DELIBERADO: o Sonnet 5 esta em preco promocional de $2/$10 ate 2026-08-31, e
 # passa a $3/$15 em 01/09. A tabela abaixo usa o preco PROMOCIONAL ENCERRADO,

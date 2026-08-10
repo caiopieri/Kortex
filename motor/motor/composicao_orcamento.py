@@ -30,12 +30,24 @@ from .orcamento import (
     RotaTentativaCusteada,
 )
 
-# 2026-07-28T00:00:00Z. Tabelas de gemini_orcado/anthropic_orcado/openai_orcado
-# reconferidas nesta data contra os PRICING_SOURCE de cada uma.
+# 2026-08-10T00:00:00Z. Tabelas de gemini_orcado/anthropic_orcado/openai_orcado
+# e PRECOS de omniroute_orcado reconferidas nesta data contra os PRICING_SOURCE
+# de cada uma. Nenhum preco subiu: toda entrada verificavel esta igual ou ACIMA
+# do mercado, entao a tabela segue sendo teto conservador -- que e a unica
+# propriedade que ela precisa ter. Reconferencia de 2026-08-10:
+#   gpt-5.6-terra    tabela 2.50/15  | catalogo 1/6      -> tabela acima
+#   claude-sonnet-5  tabela 3/15     | catalogo 2/10     -> tabela acima
+#   gemini-2.5-pro   tabela 1.25/10  | fonte 1.25/10     -> exato (faixa <=200k,
+#                    garantida por MAX_INPUT_TOKENS = 200_000)
+#   gpt-5.6-sol      tabela 5/30     | catalogo 5/30     -> exato
+#   gpt-5.6-luna     tabela 1/6      | catalogo 0.10/0.60-> tabela acima
+#   gemini-3.5-flash tabela 0.30/2.50| catalogo 0.30/2.50-> exato
+#   claude opus      tabela 5/25     | catalogo 5/25     -> exato
+#   gemini-3.1-pro   sem tabela publica; segue no teto da familia Pro
 # ESTE VALOR EXPIRA EM 7 DIAS (PRICING_MAX_AGE_S). Vencido, o motor recusa
 # arrancar -- por desenho: preco velho e contencao monetaria velha. Renovar
 # exige RECONFERIR os precos, nao so mexer no numero.
-PRICING_CAPTURADO_EM = 1_785_196_800
+PRICING_CAPTURADO_EM = 1_786_320_000
 PRICING_MAX_AGE_S = 7 * 24 * 60 * 60
 FX_MAX_AGE_LIMITE_S = 24 * 60 * 60
 

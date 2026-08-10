@@ -39,7 +39,7 @@ from .orcamento import CotacaoTentativa, ErroOrcamento, ResultadoTentativa
 
 MAX_INPUT_TOKENS = 200_000
 MAX_OUTPUT_TOKENS = 64_000
-PRICING_VERSION = "omniroute-openrouter-verified-2026-07-28"
+PRICING_VERSION = "omniroute-openrouter-verified-2026-08-10"
 PRICING_SOURCE = "https://openrouter.ai/models"
 _QUANTUM_BRL = Decimal("0.000001")
 _MILHAO = Decimal(1_000_000)

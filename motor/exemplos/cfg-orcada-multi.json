@@ -14,30 +14,39 @@
     "",
     "Uso: python -m motor --modelos exemplos/cfg-orcada-multi.json 'sua missao'"
   ],
-
   "gemini": {
     "api_key_env": "GEMINI_API_KEY",
-    "capacidades": ["redacao", "codigo", "analise"],
+    "capacidades": [
+      "redacao",
+      "codigo",
+      "analise"
+    ],
     "max_completion_tokens": 16000
   },
   "openai": {
     "api_key_env": "OPENAI_API_KEY",
-    "capacidades": ["redacao", "codigo", "analise"],
+    "capacidades": [
+      "redacao",
+      "codigo",
+      "analise"
+    ],
     "max_completion_tokens": 16000
   },
   "anthropic": {
     "api_key_env": "ANTHROPIC_API_KEY",
-    "capacidades": ["redacao", "codigo", "analise"],
+    "capacidades": [
+      "redacao",
+      "codigo",
+      "analise"
+    ],
     "max_completion_tokens": 16000
   },
-
   "fx": {
-    "versao": "awesomeapi-usdbrl-2026-07-28",
-    "capturado_em": 1785253671,
-    "cotacao_venda": "5.1271"
+    "versao": "awesomeapi-usdbrl-2026-08-10",
+    "capturado_em": 1786374785,
+    "cotacao_venda": "5.10482"
   },
   "fx_max_age_s": 86400,
-
   "margem": "1.20",
   "teto_bootstrap_brl": "5.0",
   "timeout": 120

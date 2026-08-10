@@ -27,9 +27,9 @@ MODELO = "gemini-2.5-pro"
 # a tabela abaixo nunca subestimar. Elevar isto sem trocar os precos fura o teto.
 MAX_INPUT_TOKENS = 200_000
 MAX_OUTPUT_TOKENS = 64_000
-PRICING_VERSION = "gemini-2.5-pro-standard-verified-2026-07-28"
+PRICING_VERSION = "gemini-2.5-pro-standard-verified-2026-08-10"
 PRICING_SOURCE = "https://ai.google.dev/gemini-api/docs/pricing"
-# Verificado em 2026-07-28 contra PRICING_SOURCE.
+# Verificado em 2026-08-10 contra PRICING_SOURCE.
 # Faixa de prompt <= 200k tokens; acima disso input vira $2.50 e output $15.00.
 # O teto conservador de input (MAX_INPUT_TOKENS) mantem o prompt nesta faixa --
 # se alguem elevar esse teto acima de 200k, esta tabela passa a SUBESTIMAR.

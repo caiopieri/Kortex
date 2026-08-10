@@ -13,9 +13,9 @@ from .orcamento import CotacaoTentativa, ErroOrcamento, ResultadoTentativa
 MODELO = "gpt-5.6-terra"
 MAX_INPUT_TOKENS = 400_000
 MAX_OUTPUT_TOKENS = 128_000
-PRICING_VERSION = "openai-gpt56terra-standard-verified-2026-07-28"
+PRICING_VERSION = "openai-gpt56terra-standard-verified-2026-08-10"
 PRICING_SOURCE = "https://developers.openai.com/api/docs/pricing"
-# Verificado em 2026-07-28 contra PRICING_SOURCE.
+# Verificado em 2026-08-10 contra PRICING_SOURCE.
 #
 # ATENCAO -- ate 2026-07-28 este adapter cotava `gpt-5-2025-08-07` a
 # $1.25/$0.125/$10, que era o preco de LANCAMENTO de agosto/2025. A linha
