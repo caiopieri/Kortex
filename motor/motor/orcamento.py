@@ -291,8 +291,18 @@ class RepositorioOrcamento:
                 dados = tuple(_do_texto(campo) for campo in linha[:3])
                 if linha[3] not in ("ACTIVE", "INVALIDATED"):
                     raise ErroOrcamento("banco de dados corrompido")
-                if dados[0] != _do_texto(_texto(teto)):
-                    raise ErroOrcamento("teto divergente para sessao existente")
+                teto = _do_texto(_texto(teto))
+                if dados[0] != teto:
+                    # O teto so aperta. O planner gasta antes de a spec existir,
+                    # entao a sessao nasce no teto de bootstrap e e estreitada
+                    # quando a missao declara o seu; afrouxar seria contornar a
+                    # unica contencao monetaria do sistema.
+                    if teto > dados[0]:
+                        raise ErroOrcamento("teto divergente para sessao existente")
+                    if teto < dados[1] + dados[2]:
+                        raise ErroOrcamento("teto abaixo do ja comprometido")
+                    con.execute("UPDATE budget_session SET teto=? WHERE run_id=? AND thread_id=?", (_texto(teto), run_id, thread_id))
+                    dados = (teto, dados[1], dados[2])
                 return SessaoOrcamento(run_id=run_id, thread_id=thread_id, teto=dados[0], gasto=dados[1], reservado=dados[2], status=linha[3])
         except sqlite3.Error as erro:
             raise ErroOrcamento("ledger indisponivel ou corrompido") from erro

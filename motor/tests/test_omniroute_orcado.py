@@ -337,3 +337,25 @@ def test_route_ids_da_cadeia_sao_distintos(credencial, tmp_path) -> None:
         "verifier", "p", 1, RequisitosTentativaCusteada()
     )
     assert len({r.route_id for r in rotas}) == len(rotas)
+
+
+def test_papel_livre_de_subagente_cai_no_executor(credencial, tmp_path) -> None:
+    """`papel` de subagente é campo livre que o planner inventa.
+
+    Descoberto rodando: com `pesquisador`/`redator` na spec gerada, a fábrica
+    devolvia [] e TODO subagente morria com "adaptador custeado ausente". Quem a
+    certificação governa é o estágio, e subagente é executor por construção.
+    """
+    deps = compor_orcamento_omniroute(_cfg(), tmp_path)
+    rotas = deps.fabrica("pesquisador", "p", 1, RequisitosTentativaCusteada())
+    esperadas = deps.fabrica("executor", "p", 1, RequisitosTentativaCusteada())
+    assert rotas and [r.provider_id for r in rotas] == [r.provider_id for r in esperadas]
+
+
+def test_papel_declarado_na_config_nao_cai_no_fallback(credencial, tmp_path) -> None:
+    """O fallback não pode atropelar quem o operador declarou explicitamente."""
+    cfg = _cfg()
+    cfg["omniroute"]["papeis"]["pesquisador"] = [cfg["omniroute"]["papeis"]["verifier"][1]]
+    deps = compor_orcamento_omniroute(cfg, tmp_path)
+    rotas = deps.fabrica("pesquisador", "p", 1, RequisitosTentativaCusteada())
+    assert [r.provider_id for r in rotas] == ["anthropic"]

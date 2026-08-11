@@ -717,6 +717,27 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
             return f"{prov}/{modelo}"
         return str(prov) if prov else (str(modelo) if modelo else None)
 
+    def teto_declarado(bruto: object) -> bool:
+        """Alguém escreveu um teto, ou é o default 2.0 do schema?"""
+        if not isinstance(bruto, dict):
+            return False
+        restricoes = bruto.get("restricoes")
+        return isinstance(restricoes, dict) and "teto_custo" in restricoes
+
+    def com_teto_do_operador(spec: WorkflowSpec) -> WorkflowSpec:
+        """Faz a missão herdar o teto que o operador autorizou.
+
+        `Restricoes.teto_custo` tem default 2.0 e virou o teto real de gasto de
+        todo nó custeado. O planner recebe o schema no prompt e ecoa esse 2.0 —
+        o número não é decisão dele, e sem isto o orçamento efetivo de qualquer
+        missão gerada é um default de Pydantic. Spec escrita por humano é outra
+        coisa: lá o teto declarado é decisão, e continua valendo.
+        """
+        dados = spec.model_dump()
+        dados["restricoes"]["teto_custo"] = float(teto_bootstrap)
+        log.evento("teto.herdado", teto=str(teto_bootstrap))
+        return WorkflowSpec.model_validate(dados)
+
     def planner(state: EstadoMotor) -> dict:
         run_id = run_id_de(state)
         log.evento("run.perfil", perfil=perfil_execucao)
@@ -731,6 +752,8 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                     f"spec fornecida nao pode elevar teto bootstrap "
                     f"({spec.restricoes.teto_custo} > {teto_bootstrap})"
                 )
+            if not teto_declarado(state["spec"]):
+                spec = com_teto_do_operador(spec)
             log.evento("spec.recebida", missao=spec.missao.id, subagentes=len(spec.subagentes))
             return {"spec": spec.model_dump(), "run_id": run_id}
         rota_ativa = rota
@@ -773,6 +796,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                     spec = WorkflowSpec.model_validate(bruto)
                     if Decimal(str(spec.restricoes.teto_custo)) > teto_bootstrap:
                         raise ValueError("spec gerada nao pode elevar teto bootstrap")
+                    spec = com_teto_do_operador(spec)
                     log.evento("spec.criada", missao=spec.missao.id, subagentes=len(spec.subagentes))
                     return {"spec": spec.model_dump(), "run_id": run_id}
                 except Exception as ex:  # validação pydantic reprovada → reinjeta o erro
@@ -796,6 +820,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                 "papel": sub.get("papel"),
                 "tier": sub.get("tier"),
                 "modelo": modelo,
+                "objetivo": sub["objetivo"],
             })
         return plano
 

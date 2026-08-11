@@ -291,6 +291,11 @@ ESQUEMA: dict[str, dict[str, Any]] = {
         "campos": ["missao", "subagentes"],
         "descricao": "Registra WorkflowSpec fornecida diretamente ao motor.",
     },
+    "teto.herdado": {
+        "categoria": "missao",
+        "campos": ["teto"],
+        "descricao": "A spec nao declarou teto_custo; a missao herdou o teto do operador.",
+    },
     "tarefa.abortada": {
         "categoria": "missao",
         "campos": ["motivo"],

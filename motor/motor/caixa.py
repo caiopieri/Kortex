@@ -641,6 +641,35 @@ class CaixaFundador:
         return None
 
 
+def _achatar(valor: Any) -> str:
+    """Colapsa o valor em uma única linha.
+
+    Achatar não é estética: o plano vem de um modelo, e uma quebra de linha no
+    texto dele bastaria para forjar um segundo `**Opções:**` no corpo e tornar
+    a própria nota ilegível para `_ler_nota`.
+    """
+    return " ".join(str(valor).split()) if valor is not None else "?"
+
+
+def _contexto_do_pedido(pedido: dict[str, Any]) -> str:
+    """O que o humano precisa ver para decidir: o plano, quando houver um."""
+    plano = pedido.get("plano")
+    if isinstance(plano, list) and plano:
+        linhas = [f"plano com {len(plano)} subagente(s):", ""]
+        linhas += [
+            f"{i}. `{_achatar(no.get('id'))}` — {_achatar(no.get('papel'))}"
+            f" · tier {_achatar(no.get('tier'))} · modelo {_achatar(no.get('modelo'))}"
+            f"\n   {_achatar(no.get('objetivo'))}"
+            for i, no in enumerate(plano, 1)
+            if isinstance(no, dict)
+        ]
+        return "\n".join(linhas)
+    lacunas = pedido.get("lacunas") or []
+    if lacunas:
+        return "; ".join(_achatar(lac) for lac in lacunas)
+    return "(sem lacunas detalhadas)"
+
+
 def rodar_com_caixa(grafo, entrada, config, caixa: CaixaFundador, log: Any, *,
                     ledger: LedgerCaixa | None = None,
                     fault: Callable[[str], None] | None = None) -> dict:
@@ -703,7 +732,7 @@ def rodar_com_caixa(grafo, entrada, config, caixa: CaixaFundador, log: Any, *,
                     caixa.escrever_nota(
                         portao=portao,
                         pergunta=pedido.get("pergunta", "Decisão necessária."),
-                        contexto="; ".join(str(lac) for lac in pedido.get("lacunas", [])),
+                        contexto=_contexto_do_pedido(pedido),
                         opcoes=pedido.get("opcoes", ""),
                     )
                 if (
@@ -713,12 +742,10 @@ def rodar_com_caixa(grafo, entrada, config, caixa: CaixaFundador, log: Any, *,
                 ):
                     decisao = caixa._decisao_arquivada(portao)
                 if decisao is None:
-                    lacunas = pedido.get("lacunas", [])
-                    contexto = "; ".join(str(lac) for lac in lacunas) if lacunas else "(sem lacunas detalhadas)"
                     caixa.escrever_nota(
                         portao=portao,
                         pergunta=pedido.get("pergunta", "Decisão necessária."),
-                        contexto=contexto,
+                        contexto=_contexto_do_pedido(pedido),
                         opcoes=pedido.get("opcoes", ""),
                     )
 

@@ -42,9 +42,9 @@
     "max_completion_tokens": 16000
   },
   "fx": {
-    "versao": "awesomeapi-usdbrl-2026-08-10",
-    "capturado_em": 1786374785,
-    "cotacao_venda": "5.10482"
+    "versao": "awesomeapi-usdbrl-2026-08-11",
+    "capturado_em": 1786466552,
+    "cotacao_venda": "5.1623"
   },
   "fx_max_age_s": 86400,
   "margem": "1.20",

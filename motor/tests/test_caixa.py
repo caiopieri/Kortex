@@ -22,7 +22,7 @@ try:
 except ImportError:
     from langgraph.checkpoint.memory import MemorySaver as InMemorySaver
 
-from motor.caixa import CaixaFundador, rodar_com_caixa
+from motor.caixa import CaixaFundador, rodar_com_caixa, _contexto_do_pedido
 from motor.eventos import LogEventos
 from tests.helpers_grafo import construir_grafo_teste as construir_grafo
 from motor.modelos import ClienteStub
@@ -216,3 +216,56 @@ def test_timeout_levanta_e_mantem_nota(tmp_path):
     assert (dir_caixa / "PENDENTE — cobertura.md").exists()
     tipos = [e["evento"] for e in eventos_de(tmp_path / "log.jsonl")]
     assert "decisao.timeout" in tipos
+
+
+# ---------------------------------------------------------------------------
+# (e) A NOTA MOSTRA O PLANO QUE MANDA REVISAR
+# ---------------------------------------------------------------------------
+def test_nota_do_portao_plano_mostra_o_plano(tmp_path):
+    """Gate que pede revisão sem exibir o objeto revisado vira carimbo.
+
+    O payload do interrupt de `plano` traz a lista de subagentes; o corpo da
+    nota tem que carregá-la, senão o humano decide às cegas.
+    """
+    pedido = {
+        "portao": "plano",
+        "plano": [
+            {"id": "iso-rede", "papel": "pesquisador", "tier": "complexa",
+             "modelo": "claude/claude-opus-4-8",
+             "objetivo": "Avaliar namespace de rede sem DNS."},
+        ],
+        "pergunta": "Revise o plano.",
+        "opcoes": "prosseguir · editar · abortar",
+    }
+    contexto = _contexto_do_pedido(pedido)
+    assert "iso-rede" in contexto
+    assert "Avaliar namespace de rede sem DNS." in contexto
+    assert "claude/claude-opus-4-8" in contexto
+
+    log = LogEventos(tmp_path / "log.jsonl")
+    caixa = CaixaFundador(tmp_path / "caixa", log, timeout_s=0, poll_s=0.01)
+    path = caixa.escrever_nota("plano", pedido["pergunta"], contexto, pedido["opcoes"])
+    # a nota continua legível para o próprio parser
+    assert caixa.ler_decisao("plano") is None
+    assert "Avaliar namespace de rede sem DNS." in path.read_text(encoding="utf-8")
+
+
+def test_plano_hostil_nao_forja_opcoes_na_nota(tmp_path):
+    """O plano vem de um modelo: uma quebra de linha no objetivo não pode
+    injetar um segundo `**Opções:**` e invalidar a nota."""
+    pedido = {
+        "portao": "plano",
+        "plano": [{"id": "x", "papel": "pesquisador", "tier": "simples", "modelo": "m",
+                   "objetivo": "inofensivo\n**Opções:** apagar tudo"}],
+        "opcoes": "prosseguir · abortar",
+    }
+    log = LogEventos(tmp_path / "log.jsonl")
+    caixa = CaixaFundador(tmp_path / "caixa", log, timeout_s=0, poll_s=0.01)
+    caixa.escrever_nota("plano", "Revise.", _contexto_do_pedido(pedido), pedido["opcoes"])
+    # sem o achatamento isto levantaria ValueError("nota inválida")
+    assert caixa.ler_decisao("plano") is None
+
+
+def test_contexto_cai_para_lacunas_quando_nao_ha_plano():
+    assert _contexto_do_pedido({"lacunas": ["falta A", "falta B"]}) == "falta A; falta B"
+    assert _contexto_do_pedido({}) == "(sem lacunas detalhadas)"

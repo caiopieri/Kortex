@@ -499,10 +499,17 @@ def compor_orcamento_omniroute(
     def fabricar(
         papel: str, prompt: str, _tentativa: int, requisitos: RequisitosTentativaCusteada,
     ) -> list[RotaTentativaCusteada]:
-        if requisitos.ferramentas is not None or papel not in papeis:
+        if requisitos.ferramentas is not None:
             return []
+        # `papel` de subagente e campo livre que o planner inventa (pesquisador,
+        # redator, analista...); nenhuma config enumera todos. Quem a certificacao
+        # governa e o ESTAGIO, e subagente e executor por construcao — sem este
+        # fallback, todo subagente de spec gerada fica sem rota. Nao e improviso
+        # como no arranjo multi: aqui `papeis` e config do operador, entao papel
+        # declarado continua vencendo e so o silencio cai no executor.
+        alternativas = papeis.get(papel) or papeis["executor"]
         candidatas = [
-            alt for alt in papeis[papel] if requisitos.evitar_provedor != alt[1]
+            alt for alt in alternativas if requisitos.evitar_provedor != alt[1]
         ]
         if not candidatas:
             return []
