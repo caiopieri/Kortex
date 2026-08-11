@@ -8,7 +8,7 @@
     "criterios_cobertura": [
       "a suíte de testes roda no sandbox e sai com exit code 0",
       "os testes cobrem construção de filtros e tratamento de erro HTTP",
-      "nenhuma credencial aparece em código ou em mensagem de erro"
+      "nenhum segredo operacional real (credencial, token ou chave) aparece hardcoded no código, em log ou em mensagem de erro; valores sintéticos usados somente por fixtures ou mocks de teste são permitidos"
     ]
   },
   "restricoes": {

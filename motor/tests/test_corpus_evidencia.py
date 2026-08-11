@@ -60,6 +60,15 @@ def test_spec_de_codigo_e_valida_de_verdade(nome: str) -> None:
     WorkflowSpec.model_validate(dados)
 
 
+def test_ebay_distingue_segredo_operacional_de_fixture_de_teste() -> None:
+    dados = json.loads((EXEMPLOS / "ebay-com-portao-de-processo.json").read_text(encoding="utf-8"))
+    criterio = dados["missao"]["criterios_cobertura"][2].lower()
+
+    assert "segredo operacional real" in criterio
+    assert "aparece hardcoded no código, em log ou em mensagem de erro" in criterio
+    assert "fixtures ou mocks de teste são permitidos" in criterio
+
+
 def test_corpus_nao_regride_a_razao_processo_opiniao() -> None:
     """Piso da razão no corpus inteiro, artefato a artefato.
 
