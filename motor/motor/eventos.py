@@ -18,6 +18,10 @@ from typing import Any, BinaryIO, NoReturn
 from motor.eventos_schema import valido
 
 
+class WriterEventosOcupado(RuntimeError):
+    """O writer exclusivo do log já está em uso por outra operação."""
+
+
 def _constante_json_invalida(valor: str) -> NoReturn:
     raise ValueError(f"constante fora do JSON estrito: {valor}")
 
@@ -104,7 +108,7 @@ class LogEventos:
         except BaseException as exc:
             self._fechar_descritores()
             if isinstance(exc, OSError) and exc.errno in (errno.EACCES, errno.EAGAIN):
-                raise RuntimeError("log de eventos ja possui writer ativo") from exc
+                raise WriterEventosOcupado("log de eventos ja possui writer ativo") from exc
             raise
 
         # A flag legada permanece na API, mas o writer v2 sempre abre em append.

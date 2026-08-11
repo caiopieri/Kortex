@@ -649,6 +649,76 @@ def test_servico_real_concorrente_persiste_decision_id_e_ack(tmp_path: Path) -> 
     jobs_b.fechar()
 
 
+def test_servico_devolve_ocupado_em_leitura_concorrente_do_mesmo_job(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db_path = tmp_path / "motor.sqlite"
+    workspace = tmp_path / "runs"
+
+    def novo_servico() -> GerenciadorJobs:
+        return GerenciadorJobs(
+            db_path=db_path,
+            workspace_base=workspace,
+            cliente=ClienteStub(faz_roteador()),
+            outbox_poll_s=0.01,
+            outbox_lease_s=5,
+        )
+
+    origem = novo_servico()
+    leitor = novo_servico()
+    consulta = novo_servico()
+    resposta = novo_servico()
+    resumo = novo_servico()
+    entrou_no_dreno = threading.Event()
+    liberar_dreno = threading.Event()
+    resultado_leitura = None
+    executor = ThreadPoolExecutor(max_workers=1)
+    try:
+        origem.iniciar(spec=SPEC, thread_id="leitura-concorrente")
+        fim = time.time() + 3
+        while (status := origem.status("leitura-concorrente"))["estado"] == "em_execucao":
+            assert time.time() < fim
+            time.sleep(0.02)
+        assert status["estado"] == "gate_pendente"
+
+        drenar_original = leitor._drenar_orcamento
+
+        def drenar_bloqueado(job_id: str, log) -> bool:
+            entrou_no_dreno.set()
+            assert liberar_dreno.wait(timeout=2)
+            return drenar_original(job_id, log)
+
+        monkeypatch.setattr(leitor, "_drenar_orcamento", drenar_bloqueado)
+        resultado_leitura = executor.submit(leitor.status, "leitura-concorrente")
+        assert entrou_no_dreno.wait(timeout=2)
+
+        ocupado = {
+            "estado": "erro",
+            "erro": {
+                "tipo": "ServicoOcupado",
+                "mensagem": "operação concorrente no job; tente novamente",
+                "transitorio": True,
+            },
+        }
+        assert consulta.status("leitura-concorrente") == ocupado
+
+        # Força só o fallback legado de responder_gate; a contenção abaixo é o
+        # flock real, mantido pelo leitor na outra thread.
+        monkeypatch.setattr(resposta, "_gates_duraveis", lambda _job_id: [])
+        assert resposta.responder_gate("leitura-concorrente", "prosseguir") == ocupado
+
+        digest = resumo.resumo("leitura-concorrente")
+        assert digest["estado"] == "erro"
+        assert digest["erro"] == ocupado["erro"]
+    finally:
+        liberar_dreno.set()
+        if resultado_leitura is not None:
+            resultado_leitura.result(timeout=3)
+        executor.shutdown(wait=True)
+        for jobs in (origem, leitor, consulta, resposta, resumo):
+            jobs.fechar()
+
+
 def test_servico_serializa_dois_interrupts_paralelos_por_job(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:

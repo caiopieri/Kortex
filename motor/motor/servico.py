@@ -26,7 +26,7 @@ from .composicao_orcamento import (
     compor_orcamento_openai,
     validar_independencia_orcada,
 )
-from .eventos import LogEventos
+from .eventos import LogEventos, WriterEventosOcupado
 from .eventos_schema import SCHEMA_VERSAO
 from .grafo import construir_grafo
 from .modelos import ClienteModelo
@@ -201,7 +201,10 @@ class GerenciadorJobs:
                 return self._resposta_de_registro(job_id, registro)
             if registro:
                 return {"estado": "em_execucao"}
-        return self._status_duravel(job_id)
+        try:
+            return self._status_duravel(job_id)
+        except WriterEventosOcupado:
+            return self._resposta_servico_ocupado()
 
     def responder_gate(self, job_id: str, decisao,
                        decision_id: str | None = None) -> dict:
@@ -253,6 +256,8 @@ class GerenciadorJobs:
                 }
             if decision_id is None:
                 legado = self.status(job_id)
+                if legado.get("estado") == "erro":
+                    return legado
                 gate_legado = legado.get("gate") or {}
                 if (
                     legado.get("estado") == "gate_pendente"
@@ -384,6 +389,7 @@ class GerenciadorJobs:
             digest["resumo_resposta"] = self._resumir_resposta(status.get("resposta_final", ""))
         if status["estado"] == "erro":
             erro = status.get("erro", {})
+            digest["erro"] = erro
             digest["marcos"] = [*digest["marcos"], f"erro: {erro.get('tipo', 'Erro')}"]
         return digest
 
@@ -671,6 +677,17 @@ class GerenciadorJobs:
         if registro["estado"] == "concluido":
             return self._resultado_concluido(job_id, registro["resultado"])
         return {"estado": "erro", "erro": registro["erro"]}
+
+    @staticmethod
+    def _resposta_servico_ocupado() -> dict:
+        return {
+            "estado": "erro",
+            "erro": {
+                "tipo": "ServicoOcupado",
+                "mensagem": "operação concorrente no job; tente novamente",
+                "transitorio": True,
+            },
+        }
 
     def _resultado_concluido(self, job_id: str, resultado: dict[str, Any]) -> dict:
         artefatos = []
