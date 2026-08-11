@@ -110,7 +110,7 @@ def construir_cliente(cfg_modelos: dict | None, dir_registro: str | None,
 
 def main() -> int:
     args = sys.argv[1:]
-    if not args:
+    if not args or "--help" in args or "-h" in args:
         print(__doc__)
         return 2
 
@@ -265,6 +265,14 @@ def main() -> int:
 
     if not args:
         print("erro: informe uma missão ou --spec.")
+        return 2
+    # O que sobrou vira TEXTO DE MISSÃO. Sem esta checagem, uma flag digitada
+    # errada -- ou `--help`, que este parser manual nunca tratou -- é despachada
+    # ao planner e gasta orçamento antes de qualquer erro aparecer.
+    if args[0] != "--spec" and any(arg.startswith("--") for arg in args):
+        desconhecidas = [arg for arg in args if arg.startswith("--")]
+        print(f"erro: opção desconhecida: {' '.join(desconhecidas)}")
+        print(__doc__)
         return 2
     entrada: dict
     if args[0] == "--spec":

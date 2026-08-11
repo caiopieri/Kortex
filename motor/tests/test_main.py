@@ -83,3 +83,21 @@ def test_main_global_pins_sem_orcamento_falha_fechado(tmp_path, monkeypatch):
         lambda *_args, **_kwargs: pytest.fail("cliente legado nao deve ser construido"),
     )
     assert main() == 1
+
+
+def test_flag_desconhecida_nao_vira_texto_de_missao(capsys, monkeypatch):
+    """Parser manual: o que sobra vira missão e é despachado ao planner.
+
+    Descoberto rodando: `--help` nunca foi tratado, virou texto de missão e
+    disparou uma run paga de verdade antes de qualquer erro aparecer.
+    """
+    monkeypatch.setattr(sys, "argv", ["motor", "missao", "--verbos"])
+    assert main() == 2
+    assert "opção desconhecida: --verbos" in capsys.readouterr().out
+
+
+def test_help_imprime_uso_em_vez_de_gastar(capsys, monkeypatch):
+    for flag in ("--help", "-h"):
+        monkeypatch.setattr(sys, "argv", ["motor", flag])
+        assert main() == 2
+        assert "opção desconhecida" not in capsys.readouterr().out

@@ -100,6 +100,6 @@
   },
   "fx_max_age_s": 86400,
   "margem": "1.20",
-  "teto_bootstrap_brl": "80.0",
+  "teto_bootstrap_brl": "150.0",
   "timeout": 300
 }
