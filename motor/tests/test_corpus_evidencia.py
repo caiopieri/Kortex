@@ -81,8 +81,11 @@ def test_ebay_contrato_exercita_chamadas_canonicas_da_api_publica() -> None:
     assert "patch.object(m.requests, 'get'" in contrato
     assert "token_mock.assert_called_once()" in contrato
     assert "search_mock.assert_called_once()" in contrato
+    assert "caso.assertRaises(Exception, m.buscar)" in contrato
+    assert "caso.assertRaises(Exception, m.buscar, '')" in contrato
     assert "conditions:{{NEW}},buyingOptions:{{FIXED_PRICE}}" in contrato
     argumento_python = shlex.split(contrato)[2].format_map({})
+    compile(argumento_python, "<contrato-do-modulo>", "exec")
     assert "price:[10..50],conditions:{NEW},buyingOptions:{FIXED_PRICE}" in argumento_python
 
 
