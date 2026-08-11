@@ -10,6 +10,7 @@ Estes testes existem para que essa erosão fique vermelha em vez de silenciosa.
 from __future__ import annotations
 
 import json
+import shlex
 from pathlib import Path
 from typing import Any
 
@@ -67,6 +68,22 @@ def test_ebay_distingue_segredo_operacional_de_fixture_de_teste() -> None:
     assert "segredo operacional real" in criterio
     assert "aparece hardcoded no código, em log ou em mensagem de erro" in criterio
     assert "fixtures ou mocks de teste são permitidos" in criterio
+
+
+def test_ebay_contrato_exercita_chamadas_canonicas_da_api_publica() -> None:
+    dados = json.loads((EXEMPLOS / "ebay-com-portao-de-processo.json").read_text(encoding="utf-8"))
+    contrato = dados["subagentes"][2]["validador"]["config"]["comando"]
+
+    assert "callable(m.obter_token)" in contrato
+    assert "min_price=10, max_price=50" in contrato
+    assert "token='fixture-token'" in contrato
+    assert "patch.object(m.requests, 'post'" in contrato
+    assert "patch.object(m.requests, 'get'" in contrato
+    assert "token_mock.assert_called_once()" in contrato
+    assert "search_mock.assert_called_once()" in contrato
+    assert "conditions:{{NEW}},buyingOptions:{{FIXED_PRICE}}" in contrato
+    argumento_python = shlex.split(contrato)[2].format_map({})
+    assert "price:[10..50],conditions:{NEW},buyingOptions:{FIXED_PRICE}" in argumento_python
 
 
 def test_corpus_nao_regride_a_razao_processo_opiniao() -> None:
