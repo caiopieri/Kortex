@@ -8,13 +8,17 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
 
 VERSAO_SUPORTADA = "0.1"
 NonBlank = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 InteiroPositivo = Annotated[int, Field(strict=True, ge=1)]
 TimeoutComando = Annotated[int, Field(strict=True, ge=1, le=300)]
 CustoFinito = Annotated[float, Field(strict=True, gt=0, allow_inf_nan=False)]
+ModuloPython = Annotated[
+    str,
+    StringConstraints(pattern=r"^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$"),
+]
 
 
 class ConfigSchemaJson(BaseModel):
@@ -45,6 +49,14 @@ class ConfigComando(BaseModel):
 
     comando: NonBlank
     timeout: TimeoutComando = 30
+    modulos_python: list[ModuloPython] = Field(default_factory=list, max_length=32)
+
+    @field_validator("modulos_python")
+    @classmethod
+    def _modulos_sem_duplicatas(cls, modulos: list[str]) -> list[str]:
+        if len(modulos) != len(set(modulos)):
+            raise ValueError("modulos_python não pode repetir módulo")
+        return modulos
 
 
 class ValidadorSchemaJson(BaseModel):

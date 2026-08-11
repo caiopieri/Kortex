@@ -21,11 +21,13 @@ from __future__ import annotations
 
 import json
 import re
+import shlex
 import sqlite3
 import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Protocol
 from uuid import uuid4
 
 from langgraph.types import Command
@@ -48,7 +50,8 @@ from .eventos import LogEventos
 from .grafo import construir_grafo
 from .modelos import ClienteClaudeCLI, ClienteModelo, ProvedorIndisponivel, cliente_de_config
 from .orcamento import ErroOrcamento, RepositorioOrcamento, publicar_um_pendente
-from .runner import compor_sandbox
+from .runner import CommandResult, compor_sandbox
+from .spec import WorkflowSpec
 from .registro import (
     cliente_de_registro,
     ferramentas_de_registro,
@@ -72,6 +75,42 @@ def _lista_str(valor) -> list[str]:
     if isinstance(valor, list):
         return [str(item) for item in valor if str(item).strip()]
     return [str(valor)]
+
+
+class _SondaModulosSandbox(Protocol):
+    def importar_modulo_python(self, executavel: str, modulo: str) -> CommandResult: ...
+
+
+def _preflight_modulos_sandbox(
+    spec: WorkflowSpec, runner: _SondaModulosSandbox, caminho_sandbox: str,
+) -> None:
+    """Verifica dependências declaradas antes de compor qualquer cliente de modelo."""
+    for subagente in spec.subagentes:
+        validador = subagente.validador
+        if validador is None or validador.kind != "comando":
+            continue
+        config = validador.config
+        modulos = config.modulos_python
+        if not modulos:
+            continue
+        try:
+            executavel = shlex.split(config.comando)[0]
+        except (IndexError, ValueError) as erro:
+            raise ValueError(
+                f"validador '{subagente.id}' tem comando inválido para preflight"
+            ) from erro
+        for modulo in modulos:
+            resultado = runner.importar_modulo_python(executavel, modulo)
+            if resultado.erro is not None:
+                raise ValueError(
+                    f"sandbox '{caminho_sandbox}' não pôde verificar módulo Python "
+                    f"'{modulo}' exigido pelo validador '{subagente.id}': {resultado.motivo}"
+                )
+            if resultado.returncode != 0:
+                raise ValueError(
+                    f"sandbox '{caminho_sandbox}' não contém módulo Python "
+                    f"'{modulo}' exigido pelo validador '{subagente.id}'"
+                )
 
 
 def _drenar_orcamento_cli(
@@ -125,13 +164,15 @@ def main() -> int:
     # isolado. Sem a flag, `command_runner` continua sendo DenyCommandRunner e
     # nenhum comando roda -- que é o default seguro, não um bug.
     command_runner = None
+    caminho_sandbox: str | None = None
     if "--sandbox" in args:
         i = args.index("--sandbox")
         if i + 1 >= len(args):
             print("erro: --sandbox exige o caminho de uma config.")
             return 2
         try:
-            command_runner, evidencia_sandbox = compor_sandbox(args[i + 1])
+            caminho_sandbox = args[i + 1]
+            command_runner, evidencia_sandbox = compor_sandbox(caminho_sandbox)
         except (OSError, ValueError, json.JSONDecodeError,
                 subprocess.SubprocessError) as erro:
             print(f"erro: sandbox indisponível: {erro}")
@@ -277,6 +318,16 @@ def main() -> int:
     entrada: dict
     if args[0] == "--spec":
         entrada = {"spec": json.loads(Path(args[1]).read_text(encoding="utf-8"))}
+        if command_runner is not None and caminho_sandbox is not None:
+            try:
+                _preflight_modulos_sandbox(
+                    WorkflowSpec.model_validate(entrada["spec"]),
+                    command_runner,
+                    caminho_sandbox,
+                )
+            except ValueError as erro:
+                print(f"erro: pareamento spec/sandbox inválido: {erro}")
+                return 2
     else:
         entrada = {"missao_texto": " ".join(args)}
     entrada.update({"run_id": run_id, "thread_id": run_id})

@@ -8,6 +8,7 @@ import re
 import selectors
 import signal
 import subprocess
+import tempfile
 import time
 from pathlib import Path
 from typing import Protocol
@@ -17,6 +18,8 @@ MAX_COMBINED_OUTPUT_BYTES = 1 << 20
 MIN_TIMEOUT_S = 1
 MAX_TIMEOUT_S = 300
 TERM_GRACE_S = 2
+TIMEOUT_PREFLIGHT_MODULO_S = 30
+_IMPORTAR_MODULO = "import importlib; import sys; importlib.import_module(sys.argv[1])"
 _IMAGE_DIGEST = re.compile(
     r"[a-z0-9]+(?:[._-][a-z0-9]+)*(?::[0-9]+)?"
     r"(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)+@sha256:[0-9a-f]{64}\Z"
@@ -310,3 +313,16 @@ class DockerSandboxRunner:
                 timed_out=resultado.timed_out, truncated=resultado.truncated,
             )
         return resultado
+
+    def importar_modulo_python(self, executavel: str, modulo: str) -> CommandResult:
+        """Importa um módulo da imagem selada, sem expor o workspace da missão.
+
+        `-I` impede que um arquivo no diretório montado satisfaça a sonda: a
+        resposta só pode vir da instalação da própria imagem por digest.
+        """
+        with tempfile.TemporaryDirectory(prefix="motor-sandbox-preflight-") as temporario:
+            return self.run(CommandRequest(
+                argv=(executavel, "-I", "-c", _IMPORTAR_MODULO, modulo),
+                workspace=Path(temporario),
+                timeout_s=TIMEOUT_PREFLIGHT_MODULO_S,
+            ))
