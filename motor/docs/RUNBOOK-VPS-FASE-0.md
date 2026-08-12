@@ -93,15 +93,30 @@ continuar dizendo a verdade sobre o que ele aponta.
 `omniroute` (npm, 3.8.49) declara só `engines.node`, sem restrição de `os`/`cpu`: roda em
 linux-arm64. Node ≥ 22.22.2.
 
-O problema **não** é portabilidade, é credencial. Os provedores que o Kortex usa hoje
-(`claude`, `codex`, `agy`) são `auth_type: oauth` — sessões de navegador. Numa VPS
-headless não há navegador. Dois caminhos, e é decisão do fundador:
+Credencial **não** exige desktop na VPS. `omniroute oauth providers` declara o fluxo de
+cada um:
 
-- **Túnel SSH** (`ssh -L`) para completar o fluxo OAuth a partir do laptop, uma vez por
-  provedor. Mais limpo; sessões nascem na VPS.
-- **Copiar `~/.omniroute/storage.sqlite`** do Mac. Mais rápido, mas carrega tokens entre
-  máquinas e depende de `STORAGE_ENCRYPTION_KEY` — verificar se a chave é derivada da
-  máquina antes de contar com isso.
+| provedor | fluxo | como autorizar sem navegador na VPS |
+|---|---|---|
+| `claude-code` | **device** | roda na VPS, imprime URL + código, abre de qualquer aparelho |
+| `codex` | **device** | idem |
+| `copilot` | **device** | idem |
+| `antigravity` | browser | `omniroute login antigravity` no Mac → cola o blob na VPS |
+| `gemini`, `windsurf`, `qwen` | browser | sem helper local hoje; ver abaixo |
+
+Os três provedores que a config usa hoje (`claude`, `codex`, `agy`) fecham sem desktop.
+
+Se um dia for preciso um `browser` sem helper local (`gemini`, `qwen`, `windsurf`), as
+opções em ordem de preferência são: **túnel SSH** (`ssh -L`) — fluxo de navegador
+costuma redirecionar para `localhost`, e o túnel entrega isso no browser do Mac; ou
+**desktop leve + VNC**, que funciona mas custa RAM e CPU que 2 OCPU / 12 GB não têm
+sobrando, e abre superfície de ataque numa máquina pública 24/7. Se for por esse
+caminho, o VNC nunca deve ficar exposto — só por túnel SSH, e o desktop ligado sob
+demanda, não no boot.
+
+Copiar `~/.omniroute/storage.sqlite` do Mac é o atalho tentador e o pior dos três:
+carrega token entre máquinas e depende de `STORAGE_ENCRYPTION_KEY`. Se for usar,
+verificar antes se a chave é derivada da máquina.
 
 Enquanto o OmniRoute só existir numa máquina, ele é **ponto único de falha** do Kortex.
 Registrar como risco, não resolver na Fase 0.
