@@ -77,13 +77,12 @@ contaminação de medição.
 
 ## ONDA 0 — tempo-crítico (antes de 2026-08-17)
 
-- [ ] **Dívida 7 — fixture de pricing com bomba-relógio.** `test_omniroute_orcado.py` e
-      `test_composicao_multi.py` carregam snapshot datado e passam a falhar sozinhos ao
-      ultrapassar a janela. O fail-closed de frescor está CERTO; o teste é que fixou uma
-      data em vez de **injetar o relógio**. Adiantar a data é explicitamente rejeitado pelo
-      próprio erro do motor: mantém o número velho.
-      *Pronto quando:* fixtures injetam tempo, e a suíte passa igual com o relógio real em
-      qualquer data futura. *Dono:* Codex.
+- [x] **Dívida 7 — fixture de pricing com bomba-relógio.** FECHADA em 2026-08-13, commit
+      `e4d28d6`. Medida antes de corrigir: a +10 dias eram 16 falhas (as 6 da auditoria +
+      10 de pricing). Corrigida injetando `relogio=lambda: PRICING_CAPTURADO_EM` nos dez
+      chamadores afetados, com o FX congelado junto (snapshot no futuro é recusado pelo
+      motor). Verificado com plugin próprio, não com o do executor: revertendo só o diff
+      dele a bomba volta; suíte a +1 ano dá 1150/6.
 - [ ] **Reconferir os 19 preços de `PRECOS`** contra os catálogos, ou aceitar
       conscientemente que o motor para em 17/ago. *Dono:* fundador decide; pesquisa manual.
 
