@@ -20,7 +20,24 @@ Repository instructions for automated contributors.
 - Do not build clients for additional inference providers. The OpenAI-compatible plug already
   exists; aggregation of inference is a configuration concern, execution of commands is not.
 
+- Architecture is evidence identity, not a build flag. An image rebuilt for another
+  architecture has a different digest and does not inherit the previous one's conformance
+  evidence. Add a config; never repoint an existing one whose filename then lies.
+- Cost containment is currency-specific. A route without a declared price fails closed by
+  design; registering it at zero silences the only monetary containment the engine has.
+  Free routes are scarce in quota and availability, not money — they need their own
+  containment, not an entry in the price table.
+- A process gate proves what its own suite asserts. When the same run writes both the code
+  and its tests, green means self-consistency, not conformance to the mission. Contracts
+  must assert canonical calls and negatives derived from the brief, checked by a validator
+  the generated suite does not author.
+
 ## Verification
+
+Run the full suite **one at a time per checkout**. `motor/__main__.py` opens the
+repository-root `log.jsonl` under an exclusive `flock`, so two concurrent suites — or two
+agents on the same repository — contaminate each other and produce different failure sets.
+Concurrent measurement is not evidence. Coordinate before running.
 
 Run from `motor/`:
 
