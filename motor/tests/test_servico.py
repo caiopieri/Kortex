@@ -269,6 +269,40 @@ def test_responder_gate_em_job_nao_pausado_vira_erro_tratavel(tmp_path):
     assert status["erro"]["tipo"] == "EstadoInvalido"
 
 
+def test_responder_gate_preserva_erro_terminal_em_vez_de_estado_invalido(tmp_path, monkeypatch):
+    """F4 fixa o erro TRANSITÓRIO no fallback legado; este fixa o TERMINAL.
+
+    `responder_gate` preserva qualquer erro de `status()`, não só `ServicoOcupado`.
+    Converter um job morto em `EstadoInvalido`/"job não está em gate_pendente"
+    mentiria sobre o motivo: o job não deixou de estar pausado, ele falhou -- e o
+    chamador perderia a causa real. O teste vizinho acima prova que job inexistente
+    CONTINUA sendo `EstadoInvalido`, então a preservação não engole a distinção.
+    """
+    gerenciador = GerenciadorJobs(
+        db_path=tmp_path / "motor.db",
+        workspace_base=tmp_path / "runs",
+        cliente=ClienteStub(faz_roteador()),
+    )
+
+    def falhar(_job_id: str, truncar: bool = True):
+        raise ValueError("sequencia invalida na linha 9")
+
+    monkeypatch.setattr(gerenciador, "_log_do_job", falhar)
+    gerenciador.iniciar(spec=SPEC, thread_id="erro-terminal")
+    terminal = aguardar_estado(gerenciador, "erro-terminal", "erro")
+    # A falha já matou o job; desfazer aqui mantém o alvo do teste em
+    # `responder_gate`, e não em `_gates_duraveis` reencontrando o log quebrado.
+    monkeypatch.undo()
+
+    resposta = gerenciador.responder_gate("erro-terminal", "prosseguir")
+
+    assert resposta == terminal
+    assert resposta["erro"] == {
+        "tipo": "ValueError",
+        "mensagem": "sequencia invalida na linha 9",
+    }
+
+
 def test_falha_ao_abrir_log_encerra_job_com_erro(tmp_path, monkeypatch):
     gerenciador = GerenciadorJobs(
         db_path=tmp_path / "motor.db",
