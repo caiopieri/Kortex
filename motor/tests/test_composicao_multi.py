@@ -15,6 +15,7 @@ from decimal import Decimal
 import pytest
 
 from motor.composicao_orcamento import (
+    PRICING_CAPTURADO_EM,
     compor_orcamento_multi,
     validar_independencia_orcada,
 )
@@ -27,7 +28,7 @@ _ENVS = {
 }
 
 
-def _cfg() -> dict:
+def _cfg(agora: int | None = None) -> dict:
     return {
         "gemini": {
             "api_key_env": _ENVS["gemini"],
@@ -46,7 +47,7 @@ def _cfg() -> dict:
         },
         "fx": {
             "versao": "ptax-teste",
-            "capturado_em": int(time.time()),
+            "capturado_em": int(time.time()) if agora is None else agora,
             "cotacao_venda": "5.40",
         },
         "fx_max_age_s": 86400,
@@ -119,7 +120,9 @@ def _rota(deps, papel: str, **kwargs):
 
 
 def test_mapa_de_papeis_segue_o_desenho_do_fundador(credenciais, tmp_path) -> None:
-    deps = _deps(tmp_path)
+    deps = compor_orcamento_multi(
+        _cfg(PRICING_CAPTURADO_EM), tmp_path, relogio=lambda: PRICING_CAPTURADO_EM,
+    )
     assert _rota(deps, "planner").provider_id == "anthropic"
     assert _rota(deps, "executor").provider_id == "google"
     assert _rota(deps, "verifier").provider_id == "openai"
@@ -133,7 +136,9 @@ def test_openai_executando_nao_pode_verificar_a_si_mesma(credenciais, tmp_path) 
     Gemini fora (evitado), OpenAI executa. Aí o verifier PRECISA sair da
     Anthropic — se voltasse OpenAI, o produtor estaria julgando a própria obra.
     """
-    deps = _deps(tmp_path)
+    deps = compor_orcamento_multi(
+        _cfg(PRICING_CAPTURADO_EM), tmp_path, relogio=lambda: PRICING_CAPTURADO_EM,
+    )
     executor = _rota(deps, "executor", evitar_provedor="google")
     assert executor.provider_id == "openai"
     verifier = _rota(deps, "verifier", evitar_provedor="openai")

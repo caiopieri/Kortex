@@ -12,6 +12,7 @@ from decimal import Decimal
 import pytest
 
 from motor.composicao_orcamento import (
+    PRICING_CAPTURADO_EM,
     compor_orcamento_omniroute,
     validar_independencia_orcada,
 )
@@ -167,7 +168,7 @@ def test_max_input_tokens_e_configuravel_mas_limitado() -> None:
 # Composição: preferência ordenada por papel
 # --------------------------------------------------------------------------
 
-def _cfg() -> dict:
+def _cfg(agora: int | None = None) -> dict:
     def rota(modelo, provider):
         return {
             "modelo": modelo, "provider_id": provider,
@@ -191,7 +192,7 @@ def _cfg() -> dict:
             },
         },
         "fx": {
-            "versao": "fx", "capturado_em": int(time.time()),
+            "versao": "fx", "capturado_em": int(time.time()) if agora is None else agora,
             "cotacao_venda": "5.1271",
         },
         "fx_max_age_s": 86400,
@@ -215,18 +216,22 @@ def test_papel_com_uma_alternativa_so_fica_sem_rota_quando_o_produtor_coincide(
     planejando, um verifier exclusivamente Anthropic nunca roda — e a falha
     aparece como "falha externa do verifier", que não explica nada.
     """
-    cfg = _cfg()
+    cfg = _cfg(PRICING_CAPTURADO_EM)
     cfg["omniroute"]["papeis"]["verifier"] = [
         cfg["omniroute"]["papeis"]["verifier"][1]  # só a anthropic
     ]
-    deps = compor_orcamento_omniroute(cfg, tmp_path)
+    deps = compor_orcamento_omniroute(
+        cfg, tmp_path, relogio=lambda: PRICING_CAPTURADO_EM,
+    )
     assert deps.fabrica(
         "verifier", "p", 1, RequisitosTentativaCusteada(evitar_provedor="anthropic")
     ) == []
 
 
 def test_alternativa_assume_quando_a_preferida_e_evitada(credencial, tmp_path) -> None:
-    deps = compor_orcamento_omniroute(_cfg(), tmp_path)
+    deps = compor_orcamento_omniroute(
+        _cfg(PRICING_CAPTURADO_EM), tmp_path, relogio=lambda: PRICING_CAPTURADO_EM,
+    )
     assert deps.fabrica("verifier", "p", 1, RequisitosTentativaCusteada())[
         0
     ].provider_id == "google"
@@ -240,7 +245,9 @@ def test_alternativa_assume_quando_a_preferida_e_evitada(credencial, tmp_path) -
 
 def test_independencia_passa_com_alternativas(credencial, tmp_path) -> None:
     validar_independencia_orcada(
-        compor_orcamento_omniroute(_cfg(), tmp_path).rotas_certificadas
+        compor_orcamento_omniroute(
+            _cfg(PRICING_CAPTURADO_EM), tmp_path, relogio=lambda: PRICING_CAPTURADO_EM,
+        ).rotas_certificadas
     )
 
 
@@ -272,7 +279,9 @@ def test_a_cadeia_inteira_e_devolvida_para_o_motor_poder_cair_na_proxima(
     o provedor de topo estar sem cota para o papel inteiro morrer com
     "modelo não respondeu" — foi o que derrubou uma missão real.
     """
-    deps = compor_orcamento_omniroute(_cfg(), tmp_path)
+    deps = compor_orcamento_omniroute(
+        _cfg(PRICING_CAPTURADO_EM), tmp_path, relogio=lambda: PRICING_CAPTURADO_EM,
+    )
     rotas = deps.fabrica("verifier", "p", 1, RequisitosTentativaCusteada())
     assert [r.provider_id for r in rotas] == ["google", "anthropic"]
 
@@ -317,8 +326,10 @@ def test_config_de_producao_passa_na_independencia(credencial, tmp_path) -> None
         .read_text(encoding="utf-8")
     )
     cfg["omniroute"]["api_key_env"] = _ENV
-    cfg["fx"]["capturado_em"] = int(time.time())
-    deps = compor_orcamento_omniroute(cfg, tmp_path)
+    cfg["fx"]["capturado_em"] = PRICING_CAPTURADO_EM
+    deps = compor_orcamento_omniroute(
+        cfg, tmp_path, relogio=lambda: PRICING_CAPTURADO_EM,
+    )
     validar_independencia_orcada(deps.rotas_certificadas)
 
     # E o essencial para o failover: nenhum papel pode ficar sem rota quando o
@@ -333,7 +344,9 @@ def test_config_de_producao_passa_na_independencia(credencial, tmp_path) -> None
 def test_route_ids_da_cadeia_sao_distintos(credencial, tmp_path) -> None:
     """`validar_independencia_orcada` rejeita `route_id` duplicado, e o motor usa
     o índice na cadeia para compor a identidade da reserva."""
-    rotas = compor_orcamento_omniroute(_cfg(), tmp_path).fabrica(
+    rotas = compor_orcamento_omniroute(
+        _cfg(PRICING_CAPTURADO_EM), tmp_path, relogio=lambda: PRICING_CAPTURADO_EM,
+    ).fabrica(
         "verifier", "p", 1, RequisitosTentativaCusteada()
     )
     assert len({r.route_id for r in rotas}) == len(rotas)
@@ -346,7 +359,9 @@ def test_papel_livre_de_subagente_cai_no_executor(credencial, tmp_path) -> None:
     devolvia [] e TODO subagente morria com "adaptador custeado ausente". Quem a
     certificação governa é o estágio, e subagente é executor por construção.
     """
-    deps = compor_orcamento_omniroute(_cfg(), tmp_path)
+    deps = compor_orcamento_omniroute(
+        _cfg(PRICING_CAPTURADO_EM), tmp_path, relogio=lambda: PRICING_CAPTURADO_EM,
+    )
     rotas = deps.fabrica("pesquisador", "p", 1, RequisitosTentativaCusteada())
     esperadas = deps.fabrica("executor", "p", 1, RequisitosTentativaCusteada())
     assert rotas and [r.provider_id for r in rotas] == [r.provider_id for r in esperadas]
@@ -354,8 +369,10 @@ def test_papel_livre_de_subagente_cai_no_executor(credencial, tmp_path) -> None:
 
 def test_papel_declarado_na_config_nao_cai_no_fallback(credencial, tmp_path) -> None:
     """O fallback não pode atropelar quem o operador declarou explicitamente."""
-    cfg = _cfg()
+    cfg = _cfg(PRICING_CAPTURADO_EM)
     cfg["omniroute"]["papeis"]["pesquisador"] = [cfg["omniroute"]["papeis"]["verifier"][1]]
-    deps = compor_orcamento_omniroute(cfg, tmp_path)
+    deps = compor_orcamento_omniroute(
+        cfg, tmp_path, relogio=lambda: PRICING_CAPTURADO_EM,
+    )
     rotas = deps.fabrica("pesquisador", "p", 1, RequisitosTentativaCusteada())
     assert [r.provider_id for r in rotas] == ["anthropic"]
