@@ -105,7 +105,7 @@ class Subagente(BaseModel):
     objetivo: str = Field(min_length=1)
     entradas: dict[str, Any] = Field(default_factory=dict)
     resultado_esperado: str = Field(min_length=1)
-    rubrica: list[str] = Field(default_factory=list, description="critérios objetivos que o verifier checa")
+    rubrica: list[NonBlank] = Field(default_factory=list, description="critérios objetivos que o verifier checa")
     ferramentas: Optional[str] = Field(default=None, description="ex.: 'WebSearch' para claude -p")
     fonte_rag: Optional[str] = Field(
         default=None,
@@ -134,7 +134,7 @@ class Missao(BaseModel):
     id: str = Field(min_length=1)
     objetivo: str = Field(min_length=1)
     contexto: str = ""
-    criterios_cobertura: list[str] = Field(min_length=1, description="o que precisa estar coberto antes da síntese")
+    criterios_cobertura: list[NonBlank] = Field(min_length=1, description="o que precisa estar coberto antes da síntese")
     template: Optional[str] = Field(default=None, description="nome do template de workflow que originou a missão")
     versao_template: Optional[str] = Field(default=None, description="versão do template de workflow usado")
 
