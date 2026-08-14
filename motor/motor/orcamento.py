@@ -16,12 +16,17 @@ from typing import Literal, Protocol, TypeAlias, cast
 from .eventos_schema import valido
 
 
-Moeda = Literal["BRL"]
+Moeda = Literal["BRL", "TOKEN"]
 StatusSessao: TypeAlias = Literal["ACTIVE", "INVALIDATED"]
 StatusReserva: TypeAlias = Literal["RESERVED", "RECONCILED", "CONTRACT_VIOLATED", "UNKNOWN_COST"]
 _DECIMAL = re.compile(r"(?:0|[1-9][0-9]*)(?:\.[0-9]+)?\Z")
 _MAX_DECIMAL_CHARS = 128
 _PRECISAO_SOMA = 2 * _MAX_DECIMAL_CHARS + 1
+_MOEDA_DO_REPOSITORIO = object()
+_ARQUIVO_POR_MOEDA: dict[Moeda, str] = {
+    "BRL": "orcamento.sqlite3",
+    "TOKEN": "cota.sqlite3",
+}
 
 
 class ErroOrcamento(ValueError):
@@ -53,7 +58,11 @@ class CotacaoTentativa:
 
     def __post_init__(self) -> None:
         _decimal(self.maximo, positivo=True)
-        if self.moeda != "BRL" or not _identificador(self.pricing_version):
+        if (
+            type(self.moeda) is not str
+            or self.moeda not in _ARQUIVO_POR_MOEDA
+            or not _identificador(self.pricing_version)
+        ):
             raise ErroOrcamento("cotacao invalida")
 
 
@@ -66,7 +75,11 @@ class ResultadoTentativa:
 
     def __post_init__(self) -> None:
         _decimal(self.custo_real)
-        if self.moeda != "BRL" or not _identificador(self.usage_ref):
+        if (
+            type(self.moeda) is not str
+            or self.moeda not in _ARQUIVO_POR_MOEDA
+            or not _identificador(self.usage_ref)
+        ):
             raise ErroOrcamento("resultado invalido")
 
 
@@ -74,6 +87,7 @@ class ResultadoTentativa:
 class SessaoOrcamento:
     run_id: str
     thread_id: str
+    moeda: Moeda
     teto: Decimal
     gasto: Decimal
     reservado: Decimal
@@ -233,8 +247,16 @@ def validar_identidade_tentativa(valor: object) -> IdentidadeTentativaCusteada:
 
 
 class RepositorioOrcamento:
-    def __init__(self, raiz: Path) -> None:
+    def __init__(self, raiz: Path, *, moeda: Moeda = "BRL") -> None:
         self._raiz = raiz.resolve()
+        if type(moeda) is not str or moeda not in _ARQUIVO_POR_MOEDA:
+            raise ErroOrcamento("moeda invalida")
+        self._moeda: Moeda = cast(Moeda, moeda)
+        self._nome_arquivo: str = _ARQUIVO_POR_MOEDA[self._moeda]
+
+    @property
+    def moeda(self) -> Moeda:
+        return self._moeda
 
     def caminho(self, run_id: str) -> Path:
         run_id = _id(run_id, "run_id")
@@ -247,7 +269,7 @@ class RepositorioOrcamento:
         if (not stat.S_ISDIR(diretorio.st_mode) or diretorio.st_uid != os.geteuid()
                 or stat.S_IMODE(diretorio.st_mode) & 0o022):
             raise ErroOrcamento("diretorio de run nao e seguro")
-        arquivo = esperado / "orcamento.sqlite3"
+        arquivo = esperado / self._nome_arquivo
         try:
             fd = os.open(arquivo, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
         except FileExistsError:
@@ -271,7 +293,7 @@ class RepositorioOrcamento:
     def possui_ledger(self, run_id: str) -> bool:
         """Consulta existência sem criar diretório, arquivo ou schema."""
         run_id = _id(run_id, "run_id")
-        arquivo = self._raiz / run_id / "orcamento.sqlite3"
+        arquivo = self._raiz / run_id / self._nome_arquivo
         try:
             arquivo.lstat()
         except FileNotFoundError:
@@ -286,7 +308,7 @@ class RepositorioOrcamento:
                 con.execute("BEGIN IMMEDIATE")
                 linha = con.execute("SELECT teto,gasto,reservado,status FROM budget_session WHERE run_id=? AND thread_id=?", (run_id, thread_id)).fetchone()
                 if linha is None:
-                    con.execute("INSERT INTO budget_session (run_id,thread_id,teto,moeda,gasto,reservado,status) VALUES (?,?,?,?,?,?,?)", (run_id, thread_id, _texto(teto), "BRL", "0", "0", "ACTIVE"))
+                    con.execute("INSERT INTO budget_session (run_id,thread_id,teto,moeda,gasto,reservado,status) VALUES (?,?,?,?,?,?,?)", (run_id, thread_id, _texto(teto), self._moeda, "0", "0", "ACTIVE"))
                     linha = (_texto(teto), "0", "0", "ACTIVE")
                 dados = tuple(_do_texto(campo) for campo in linha[:3])
                 if linha[3] not in ("ACTIVE", "INVALIDATED"):
@@ -303,7 +325,7 @@ class RepositorioOrcamento:
                         raise ErroOrcamento("teto abaixo do ja comprometido")
                     con.execute("UPDATE budget_session SET teto=? WHERE run_id=? AND thread_id=?", (_texto(teto), run_id, thread_id))
                     dados = (teto, dados[1], dados[2])
-                return SessaoOrcamento(run_id=run_id, thread_id=thread_id, teto=dados[0], gasto=dados[1], reservado=dados[2], status=linha[3])
+                return SessaoOrcamento(run_id=run_id, thread_id=thread_id, moeda=self._moeda, teto=dados[0], gasto=dados[1], reservado=dados[2], status=linha[3])
         except sqlite3.Error as erro:
             raise ErroOrcamento("ledger indisponivel ou corrompido") from erro
 
@@ -317,8 +339,7 @@ class RepositorioOrcamento:
     def bloquear(self, sessao: SessaoOrcamento, identidade: IdentidadeTentativaCusteada,
                  motivo: Literal["sem_adapter", "sem_cotacao"]) -> None:
         """Persiste bloqueio pré-efeito sem criar reserva nem alterar saldo."""
-        _id(sessao.run_id, "run_id")
-        _id(sessao.thread_id, "thread_id")
+        self._validar_sessao(sessao)
         identidade = _validar_identidade(identidade)
         reserva = ReservaOrcamento(
             identidade.reservation_id, identidade.call_id, identidade.route_id,
@@ -340,8 +361,7 @@ class RepositorioOrcamento:
         Uma reserva RESERVED já existente é ambígua após crash e nunca deve ser reutilizada
         para executar o transporte outra vez.
         """
-        _id(sessao.run_id, "run_id")
-        _id(sessao.thread_id, "thread_id")
+        self._validar_sessao(sessao)
         for nome in ("reservation_id", "call_id", "route_id", "pricing_version"):
             _id(getattr(reserva, nome), nome)
         if type(reserva.attempt) is not int or reserva.attempt < 1 or reserva.status != "RESERVED":
@@ -388,16 +408,16 @@ class RepositorioOrcamento:
         except sqlite3.Error as erro:
             raise ErroOrcamento("ledger indisponivel ou corrompido") from erro
 
-    @staticmethod
-    def _event_id(reservation_id: str, tipo: str) -> str:
-        return hashlib.sha256(f"{reservation_id}\0{tipo}".encode()).hexdigest()
+    def _event_id(self, reservation_id: str, tipo: str) -> str:
+        prefixo = "" if self._moeda == "BRL" else f"{self._moeda}\0"
+        return hashlib.sha256(f"{prefixo}{reservation_id}\0{tipo}".encode()).hexdigest()
 
     def _payload(self, sessao: SessaoOrcamento, reserva: ReservaOrcamento,
                  teto: Decimal, gasto: Decimal, reservado: Decimal, **extra: object) -> dict[str, object]:
         return {
             "run_id": sessao.run_id, "thread_id": sessao.thread_id,
             "call_id": reserva.call_id, "rota": reserva.route_id, "tentativa": reserva.attempt,
-            "moeda": "BRL", "teto": _texto(teto), "gasto": _texto(gasto),
+            "moeda": self._moeda, "teto": _texto(teto), "gasto": _texto(gasto),
             "reservado": _texto(reservado), **extra,
         }
 
@@ -422,13 +442,15 @@ class RepositorioOrcamento:
             esperado,
         )
 
-    @staticmethod
-    def _payload_valido(tipo: object, payload: object) -> bool:
+    def _payload_valido(self, tipo: object, payload: object) -> bool:
         if not isinstance(tipo, str) or not isinstance(payload, dict):
             return False
         if {"evento", "t", "seq"} & payload.keys():
             return False
-        return valido({**payload, "evento": tipo, "t": 0.0, "seq": 1})
+        return (
+            payload.get("moeda") == self._moeda
+            and valido({**payload, "evento": tipo, "t": 0.0, "seq": 1})
+        )
 
     def _bloquear(self, con: sqlite3.Connection, sessao: SessaoOrcamento,
                   reserva: ReservaOrcamento, motivo: str, linha: tuple[object, ...]) -> None:
@@ -521,9 +543,16 @@ class RepositorioOrcamento:
             event_id, tipo, payload, cast(str | None, owner), cast(int | None, lease_ate), tentativas
         )
 
-    def reconciliar(self, sessao: SessaoOrcamento, reserva: ReservaOrcamento, custo_real: object, moeda: object = "BRL") -> ReservaOrcamento:
-        _id(sessao.run_id, "run_id")
-        _id(sessao.thread_id, "thread_id")
+    def reconciliar(
+        self,
+        sessao: SessaoOrcamento,
+        reserva: ReservaOrcamento,
+        custo_real: object,
+        moeda: object = _MOEDA_DO_REPOSITORIO,
+    ) -> ReservaOrcamento:
+        self._validar_sessao(sessao)
+        if moeda is _MOEDA_DO_REPOSITORIO:
+            moeda = self._moeda
         _id(reserva.reservation_id, "reservation_id")
         _id(reserva.call_id, "call_id")
         _id(reserva.route_id, "route_id")
@@ -571,38 +600,55 @@ class RepositorioOrcamento:
                 else:
                     motivo = (
                         "custo_invalido" if status == "UNKNOWN_COST"
-                        else "moeda_divergente" if moeda_real != "BRL" else "custo_acima_maximo"
+                        else "moeda_divergente" if moeda_real != self._moeda else "custo_acima_maximo"
                     )
                     self._outbox(con, reserva.reservation_id, "custo.contrato_violado", self._payload(
                         sessao, reserva, teto, novo_gasto, novo_reservado,
                         reservation_id=reserva.reservation_id, maximo=_texto(maximo),
-                        custo_real=None if real is None else _texto(real), moeda_recebida=moeda_real or "BRL",
+                        custo_real=None if real is None else _texto(real), moeda_recebida=moeda_real or self._moeda,
                         pricing_version=reserva.pricing_version, motivo=motivo))
                 return ReservaOrcamento(reserva.reservation_id, reserva.call_id, reserva.route_id, reserva.attempt, maximo, reserva.pricing_version, status)
         except sqlite3.Error as erro:
             raise ErroOrcamento("ledger indisponivel ou corrompido") from erro
 
-    @staticmethod
-    def _resultado(custo: object, moeda: object, maximo: Decimal) -> tuple[StatusReserva, Decimal | None, str | None, bool]:
+    def _resultado(self, custo: object, moeda: object, maximo: Decimal) -> tuple[StatusReserva, Decimal | None, str | None, bool]:
         if type(custo) is not Decimal or not custo.is_finite() or custo < 0:
-            return "UNKNOWN_COST", None, "BRL", False
+            return "UNKNOWN_COST", None, self._moeda, False
         real = _decimal(custo)
         if type(moeda) is not str or not _identificador(moeda):
-            return "UNKNOWN_COST", None, "BRL", False
-        if moeda != "BRL":
+            return "UNKNOWN_COST", None, self._moeda, False
+        if moeda != self._moeda:
             return "CONTRACT_VIOLATED", real, moeda, False
         return ("RECONCILED" if real <= maximo else "CONTRACT_VIOLATED"), real, moeda, True
+
+    def _validar_sessao(self, sessao: object) -> SessaoOrcamento:
+        if type(sessao) is not SessaoOrcamento or sessao.moeda != self._moeda:
+            raise ErroOrcamento("sessao de outra moeda")
+        _id(sessao.run_id, "run_id")
+        _id(sessao.thread_id, "thread_id")
+        return sessao
 
     def _conexao(self, run_id: str) -> sqlite3.Connection:
         con = sqlite3.connect(self.caminho(run_id), isolation_level=None, timeout=2)
         try:
             con.execute("PRAGMA foreign_keys=ON")
             con.execute("BEGIN IMMEDIATE")
-            con.execute("""CREATE TABLE IF NOT EXISTS budget_session (
-              run_id TEXT NOT NULL, thread_id TEXT NOT NULL, teto TEXT NOT NULL, moeda TEXT NOT NULL,
-              gasto TEXT NOT NULL, reservado TEXT NOT NULL, status TEXT NOT NULL,
-              PRIMARY KEY (run_id, thread_id), CHECK (moeda='BRL'), CHECK (status IN ('ACTIVE','INVALIDATED')),
-              CHECK (typeof(teto)='text' AND typeof(gasto)='text' AND typeof(reservado)='text'))""")
+            check_moeda = (
+                "CHECK (moeda='BRL')"
+                if self._moeda == "BRL"
+                else "CHECK (moeda='TOKEN')"
+            )
+            schema_sessao = (
+                "CREATE TABLE IF NOT EXISTS budget_session ("
+                "run_id TEXT NOT NULL, thread_id TEXT NOT NULL, teto TEXT NOT NULL, "
+                "moeda TEXT NOT NULL, gasto TEXT NOT NULL, reservado TEXT NOT NULL, "
+                "status TEXT NOT NULL, PRIMARY KEY (run_id, thread_id), "
+                + check_moeda
+                + ", CHECK (status IN ('ACTIVE','INVALIDATED')), "
+                "CHECK (typeof(teto)='text' AND typeof(gasto)='text' "
+                "AND typeof(reservado)='text'))"
+            )
+            con.execute(schema_sessao)
             con.execute("""CREATE TABLE IF NOT EXISTS budget_reservation (
               reservation_id TEXT PRIMARY KEY, run_id TEXT NOT NULL, thread_id TEXT NOT NULL,
               call_id TEXT NOT NULL, route_id TEXT NOT NULL, attempt INTEGER NOT NULL, maximo TEXT NOT NULL,
@@ -625,6 +671,20 @@ class RepositorioOrcamento:
             con.execute("INSERT INTO budget_outbox_claim (event_id,estado,tentativas) "
                         "SELECT o.event_id,'PENDING',0 FROM budget_outbox o WHERE NOT EXISTS "
                         "(SELECT 1 FROM budget_outbox_claim c WHERE c.event_id=o.event_id)")
+            if con.execute(
+                "SELECT 1 FROM budget_session WHERE moeda<>? LIMIT 1", (self._moeda,)
+            ).fetchone() is not None:
+                raise sqlite3.DatabaseError("moeda divergente no ledger")
+            if self._moeda == "TOKEN":
+                schema = con.execute(
+                    "SELECT sql FROM sqlite_master WHERE name='budget_session'"
+                ).fetchone()
+                if (
+                    schema is None
+                    or type(schema[0]) is not str
+                    or "CHECK (moeda='TOKEN')" not in schema[0]
+                ):
+                    raise sqlite3.DatabaseError("schema de moeda divergente")
             if "moeda_real" not in {linha[1] for linha in con.execute("PRAGMA table_info(budget_reservation)")}:
                 con.execute("ALTER TABLE budget_reservation ADD COLUMN moeda_real TEXT")
             con.commit()
@@ -659,7 +719,7 @@ def executar_tentativa_custeada(
     except Exception:
         repositorio.bloquear(sessao, identidade, "sem_cotacao")
         return None
-    if not _cotacao_tentativa_valida(cotacao):
+    if not _cotacao_tentativa_valida(cotacao, repositorio.moeda):
         repositorio.bloquear(sessao, identidade, "sem_cotacao")
         return None
     reserva = ReservaOrcamento(
@@ -708,14 +768,19 @@ def _resultado_tentativa_valido(valor: object) -> bool:
         _decimal(valor.custo_real)
     except ErroOrcamento:
         return False
-    return (valor.texto is None or type(valor.texto) is str) and valor.moeda == "BRL" and _identificador(valor.usage_ref)
+    return (
+        (valor.texto is None or type(valor.texto) is str)
+        and type(valor.moeda) is str
+        and valor.moeda in _ARQUIVO_POR_MOEDA
+        and _identificador(valor.usage_ref)
+    )
 
 
-def _cotacao_tentativa_valida(valor: object) -> bool:
+def _cotacao_tentativa_valida(valor: object, moeda: Moeda) -> bool:
     if type(valor) is not CotacaoTentativa:
         return False
     try:
         _decimal(valor.maximo, positivo=True)
     except ErroOrcamento:
         return False
-    return valor.moeda == "BRL" and _identificador(valor.pricing_version)
+    return valor.moeda == moeda and _identificador(valor.pricing_version)

@@ -37,24 +37,24 @@ ESQUEMA: dict[str, dict[str, Any]] = {
     "custo.reservado": {
         "categoria": "orcamento",
         "campos": [*_CAMPOS_ORCAMENTO, "reservation_id", "maximo", "pricing_version"],
-        "descricao": "Registra reserva monetaria aceita e os totais da sessao apos a reserva.",
+        "descricao": "Registra reserva de contencao aceita e os totais da sessao apos a reserva.",
     },
     "custo.reconciliado": {
         "categoria": "orcamento",
         "campos": [*_CAMPOS_ORCAMENTO, "reservation_id", "maximo", "custo_real",
                    "delta_liberado", "pricing_version"],
-        "descricao": "Registra custo real reconciliado e os totais resultantes da sessao.",
+        "descricao": "Registra consumo real reconciliado e os totais resultantes da sessao.",
     },
     "custo.bloqueado": {
         "categoria": "orcamento",
         "campos": [*_CAMPOS_ORCAMENTO, "motivo"],
-        "descricao": "Registra bloqueio antes de efeito externo com snapshot monetario sanitizado.",
+        "descricao": "Registra bloqueio antes de efeito externo com snapshot de contencao.",
     },
     "custo.contrato_violado": {
         "categoria": "orcamento",
         "campos": [*_CAMPOS_ORCAMENTO, "reservation_id", "maximo", "custo_real",
                    "moeda_recebida", "pricing_version", "motivo"],
-        "descricao": "Registra violacao de maximo, moeda ou custo real do contrato monetario.",
+        "descricao": "Registra violacao de maximo, moeda ou consumo real do contrato de contencao.",
     },
     "curador.certificou": {
         "categoria": "curador",
@@ -551,7 +551,7 @@ def _dominio_monetario_valido(tipo: str, evento: dict[str, Any]) -> bool:
     for campo in ("reservation_id", "pricing_version"):
         if campo in evento and not _identificador_valido(evento[campo]):
             return False
-    if evento["moeda"] != "BRL" or evento["tentativa"] < 1:
+    if evento["moeda"] not in {"BRL", "TOKEN"} or evento["tentativa"] < 1:
         return False
 
     teto = _decimal_canonico(evento["teto"])
@@ -597,21 +597,21 @@ def _dominio_monetario_valido(tipo: str, evento: dict[str, Any]) -> bool:
         return (
             custo_real is not None
             and custo_real > maximo
-            and moeda_recebida == "BRL"
+            and moeda_recebida == evento["moeda"]
             and gasto >= custo_real
         )
     if motivo == "moeda_divergente":
         return (
             custo_real is not None
             and _identificador_valido(moeda_recebida)
-            and moeda_recebida != "BRL"
+            and moeda_recebida != evento["moeda"]
             and comprometido <= teto
             and reservado >= maximo
         )
     return (
         motivo == "custo_invalido"
         and custo_real is None
-        and moeda_recebida == "BRL"
+        and moeda_recebida == evento["moeda"]
         and comprometido <= teto
         and reservado >= maximo
     )
