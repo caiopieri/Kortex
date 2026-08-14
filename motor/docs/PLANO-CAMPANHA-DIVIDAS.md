@@ -304,9 +304,22 @@ Desenho fechado (ver `kortex-fase1-moeda-de-contencao` na memória):
       invisível para conclusão e recovery*.
       **Fatiada em três, cada uma funcional:**
       - [ ] **1c-i** — `DependenciasOrcamento` por moeda (sem alias `repositorio`, que
-            deixaria CLI/serviço drenando só BRL em silêncio) + relay/status/conclusão
-            varrendo todos os ledgers, consultando `possui_ledger` antes de drenar para
-            preservar criação lazy. Só BRL configurado ⇒ comportamento idêntico. *Em voo.*
+            deixaria CLI/serviço drenando só BRL em silêncio) + relay/status/dreno
+            **iterando o mapa**, consultando `possui_ledger` antes de drenar cada moeda para
+            preservar criação lazy, com ordem de dreno fixa e declarada. Só BRL configurado
+            ⇒ mapa de uma entrada ⇒ **comportamento idêntico, sem asterisco**. *Em voo.*
+            *Colisão de restrições resolvida em 2026-08-14:* quatro pontos de teste leem os
+            campos singulares (`h12b4f:125`, `h12b4f:150-152`, `composicao_multi:215`,
+            `helpers_grafo:64-69`), então "não editar teste" e "remover o campo singular" não
+            cabiam juntos. **Autorizada a migração mecânica** — trocar o acessor preservando
+            valor, semântica e número de asserts não é enfraquecer teste, e a regra existe
+            contra enfraquecimento. O alias de compatibilidade seria pior: manteria a classe
+            prometendo duas APIs e permitiria um callsite novo contra a singular.
+            *Correção de escopo minha:* a exigência de **conclusão recusar
+            RESERVED/UNKNOWN_COST saiu daqui e foi para a 1c-iii**. Ela muda o exit/status de
+            run BRL ambíguo, e eu tinha declarado esta fatia como estrutural — as duas coisas
+            não cabem na mesma fatia. Sem o resultado tipado da 1c-iii, endurecer conclusão
+            agora seria adivinhar qual falha é ambígua.
       - [ ] **1c-ii** — moeda explícita na rota + `teto_bootstrap_token` operator-owned, ao
             lado de `teto_bootstrap_brl`. `restricoes.teto_custo` continua significando BRL
             e **jamais** governa TOKEN (contrato S7).
