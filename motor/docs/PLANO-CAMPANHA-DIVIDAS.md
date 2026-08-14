@@ -45,7 +45,14 @@ de escolher em silêncio — é o que rende as melhores contribuições dele.
    Consolidação de testes some com cobertura e a suíte fica verde a perda inteira. Na 1c-i,
    três testes novos viraram um e o que sumiu era justamente o que fixava a criação lazy;
    só apareceu porque o total caiu de 1240 para 1238. `pytest -q --collect-only | tail -1`.
-7. **Verde na suíte não vê mudança de concorrência.** Duas regressões da 1c-i passaram
+7. **Migração de teste que faz vermelho virar verde EXIGE teste novo que prove a regra.**
+   Quando um teste existente passa a falhar porque o produto ficou mais exigente, adicionar
+   a nova pré-condição ao teste o faz passar — e não deixa prova nenhuma de que a exigência
+   é aplicada. Trocar a exigência por um default silencioso depois disso passa no gate.
+   Na 1c-ii, cinco testes ganharam `teto_bootstrap_token` e só entraram junto de
+   `test_cada_moeda_usada_exige_seu_teto`, que reprova quando o teto some.
+   *Regra derivada:* toda migração autorizada vem com o negativo que a justifica.
+8. **Verde na suíte não vê mudança de concorrência.** Duas regressões da 1c-i passaram
    verdes: o writer novo em `status()` (achado lendo o diff) e a perda de cobertura (achada
    contando testes). Enquanto a dívida 12 existir, qualquer fatia que toque relay, status ou
    lock precisa de leitura de diff — o gate não decide.
@@ -345,9 +352,20 @@ Desenho fechado (ver `kortex-fase1-moeda-de-contencao` na memória):
             run BRL ambíguo, e eu tinha declarado esta fatia como estrutural — as duas coisas
             não cabem na mesma fatia. Sem o resultado tipado da 1c-iii, endurecer conclusão
             agora seria adivinhar qual falha é ambígua.
-      - [ ] **1c-ii** — moeda explícita na rota + `teto_bootstrap_token` operator-owned, ao
-            lado de `teto_bootstrap_brl`. `restricoes.teto_custo` continua significando BRL
-            e **jamais** governa TOKEN (contrato S7).
+      - [x] **1c-ii — FECHADA** 2026-08-14, commit `536b2d4`. A moeda da rota é **DERIVADA**
+            de `resolver_modelo`, não declarada na config — a mesma fonte code-owned que fixa
+            o vendor fixa a moeda, e "rota rotulada errado" deixa de existir por construção.
+            (Medido: zero construtores de rota em `modelos.py`; os três produtivos estão em
+            `composicao_orcamento.py`.) O mesmo `moedas_usadas` governa **três** coisas —
+            frescor, teto obrigatório e criação de entrada no mapa — então não há como
+            divergirem. `teto_bootstrap_token` só aceita inteiro positivo canônico; teto
+            ausente **reprova** em vez de cair em default, que é o defeito do S7.
+            *Condição que impus para autorizar a 4ª edição de teste da campanha:* adicionar a
+            chave em 5 testes faz 5 testes passarem e **não prova que a exigência é
+            aplicada** — se alguém trocá-la por um default silencioso, os 5 seguem verdes.
+            Por isso entraram junto de `test_cada_moeda_usada_exige_seu_teto` (4 casos,
+            causa isolada por `match`). Provado por mutação: default silencioso derruba
+            exatamente os 2 casos TOKEN. Gate: 1254 coletados (+15), 1218 passam, 1 falha.
       - [ ] **1c-iii** — resolução lazy no laço + **resultado tipado** (sucesso / falha
             pré-efeito segura / ambígua-terminal) + **taint de run** + testes de failover
             atravessando moeda.
