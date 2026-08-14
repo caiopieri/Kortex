@@ -258,9 +258,33 @@ Desenho fechado (ver `kortex-fase1-moeda-de-contencao` na memória):
       (as duas outboxes convergem para o mesmo `LogEventos` e colidiriam). Guard de preço
       roda no import e checa por tipo estrito — `0`, `0.0`, `"0"`, `Decimal("0.00")`,
       negativo, NaN, infinito. Gate: 1186 passam, 1 falha (só E-02).
-- [ ] **1b** — tabela code-owned de rota grátis (modelo → vendor + classe de cota), cotação
-      em token, mesma checagem vendor × provider_id, fail-closed para modelo fora das duas
-      tabelas.
+- [x] **1b — FECHADA em 2026-08-14**, commit `2caf5c9`. `ROTAS_GRATIS` é `modelo → vendor`,
+      **sem campo numérico**: em TOKEN a cotação é IDENTIDADE (reserva = `max_input +
+      max_completion`, consumo = usage observado), então não existe número que possa ser
+      zerado para desligar a contenção — resolve por construção o que a 1a resolve por
+      checagem. **A "classe de cota" foi CORTADA**: não decidia nada que o teto do operador
+      já não decidisse, e rótulo sem teto/ledger/pool próprio sugere isolamento inexistente.
+      `resolver_modelo` é a resolução ÚNICA de vendor (`pago == gratis` pega "em nenhuma" e
+      "nas duas" de uma vez); `composicao_orcamento.py` não indexa mais tabela nenhuma, para
+      não existir ramo grátis que pule o guard de independência.
+      **Frescor condicional à moeda usada, e não é afrouxamento** — verificado por sonda:
+      config mista com FX vencido RECUSA, mista com FX fresco compõe, só-TOKEN não depende
+      de cotação USD-BRL (exigir câmbio fresco para rota que não custa dinheiro era
+      acoplamento sem sentido). Janela do catálogo grátis é de **24h**, mais curta que os 7
+      dias do pricing e de propósito: free tier some sem aviso — medindo hoje,
+      `nvidia/deepseek-ai/deepseek-v4-flash` deu **410 Gone**.
+      ⚠️ **O catálogo grátis vence 2026-08-15T00:00Z.** Depois disso rota grátis não compõe
+      até remedir. Comando: `python3 scratchpad/medir_1pre.py` contra
+      `http://127.0.0.1:20128/v1` (não exige credencial), e atualizar
+      `ROTAS_GRATIS_CAPTURADO_EM`/`ROTAS_GRATIS_VERSION`.
+      *Declarado:* 1b **não é executável ponta a ponta** — a dependência composta ainda
+      carrega `RepositorioOrcamento` BRL, então cotação TOKEN é bloqueada antes da rede até
+      a 1c. E gratuidade continua sendo atestação code-owned: uma rota pode seguir
+      respondendo depois de deixar de ser grátis, e nenhum teste pega isso.
+- [ ] **1b-bis** — teste causal isolado de **config mista + FX vencido reprova** (e o
+      espelho: mista + catálogo grátis vencido reprova pelo catálogo). O código já exige, e
+      eu provei por sonda, mas sonda não é teste de regressão. Lacuna levantada pelo próprio
+      Codex em vez de deixada passar. *Despachado.*
 - [ ] **1c** — `chamar_orcado` resolvendo sessão **por moeda** ao longo da cadeia de
       failover. É o nó real: hoje ele chama `sessao(...)` uma vez, antes da cadeia, com um
       teto só — e executor grátis com verifier pago é o caso NORMAL, não a borda.
