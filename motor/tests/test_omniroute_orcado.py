@@ -468,6 +468,21 @@ def test_frescor_gratis_e_condicional_ao_catalogo_usado(credencial, tmp_path) ->
     assert "tabela code-owned" in str(erro.value)
 
 
+def test_config_mista_com_fx_vencido_reprova_por_fx(credencial, tmp_path) -> None:
+    agora = ROTAS_GRATIS_CAPTURADO_EM
+    cfg = _cfg(agora)
+    cfg["fx"]["capturado_em"] = agora - cfg["fx_max_age_s"] - 1
+    cfg["omniroute"]["papeis"]["executor"][0] = {
+        "modelo": "alibaba/glm-5.2",
+        "provider_id": "zhipu",
+        "max_input_tokens": 24000,
+        "max_completion_tokens": 4000,
+    }
+
+    with pytest.raises(ErroOrcamento, match="snapshot FX vencido"):
+        compor_orcamento_omniroute(cfg, tmp_path, relogio=lambda: agora)
+
+
 def test_composicao_so_token_nao_depende_do_frescor_monetario(
     credencial, tmp_path, monkeypatch,
 ) -> None:
