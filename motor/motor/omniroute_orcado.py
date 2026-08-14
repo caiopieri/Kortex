@@ -6,7 +6,7 @@ so -- ao custo de duas concessoes que precisam ficar explicitas:
 
 1. A INDEPENDENCIA E SO PARCIALMENTE VERIFICAVEL. `provider_id` e declarado por
    config, nao observado na resposta. O que o kernel CONSEGUE checar e que a
-   declaracao nao contradiz o vendor code-owned em `PRECOS[...].vendor` -- isso
+   declaracao nao contradiz o vendor code-owned no catalogo do modelo -- isso
    fecha o buraco de servir o mesmo modelo por duas assinaturas (`claude/` e
    `agy/` entregam o mesmo Opus 4.6) e chamar isso de dois julgamentos. O que
    ele NAO consegue checar e o proxy reescrever o roteamento por baixo e mandar
@@ -34,15 +34,22 @@ from dataclasses import dataclass
 from decimal import Decimal, ROUND_CEILING
 from typing import Callable, Mapping, cast
 
-from .orcamento import CotacaoTentativa, ErroOrcamento, ResultadoTentativa
+from .orcamento import CotacaoTentativa, ErroOrcamento, Moeda, ResultadoTentativa
 
 
 MAX_INPUT_TOKENS = 200_000
 MAX_OUTPUT_TOKENS = 64_000
 PRICING_VERSION = "omniroute-openrouter-verified-2026-08-10"
 PRICING_SOURCE = "https://openrouter.ai/models"
+ROTAS_GRATIS_VERSION = "omniroute-free-verified-2026-08-14"
+# Limite inferior conservador: a medicao informa o dia, nao a hora.
+ROTAS_GRATIS_CAPTURADO_EM = 1_786_665_600  # 2026-08-14T00:00:00Z
+ROTAS_GRATIS_MAX_AGE_S = 24 * 60 * 60
 _QUANTUM_BRL = Decimal("0.000001")
 _MILHAO = Decimal(1_000_000)
+_VENDORS = frozenset({
+    "anthropic", "deepseek", "google", "meta", "moonshot", "openai", "zhipu",
+})
 
 
 @dataclass(frozen=True)
@@ -131,6 +138,23 @@ PRECOS: dict[str, PrecoModelo] = {
     ),
 }
 
+# Rotas medidas pelo leitor real em 2026-08-14. TOKEN e unidade identidade:
+# nao ha preco, fator ou zero capaz de desligar a contencao.
+ROTAS_GRATIS: dict[str, str] = {
+    "nvidia/meta/llama-3.1-8b-instruct": "meta",
+    "alibaba/deepseek-v3.2": "deepseek",
+    "alibaba/glm-5.2": "zhipu",
+    "alibaba/kimi-k2.7-code": "moonshot",
+    "gemini/gemini-2.0-flash-lite": "google",
+}
+
+
+@dataclass(frozen=True)
+class ModeloContido:
+    moeda: Moeda
+    vendor: str
+    preco: PrecoModelo | None
+
 
 def _validar_precos(precos: Mapping[str, object]) -> None:
     for modelo, preco in precos.items():
@@ -142,7 +166,43 @@ def _validar_precos(precos: Mapping[str, object]) -> None:
                 raise ErroOrcamento(f"preco invalido em PRECOS: {modelo!r}.{campo}")
 
 
-_validar_precos(PRECOS)
+def _validar_catalogos(
+    precos: Mapping[str, object], rotas_gratis: Mapping[str, object],
+) -> None:
+    _validar_precos(precos)
+    sobrepostos = set(precos) & set(rotas_gratis)
+    if sobrepostos:
+        raise ErroOrcamento(
+            f"modelo em duas moedas de contencao: {next(iter(sobrepostos))!r}"
+        )
+    for modelo, vendor in rotas_gratis.items():
+        if (
+            type(modelo) is not str or not modelo
+            or type(vendor) is not str or vendor not in _VENDORS
+        ):
+            raise ErroOrcamento(f"rota gratis invalida: {modelo!r}")
+    for modelo, entrada in precos.items():
+        vendor = entrada.vendor if type(entrada) is PrecoModelo else None
+        if type(vendor) is not str or vendor not in _VENDORS:
+            raise ErroOrcamento(f"vendor invalido para modelo: {modelo!r}")
+
+
+def resolver_modelo(modelo: str) -> ModeloContido:
+    pago = modelo in PRECOS
+    gratis = modelo in ROTAS_GRATIS
+    if pago == gratis:
+        if pago:
+            raise ErroOrcamento(f"modelo em duas moedas de contencao: {modelo}")
+        raise ErroOrcamento(
+            f"modelo sem contencao declarada (sem preco declarado nem rota gratis): {modelo}"
+        )
+    if pago:
+        preco = PRECOS[modelo]
+        return ModeloContido("BRL", preco.vendor, preco)
+    return ModeloContido("TOKEN", ROTAS_GRATIS[modelo], None)
+
+
+_validar_catalogos(PRECOS, ROTAS_GRATIS)
 
 
 def _horas(segundos: int) -> str:
@@ -151,6 +211,7 @@ def _horas(segundos: int) -> str:
 
 def exigir_snapshot_fresco(
     rotulo: str, versao: str, capturado_em: int, max_age_s: int, agora: int,
+    *, remediacao: str | None = None,
 ) -> None:
     """Recusa snapshot velho DIZENDO o que venceu, de quanto, e o que fazer.
 
@@ -172,12 +233,26 @@ def exigir_snapshot_fresco(
         )
     idade = agora - capturado_em
     if idade > max_age_s:
+        instrucao = remediacao or (
+            f"Recapture a cotacao real e atualize o bloco `{rotulo.lower()}` da "
+            "config -- adiantar so a data mantem o numero velho."
+        )
         raise ErroOrcamento(
             f"snapshot {rotulo} vencido: capturado ha {_horas(idade)}, "
             f"limite {_horas(max_age_s)} (versao {versao}). "
-            f"Recapture a cotacao real e atualize o bloco `{rotulo.lower()}` da "
-            f"config -- adiantar so a data mantem o numero velho."
+            f"{instrucao}"
         )
+
+
+def exigir_rotas_gratis_frescas(agora: int) -> None:
+    exigir_snapshot_fresco(
+        "rotas-gratis", ROTAS_GRATIS_VERSION, ROTAS_GRATIS_CAPTURADO_EM,
+        ROTAS_GRATIS_MAX_AGE_S, agora,
+        remediacao=(
+            "Remeca as rotas contra o leitor real e atualize a tabela code-owned; "
+            "adiantar so a data nao prova gratuidade nem disponibilidade."
+        ),
+    )
 
 
 @dataclass(frozen=True)
@@ -234,12 +309,10 @@ class ClienteOmniRouteCusteado:
             raise ErroOrcamento("entrada OmniRoute invalida")
         if not isinstance(base_url, str) or not base_url.startswith(("http://", "https://")):
             raise ErroOrcamento("base_url OmniRoute invalida")
-        if modelo not in PRECOS:
-            # Fail-closed: modelo sem preco declarado nao roda. Deixar passar seria
-            # executar com custo desconhecido, que e pior que nao executar.
-            raise ErroOrcamento(f"modelo sem preco declarado: {modelo}")
+        resolucao = resolver_modelo(modelo)
         self.modelo = modelo
-        self.preco = PRECOS[modelo]
+        self.moeda = resolucao.moeda
+        self.preco = resolucao.preco
         self.max_input_tokens = _inteiro(max_input_tokens, "max_input_tokens")
         self.max_completion_tokens = _inteiro(max_completion_tokens, "max_completion_tokens")
         # `max_input_tokens` e CONFIGURAVEL aqui, ao contrario dos adapters
@@ -253,24 +326,32 @@ class ClienteOmniRouteCusteado:
             raise ErroOrcamento("limites de token invalidos")
         if len(prompt.encode("utf-8")) > self.max_input_tokens:
             raise ErroOrcamento("prompt excede limite conservador")
-        if (type(agora) is not int or type(fx_max_age_s) is not int or fx_max_age_s <= 0
-                or type(pricing_max_age_s) is not int or pricing_max_age_s <= 0):
+        if type(agora) is not int:
             raise ErroOrcamento("janela de snapshot invalida")
-        if type(fx) is not SnapshotFX or not fx.versao or type(fx.capturado_em) is not int:
-            raise ErroOrcamento("snapshot FX invalido")
-        exigir_snapshot_fresco("FX", fx.versao, fx.capturado_em, fx_max_age_s, agora)
-        if (type(pricing) is not SnapshotPricing
-                or pricing.versao != PRICING_VERSION or pricing.fonte != PRICING_SOURCE
-                or type(pricing.capturado_em) is not int):
-            raise ErroOrcamento("snapshot pricing invalido")
-        exigir_snapshot_fresco(
-            "pricing", pricing.versao, pricing.capturado_em, pricing_max_age_s, agora,
-        )
-        self.fx, self.pricing = fx, pricing
-        self.margem = _decimal_positivo(margem, "margem")
-        _decimal_positivo(fx.cotacao_venda, "cotacaoVenda")
-        if self.margem < 1:
-            raise ErroOrcamento("margem subestima custo")
+        self.fx: SnapshotFX | None = None
+        self.pricing: SnapshotPricing | None = None
+        self.margem: Decimal | None = None
+        if self.moeda == "BRL":
+            if (type(fx_max_age_s) is not int or fx_max_age_s <= 0
+                    or type(pricing_max_age_s) is not int or pricing_max_age_s <= 0):
+                raise ErroOrcamento("janela de snapshot invalida")
+            if type(fx) is not SnapshotFX or not fx.versao or type(fx.capturado_em) is not int:
+                raise ErroOrcamento("snapshot FX invalido")
+            exigir_snapshot_fresco("FX", fx.versao, fx.capturado_em, fx_max_age_s, agora)
+            if (type(pricing) is not SnapshotPricing
+                    or pricing.versao != PRICING_VERSION or pricing.fonte != PRICING_SOURCE
+                    or type(pricing.capturado_em) is not int):
+                raise ErroOrcamento("snapshot pricing invalido")
+            exigir_snapshot_fresco(
+                "pricing", pricing.versao, pricing.capturado_em, pricing_max_age_s, agora,
+            )
+            self.fx, self.pricing = fx, pricing
+            self.margem = _decimal_positivo(margem, "margem")
+            _decimal_positivo(fx.cotacao_venda, "cotacaoVenda")
+            if self.margem < 1:
+                raise ErroOrcamento("margem subestima custo")
+        else:
+            exigir_rotas_gratis_frescas(agora)
         if type(timeout) is not int or timeout <= 0 or not callable(transporte):
             raise ErroOrcamento("transporte invalido")
         self._api_key, self._prompt = api_key, prompt
@@ -278,6 +359,8 @@ class ClienteOmniRouteCusteado:
         self._timeout, self._transporte = timeout, transporte
 
     def _brl(self, entrada: int, cached: int, saida: int, *, margem: bool) -> Decimal:
+        if self.preco is None or self.fx is None or self.margem is None:
+            raise ErroOrcamento("modelo sem contencao monetaria")
         usd = ((entrada - cached) * self.preco.entrada / _MILHAO
                + cached * self.preco.cached / _MILHAO
                + saida * self.preco.saida / _MILHAO)
@@ -285,7 +368,13 @@ class ClienteOmniRouteCusteado:
         return _arredondar_brl(usd * self.fx.cotacao_venda * multiplicador)
 
     def cotar_tentativa(self) -> CotacaoTentativa:
+        if self.moeda == "TOKEN":
+            maximo = Decimal(self.max_input_tokens + self.max_completion_tokens)
+            versao = f"{ROTAS_GRATIS_VERSION}@{ROTAS_GRATIS_CAPTURADO_EM}"
+            return CotacaoTentativa(maximo, "TOKEN", versao)
         maximo = self._brl(self.max_input_tokens, 0, self.max_completion_tokens, margem=True)
+        if self.pricing is None or self.fx is None or self.margem is None:
+            raise ErroOrcamento("modelo sem contencao monetaria")
         versao = (
             f"{self.pricing.versao}@{self.pricing.capturado_em}"
             f"+fx:{self.fx.versao}+margin:{self.margem}"
@@ -351,8 +440,11 @@ class ClienteOmniRouteCusteado:
             )
             if not isinstance(conteudo, str) or not conteudo or not isinstance(request_id, str):
                 raise ErroOrcamento("resposta OmniRoute incompleta")
-            custo = self._brl(entrada, cached, saida, margem=False)
-            return ResultadoTentativa(conteudo, custo, "BRL", request_id)
+            consumo = (
+                Decimal(entrada + saida) if self.moeda == "TOKEN"
+                else self._brl(entrada, cached, saida, margem=False)
+            )
+            return ResultadoTentativa(conteudo, consumo, self.moeda, request_id)
         except ErroOrcamento:
             raise
         except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as erro:

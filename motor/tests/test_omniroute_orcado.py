@@ -13,6 +13,7 @@ import pytest
 
 from motor.composicao_orcamento import (
     PRICING_CAPTURADO_EM,
+    PRICING_MAX_AGE_S,
     compor_orcamento_omniroute,
     validar_independencia_orcada,
 )
@@ -21,10 +22,15 @@ from motor.omniroute_orcado import (
     PRECOS,
     PRICING_SOURCE,
     PRICING_VERSION,
+    ROTAS_GRATIS,
+    ROTAS_GRATIS_CAPTURADO_EM,
+    ROTAS_GRATIS_MAX_AGE_S,
+    ROTAS_GRATIS_VERSION,
     ClienteOmniRouteCusteado,
     PrecoModelo,
     SnapshotFX,
     SnapshotPricing,
+    _validar_catalogos,
     _validar_precos,
 )
 from motor.orcamento import ErroOrcamento, RequisitosTentativaCusteada
@@ -165,6 +171,65 @@ def test_guard_precos_reprova_ausente_zero_negativo_e_nao_finito(
 def test_guard_precos_reprova_entrada_que_nao_e_preco(entrada: object) -> None:
     with pytest.raises(ErroOrcamento, match="preco invalido"):
         _validar_precos({"modelo": entrada})
+
+
+def test_catalogo_gratis_tem_so_as_cinco_rotas_medidas_e_sem_preco() -> None:
+    assert ROTAS_GRATIS == {
+        "nvidia/meta/llama-3.1-8b-instruct": "meta",
+        "alibaba/deepseek-v3.2": "deepseek",
+        "alibaba/glm-5.2": "zhipu",
+        "alibaba/kimi-k2.7-code": "moonshot",
+        "gemini/gemini-2.0-flash-lite": "google",
+    }
+    _validar_catalogos(PRECOS, ROTAS_GRATIS)
+
+
+def test_catalogo_reprova_modelo_nas_duas_moedas() -> None:
+    modelo = next(iter(PRECOS))
+    with pytest.raises(ErroOrcamento, match="duas moedas"):
+        _validar_catalogos(PRECOS, {modelo: PRECOS[modelo].vendor})
+
+
+@pytest.mark.parametrize("entrada", [0, 0.0, "0", Decimal("0.00"), None])
+def test_catalogo_gratis_nao_aceita_preco_zero_disfarcado(entrada: object) -> None:
+    with pytest.raises(ErroOrcamento, match="rota gratis invalida"):
+        _validar_catalogos(PRECOS, {"modelo/gratis": entrada})
+
+
+def test_rota_gratis_cota_e_reconcilia_em_token_identidade() -> None:
+    modelo = "nvidia/meta/llama-3.1-8b-instruct"
+    cliente = _cliente(
+        lambda *_: _resposta(
+            model="meta/llama-3.1-8b-instruct", prompt=40, completion=2, total=60,
+        ),
+        modelo=modelo, agora=ROTAS_GRATIS_CAPTURADO_EM,
+    )
+
+    cotacao = cliente.cotar_tentativa()
+    resultado = cliente.tentar_uma_vez()
+
+    assert (cotacao.maximo, cotacao.moeda, cotacao.pricing_version) == (
+        Decimal(28000), "TOKEN",
+        f"{ROTAS_GRATIS_VERSION}@{ROTAS_GRATIS_CAPTURADO_EM}",
+    )
+    # O residuo de raciocinio em `total_tokens` tambem consome a cota.
+    assert (resultado.custo_real, resultado.moeda) == (Decimal(60), "TOKEN")
+
+
+def test_rota_gratis_vencida_reprova_antes_da_rede() -> None:
+    chamadas = 0
+
+    def transporte(*_):
+        nonlocal chamadas
+        chamadas += 1
+        return _resposta(model="deepseek-v3.2")
+
+    with pytest.raises(ErroOrcamento, match="rotas-gratis vencido"):
+        _cliente(
+            transporte, modelo="alibaba/deepseek-v3.2",
+            agora=ROTAS_GRATIS_CAPTURADO_EM + ROTAS_GRATIS_MAX_AGE_S + 1,
+        )
+    assert chamadas == 0
 
 
 def test_stream_false_e_obrigatorio_no_payload() -> None:
@@ -354,6 +419,71 @@ def test_provider_id_que_contradiz_o_vendor_do_modelo_recusa(credencial, tmp_pat
     }]
     with pytest.raises(ErroOrcamento, match="contradiz o vendor"):
         compor_orcamento_omniroute(cfg, tmp_path)
+
+
+def test_rota_gratis_nao_pula_guard_de_vendor(credencial, tmp_path) -> None:
+    cfg = _cfg(ROTAS_GRATIS_CAPTURADO_EM)
+    cfg["omniroute"]["papeis"]["executor"][0] = {
+        "modelo": "nvidia/meta/llama-3.1-8b-instruct",
+        "provider_id": "nvidia",
+        "max_input_tokens": 24000,
+        "max_completion_tokens": 4000,
+    }
+    with pytest.raises(ErroOrcamento, match="contradiz o vendor"):
+        compor_orcamento_omniroute(
+            cfg, tmp_path, relogio=lambda: ROTAS_GRATIS_CAPTURADO_EM,
+        )
+
+
+def test_composicao_gratis_produz_cotacao_token(credencial, tmp_path) -> None:
+    cfg = _cfg(ROTAS_GRATIS_CAPTURADO_EM)
+    cfg["omniroute"]["papeis"]["executor"][0] = {
+        "modelo": "nvidia/meta/llama-3.1-8b-instruct",
+        "provider_id": "meta",
+        "max_input_tokens": 24000,
+        "max_completion_tokens": 4000,
+    }
+    deps = compor_orcamento_omniroute(
+        cfg, tmp_path, relogio=lambda: ROTAS_GRATIS_CAPTURADO_EM,
+    )
+    rota = deps.fabrica("executor", "p", 1, RequisitosTentativaCusteada())[0]
+    assert rota.provider_id == "meta"
+    assert rota.adaptador.cotar_tentativa().moeda == "TOKEN"
+
+
+def test_frescor_gratis_e_condicional_ao_catalogo_usado(credencial, tmp_path) -> None:
+    agora = ROTAS_GRATIS_CAPTURADO_EM + ROTAS_GRATIS_MAX_AGE_S + 1
+    cfg_pago = _cfg(agora)
+    compor_orcamento_omniroute(cfg_pago, tmp_path, relogio=lambda: agora)
+
+    cfg_gratis = _cfg(agora)
+    cfg_gratis["omniroute"]["papeis"]["executor"][0] = {
+        "modelo": "alibaba/glm-5.2",
+        "provider_id": "zhipu",
+        "max_input_tokens": 24000,
+        "max_completion_tokens": 4000,
+    }
+    with pytest.raises(ErroOrcamento, match="rotas-gratis vencido") as erro:
+        compor_orcamento_omniroute(cfg_gratis, tmp_path, relogio=lambda: agora)
+    assert "tabela code-owned" in str(erro.value)
+
+
+def test_composicao_so_token_nao_depende_do_frescor_monetario(
+    credencial, tmp_path, monkeypatch,
+) -> None:
+    agora = PRICING_CAPTURADO_EM + PRICING_MAX_AGE_S + 1
+    monkeypatch.setattr(
+        "motor.omniroute_orcado.ROTAS_GRATIS_CAPTURADO_EM", agora,
+    )
+    cfg = _cfg(agora)
+    papeis = cfg["omniroute"]["papeis"]
+    for papel, modelo, vendor in (
+        ("planner", "nvidia/meta/llama-3.1-8b-instruct", "meta"),
+        ("executor", "alibaba/deepseek-v3.2", "deepseek"),
+        ("verifier", "alibaba/glm-5.2", "zhipu"),
+    ):
+        papeis[papel] = [{**papeis[papel][0], "modelo": modelo, "provider_id": vendor}]
+    compor_orcamento_omniroute(cfg, tmp_path, relogio=lambda: agora)
 
 
 def test_todo_modelo_precificado_declara_vendor_conhecido() -> None:

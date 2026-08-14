@@ -433,6 +433,7 @@ def compor_orcamento_omniroute(
     # coincide com ele. Com Anthropic planejando, um verifier exclusivamente
     # Anthropic nunca roda -- foi exatamente o que derrubou a missao antes.
     papeis: dict[str, list[tuple[str, str, int, int]]] = {}
+    moedas_usadas: set[str] = set()
     for papel, bruto in papeis_bruto.items():
         itens = bruto if isinstance(bruto, list) else [bruto]
         if not isinstance(papel, str) or not itens:
@@ -442,8 +443,8 @@ def compor_orcamento_omniroute(
             if not isinstance(item, dict) or set(item) != _ESPERADOS_PAPEL_OMNI:
                 raise ErroOrcamento(f"papel omniroute invalido: {papel}")
             modelo = _texto(item, "modelo")
-            if modelo not in omniroute_orcado.PRECOS:
-                raise ErroOrcamento(f"modelo sem preco declarado: {modelo}")
+            resolucao = omniroute_orcado.resolver_modelo(modelo)
+            moedas_usadas.add(resolucao.moeda)
             provider_id = _texto(item, "provider_id")
             if re.fullmatch(r"[a-z0-9][a-z0-9_.-]{0,63}", provider_id) is None:
                 raise ErroOrcamento(f"provider_id invalido: {provider_id}")
@@ -452,11 +453,10 @@ def compor_orcamento_omniroute(
             # `agy/`; sem esta checagem, declarar a rota `agy/` como "google"
             # fazia executor e verifier passarem na independencia sendo o mesmo
             # modelo -- dois julgamentos que erram identico contados como dois.
-            vendor = omniroute_orcado.PRECOS[modelo].vendor
-            if provider_id != vendor:
+            if provider_id != resolucao.vendor:
                 raise ErroOrcamento(
                     f"provider_id {provider_id} contradiz o vendor de {modelo}"
-                    f" ({vendor})")
+                    f" ({resolucao.vendor})")
             alternativas.append((
                 modelo, provider_id,
                 _inteiro(item, "max_completion_tokens"),
@@ -483,13 +483,16 @@ def compor_orcamento_omniroute(
     # aparecia depois de o motor já ter planejado e começado a executar -- e
     # aparecia como "falha externa do executor", três vezes, sem o motivo. A
     # checagem por chamada continua: uma run longa pode vencer no meio dela.
-    omniroute_orcado.exigir_snapshot_fresco(
-        "FX", fx_versao, fx_capturado, fx_max_age, relogio(),
-    )
-    omniroute_orcado.exigir_snapshot_fresco(
-        "pricing", omniroute_orcado.PRICING_VERSION, PRICING_CAPTURADO_EM,
-        PRICING_MAX_AGE_S, relogio(),
-    )
+    if "BRL" in moedas_usadas:
+        omniroute_orcado.exigir_snapshot_fresco(
+            "FX", fx_versao, fx_capturado, fx_max_age, relogio(),
+        )
+        omniroute_orcado.exigir_snapshot_fresco(
+            "pricing", omniroute_orcado.PRICING_VERSION, PRICING_CAPTURADO_EM,
+            PRICING_MAX_AGE_S, relogio(),
+        )
+    if "TOKEN" in moedas_usadas:
+        omniroute_orcado.exigir_rotas_gratis_frescas(relogio())
     timeout = _inteiro(bloco_raiz, "timeout", maximo=600)
     margem = _decimal(bloco_raiz, "margem")
     teto_bootstrap = _decimal(bloco_raiz, "teto_bootstrap_brl")
