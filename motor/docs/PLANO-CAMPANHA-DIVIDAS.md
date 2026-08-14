@@ -134,8 +134,11 @@ família de concorrência**. Uma 5ª falha, ou uma 4ª fora dessa família, é q
 
 Mais arriscada que a Onda 1: mexe no caminho append-only que sustenta E2, o invariante do
 qual toda auditoria depende. Onda separada de propósito.
-*Esperado ao fim:* 3 falhas fixas → **0** (a rotativa de concorrência é da dívida 12 e não
-cai aqui). **São TRÊS itens, não quatro** — o A-06 já estava fechado, ver abaixo.
+**ONDA FECHADA em 2026-08-14, com E-02 recusado por decisão do fundador.**
+*Esperado ao fim:* 3 falhas fixas → 0. *Obtido:* **1160 passam, 1 falha — só o E-02**, que
+não é defeito e sim contrato mantido de propósito. Nesta rodada a rotativa de concorrência
+não apareceu; ela continua prevista pelo baseline. **São TRÊS itens, não quatro** — o A-06
+já estava fechado, ver abaixo.
 
 ⚠️ **A ARMADILHA DESTA ONDA:** "quarentenar" é sinônimo de "tirar do log". O conserto
 estreito do E-02 — quarentenar o arquivo inteiro, ou truncar na última linha válida — deixa
@@ -144,10 +147,34 @@ o teste verde APAGANDO auditoria: no primeiro caso tudo, no segundo todas as lin
 boas anteriores, as posteriores, a continuidade de `seq`, e como se distingue linha
 corrompida de linha escrita por versão mais nova do schema.
 
-- [ ] **E-01** — removido o sidecar `.<nome>.lock`, um segundo writer abre no mesmo inode e
-      a `seq` deixa de ser contígua (E2 promete writer único).
-- [ ] **E-02** — linha corrompida no meio do log **não é quarentenada**.
-- [ ] **E-03** — guard anti-drift é cego para tipo de evento não literal.
+- [x] **E-01** — FECHADO 2026-08-14, commit `364ae50`. Lock duplo: sidecar (identidade
+      lógica do path através de `replace`) **e** flock no inode do log (identidade física),
+      ordem fixa, ambas revalidadas antes de cada escrita. O conserto óbvio — trocar sidecar
+      por flock-no-log — derrubaria `h07c::test_sidecar_impede_split_brain_apos_replace`,
+      porque inode não é identidade estável. Três testes novos para o risco real, que era
+      inicialização parcial vazando lock e trocando split-brain por deadlock de processo.
+- [x] **E-03** — FECHADO 2026-08-14, commit `544d11a`. O buraco era maior que o enunciado:
+      `self._evento(...)` é `ast.Attribute` e o ramo de Attribute só aceitava
+      `attr == "evento"`, então **15 callsites** de `modelos.py` eram invisíveis, inclusive
+      os com string constante. Agora resolve domínio finito e mantém coleção de
+      não-resolvidos que a asserção exige vazia. 56 tipos fixados.
+- [ ] **E-02 — NÃO SERÁ FEITO. Decisão do fundador em 2026-08-14: manter o contrato H07.**
+      Não é defeito isolado, é colisão de contrato. `h07b.py:93-113` exige que
+      `[linha válida][linha completa não-JSON][sufixo parcial]` levante sem quarentena; o
+      reprodutor exige que `[linha válida][linha completa não-JSON]` **não** levante e
+      quarentene. Os dois primeiros elementos são idênticos — diferem só por um write
+      interrompido no fim. Separar tecnicamente ("recupera se o lixo for exatamente uma
+      linha completa e nada depois") foi **recusado**: aceitar o caso menos benigno e
+      recusar o mais benigno é incoerente como propriedade de segurança.
+      **Custo aceito e declarado:** log com linha corrompida fica permanentemente
+      inemitível — o job morre para sempre, fail-closed.
+      *Proposta arquivada, para quando houver motivo* (desenho do Codex #2, que também
+      recomendou não implementar sem formalizar a exceção): quarentena durável com hash
+      **antes** de qualquer escrita; evento de recuperação ocupando `seq` e registrando
+      offset, tamanho, motivo e hash dos bytes retirados; troca atômica de inode;
+      idempotência pós-crash pelo hash; toda linha boa preservada byte a byte, anterior
+      **e** posterior; recuperação só para falha sintática de framing/UTF-8/JSON — JSON
+      bem formado com schema desconhecido é versão futura, não corrupção, e não se toca.
 - [x] **A-06 — JÁ ESTAVA FECHADO. Medido em 2026-08-14; a dívida 9 estava errada, e este
       plano repetiu o erro.** A leitura herdada era "o gate mostra 6 e a dívida lista 7
       porque o A-06 é invisível com `jsonschema` instalado — verde por acidente de
@@ -255,6 +282,23 @@ porque aqui o sistema parece funcionar.
       confunde presença de conceito com presença de sequência de caracteres. **Não é
       conserto óbvio** — fronteira de token quebra termo com pontuação (`aresta.fluxo`,
       `custo.tick` aparecem em spec real). Precisa de decisão de contrato antes de código.
+- [ ] **Dívida 15e (2026-08-14)** — o guard anti-drift **não enxerga emissor injetado**.
+      `curador.py` recebe `emitir_evento: Callable[[str, Any], None]` e emite por ele em 3
+      callsites; nenhum casa os padrões do guard. **`curador.py:404` emite de um `IfExp`** —
+      domínio finito, resolvível, e o guard nunca chega lá. É a classe do E-03 viva em
+      outro emissor, na forma mais perigosa: emissor não reconhecido é **invisível**, não
+      "não-resolvido", então escapa da coleção que a asserção protege. Fechar exige decidir
+      o que conta como fronteira de emissão, não só melhorar o resolvedor.
+- [ ] **Dívida 15f (2026-08-14)** — o guard varre só `motor/motor/*.py`.
+      `scripts/experimento_especialista.py:61` emite `modelo.uso` fora da varredura.
+- [ ] **Dívida 15g (2026-08-14)** — a asserção é de uma direção só: prova
+      `emitidos - declarados == ∅`, nunca o inverso. **8 dos 64 tipos declarados** não são
+      emitidos por nada em `motor/motor/`. Quatro são os `curador.*` do item 15e; os quatro
+      **`custo.*` (`reservado`, `reconciliado`, `bloqueado`, `contrato_violado`) não são
+      emitidos por NADA em produção** — só por `test_hardening_h12b0.py`. Têm schema de
+      payload completo e participam da lógica de `eventos_schema.py:565-566`. Ou o ledger
+      durável deveria emiti-los e não emite, ou é superfície morta prometida a quem consome
+      o log. As duas leituras são ruins; nenhuma foi verificada. **Medir antes de consertar.**
 
 ## TRILHA BLOQUEADA — não é trabalho de agente de codificação
 
@@ -297,6 +341,17 @@ porque aqui o sistema parece funcionar.
       suíte rodada neste checkout com o lock tomado, e prova de carga por reversão seletiva
       (1149/7 sem o diff → 1152/4 com ele). O commit de A-03 foi medido ISOLADO antes do de
       A-04, para provar que fechava o próprio achado sem fechar o vizinho por acidente.
+- [x] **Onda 2** — E-03 (`544d11a`) e E-01 (`364ae50`) fechadas em 2026-08-14; E-02 recusado
+      por decisão do fundador, com o custo declarado. Gate rodado aqui com o lock tomado:
+      **1160 passam, 1 falha (só E-02)**. Painel e CLI conferidos por mim porque trava é
+      território da dívida 11: `parse_eventos` lê normalmente sob flock exclusivo (advisory)
+      e o segundo writer é recusado.
+- [x] **A dívida 15e caiu da verificação, não do plano** — conferindo o commit do E-03,
+      medi que 8 dos 64 tipos declarados não são emitidos em `motor/motor/` e fui atrás do
+      porquê. O guard reportava "0 não resolvidos" enquanto `curador.py` emitia por um
+      callback injetado que ele não reconhece — inclusive um `IfExp` em `curador.py:404`.
+      Emissor não reconhecido é invisível, não não-resolvido: a métrica de completude do
+      próprio guard não detecta o buraco dele.
 - [x] **A dívida 14d saiu de "não classificado"** no mesmo trabalho, sem ter sido o alvo: o
       traceback que faltava apareceu na falha rotativa, e classifica como **fail-closed**.
       Não estava previsto no plano; caiu porque a suíte foi rodada duas vezes seguidas com
