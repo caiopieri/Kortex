@@ -134,16 +134,35 @@ família de concorrência**. Uma 5ª falha, ou uma 4ª fora dessa família, é q
 
 Mais arriscada que a Onda 1: mexe no caminho append-only que sustenta E2, o invariante do
 qual toda auditoria depende. Onda separada de propósito.
-*Esperado ao fim:* 3 falhas → **0**.
+*Esperado ao fim:* 3 falhas fixas → **0** (a rotativa de concorrência é da dívida 12 e não
+cai aqui). **São TRÊS itens, não quatro** — o A-06 já estava fechado, ver abaixo.
+
+⚠️ **A ARMADILHA DESTA ONDA:** "quarentenar" é sinônimo de "tirar do log". O conserto
+estreito do E-02 — quarentenar o arquivo inteiro, ou truncar na última linha válida — deixa
+o teste verde APAGANDO auditoria: no primeiro caso tudo, no segundo todas as linhas boas
+*depois* da corrompida. Qualquer proposta aqui tem que dizer o que acontece com as linhas
+boas anteriores, as posteriores, a continuidade de `seq`, e como se distingue linha
+corrompida de linha escrita por versão mais nova do schema.
 
 - [ ] **E-01** — removido o sidecar `.<nome>.lock`, um segundo writer abre no mesmo inode e
       a `seq` deixa de ser contígua (E2 promete writer único).
 - [ ] **E-02** — linha corrompida no meio do log **não é quarentenada**.
 - [ ] **E-03** — guard anti-drift é cego para tipo de evento não literal.
-- [ ] **A-06** — sem `jsonschema` instalado, o mesmo payload é aprovado: o portão depende de
-      **dependência não declarada**. ⚠️ Este NÃO aparece no gate desta máquina porque
-      `jsonschema` está instalado (4.23.0) — o gate está verde numa propriedade que vale por
-      acidente de ambiente. Verificar com a dependência ausente, não só rodando a suíte.
+- [x] **A-06 — JÁ ESTAVA FECHADO. Medido em 2026-08-14; a dívida 9 estava errada, e este
+      plano repetiu o erro.** A leitura herdada era "o gate mostra 6 e a dívida lista 7
+      porque o A-06 é invisível com `jsonschema` instalado — verde por acidente de
+      ambiente". **Falso nos dois lados.** (i) O fallback fraco não existe mais:
+      `grafo.py:492-499` reprova fechado com motivo próprio (`"schema_json indisponivel:
+      jsonschema ausente no ambiente"`), e o comentário no lugar registra o raciocínio —
+      portão que não consegue checar reprova, não aprova com menos rigor. (ii) A dependência
+      **está declarada**, em `pyproject.toml:19`, com comentário citando o A-06 como motivo.
+      *Como foi medido, já que "rodar a suíte" não responde:* plugin de `sys.meta_path` fora
+      do repo bloqueando o import (mesmo princípio do plugin de relógio da dívida 7 — o
+      motor não pode ganhar uma chave para fingir o próprio ambiente). Com o bloqueio ativo,
+      6/6 passam e `grafo.JsonSchemaValidationError is None`, ou seja o motor estava
+      genuinamente em modo fallback. **O instrumento foi conferido antes da leitura**: sem
+      essa checagem, um plugin que não bloqueia nada produz exatamente o mesmo "6 passed".
+      *Lição:* o gate mostrava 6 porque são 6. O número certo nunca precisou de explicação.
 
 ## ONDA 3 — Fase 1: moeda de contenção para rota grátis
 
