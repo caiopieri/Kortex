@@ -122,7 +122,7 @@ def test_config_constroi_somente_adapter_orcado_com_pricing_selado(tmp_path, mon
         f"{PRICING_VERSION}@{PRICING_CAPTURADO_EM}+fx:ptax-2026-07-14"
     )
     assert cotacao.maximo > Decimal("0")
-    assert deps.teto_bootstrap == Decimal("25.00")
+    assert deps.orcamentos["BRL"].teto_bootstrap == Decimal("25.00")
 
 
 def test_snapshot_envelhece_por_tentativa_e_bloqueia_sem_rede(tmp_path, monkeypatch):
@@ -147,9 +147,9 @@ def test_teto_bootstrap_dois_reais_bloqueia_antes_da_rede(tmp_path, monkeypatch)
         transporte=lambda *_: posts.append(True),
     )
     adaptador = deps.fabrica("planner", "p", 1, RequisitosTentativaCusteada())[0].adaptador
-    sessao = deps.repositorio.sessao("run", "thread", Decimal("2"))
+    sessao = deps.orcamentos["BRL"].repositorio.sessao("run", "thread", Decimal("2"))
     resultado = executar_tentativa_custeada(
-        deps.repositorio, sessao,
+        deps.orcamentos["BRL"].repositorio, sessao,
         IdentidadeTentativaCusteada("reserva", "call", "openai", 1), adaptador,
     )
 
@@ -251,8 +251,8 @@ def test_cli_redelivera_outbox_apos_lease_sem_ack(tmp_path):
 
     log = LogEventos(tmp_path / "eventos.jsonl")
     try:
-        assert not _drenar_orcamento_cli(repo, "run", log, agora=14)
-        assert _drenar_orcamento_cli(repo, "run", log, agora=15)
+        assert not _drenar_orcamento_cli({"BRL": repo}, "run", log, agora=14)
+        assert _drenar_orcamento_cli({"BRL": repo}, "run", log, agora=15)
     finally:
         log.fechar()
     assert repo.listar_pendentes("run") == []

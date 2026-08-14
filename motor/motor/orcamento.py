@@ -7,6 +7,7 @@ import os
 import re
 import sqlite3
 import stat
+from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import dataclass
 from decimal import Decimal, localcontext
@@ -27,6 +28,9 @@ _ARQUIVO_POR_MOEDA: dict[Moeda, str] = {
     "BRL": "orcamento.sqlite3",
     "TOKEN": "cota.sqlite3",
 }
+# BRL primeiro preserva a ordem observável do relay legado; TOKEN vem depois,
+# independentemente da ordem de inserção do mapa de dependências.
+ORDEM_DRENO_MOEDAS: tuple[Moeda, ...] = ("BRL", "TOKEN")
 
 
 class ErroOrcamento(ValueError):
@@ -759,6 +763,37 @@ def publicar_um_pendente(
     publicador(evento.event_id, evento.tipo, deepcopy(evento.payload))
     repositorio.confirmar_pendente(run_id, evento.event_id, owner)
     return True
+
+
+def publicar_pendentes_por_moeda(
+    repositorios: Mapping[Moeda, RepositorioOrcamento],
+    run_id: str,
+    owner: str,
+    agora: int,
+    lease_s: int,
+    publicador: PublicadorEventoOrcamento,
+) -> bool:
+    """Drena todos os ledgers existentes em ordem fixa, sem criar os ausentes."""
+    if set(repositorios) - set(ORDEM_DRENO_MOEDAS):
+        raise ErroOrcamento("mapa de moedas invalido")
+    sem_pendencias = True
+    for moeda in ORDEM_DRENO_MOEDAS:
+        repositorio = repositorios.get(moeda)
+        if repositorio is None:
+            continue
+        if (
+            not isinstance(repositorio, RepositorioOrcamento)
+            or repositorio.moeda != moeda
+        ):
+            raise ErroOrcamento("repositorio de moeda divergente")
+        if not repositorio.possui_ledger(run_id):
+            continue
+        while publicar_um_pendente(
+            repositorio, run_id, owner, agora, lease_s, publicador,
+        ):
+            pass
+        sem_pendencias = not repositorio.listar_pendentes(run_id) and sem_pendencias
+    return sem_pendencias
 
 
 def _resultado_tentativa_valido(valor: object) -> bool:

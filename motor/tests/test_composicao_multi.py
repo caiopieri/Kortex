@@ -212,7 +212,7 @@ def test_fx_stale_derruba_a_tentativa(credenciais, tmp_path) -> None:
 
 
 def test_teto_bootstrap_chega_intacto(credenciais, tmp_path) -> None:
-    assert _deps(tmp_path).teto_bootstrap == Decimal("2.0")
+    assert _deps(tmp_path).orcamentos["BRL"].teto_bootstrap == Decimal("2.0")
 
 
 def test_cliente_do_arranjo_recusa_chamada_direta(credenciais, tmp_path) -> None:

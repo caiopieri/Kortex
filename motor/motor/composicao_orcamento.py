@@ -25,6 +25,7 @@ from .openai_orcado import (
 )
 from .orcamento import (
     ErroOrcamento,
+    Moeda,
     RequisitosTentativaCusteada,
     RepositorioOrcamento,
     RotaTentativaCusteada,
@@ -74,14 +75,19 @@ class RotaOrcadaCertificada:
 
 
 @dataclass(frozen=True)
+class OrcamentoMoeda:
+    repositorio: RepositorioOrcamento
+    teto_bootstrap: Decimal
+
+
+@dataclass(frozen=True)
 class DependenciasOrcamento:
     cliente: ClienteSomenteOrcado
-    repositorio: RepositorioOrcamento
+    orcamentos: dict[Moeda, OrcamentoMoeda]
     fabrica: Callable[
         [str, str, int, RequisitosTentativaCusteada], list[RotaTentativaCusteada]
     ]
     rotas_certificadas: tuple[RotaOrcadaCertificada, ...]
-    teto_bootstrap: Decimal
 
 
 def validar_independencia_orcada(
@@ -209,11 +215,14 @@ def compor_orcamento_openai(
         return [RotaTentativaCusteada("openai:gpt-5", "openai", adaptador)]
 
     return DependenciasOrcamento(
-        ClienteSomenteOrcado(), RepositorioOrcamento(Path(workspace) / "orcamento"), fabricar,
-        (RotaOrcadaCertificada(
+        cliente=ClienteSomenteOrcado(),
+        orcamentos={"BRL": OrcamentoMoeda(
+            RepositorioOrcamento(Path(workspace) / "orcamento"), teto_bootstrap,
+        )},
+        fabrica=fabricar,
+        rotas_certificadas=(RotaOrcadaCertificada(
             "openai:gpt-5", "openai", frozenset({"executor", "verifier"}),
         ),),
-        teto_bootstrap,
     )
 
 
@@ -355,10 +364,12 @@ def compor_orcamento_multi(
         return []
 
     return DependenciasOrcamento(
-        _ClienteMultiSomenteOrcado(),
-        RepositorioOrcamento(Path(workspace) / "orcamento"),
-        fabricar,
-        (
+        cliente=_ClienteMultiSomenteOrcado(),
+        orcamentos={"BRL": OrcamentoMoeda(
+            RepositorioOrcamento(Path(workspace) / "orcamento"), teto_bootstrap,
+        )},
+        fabrica=fabricar,
+        rotas_certificadas=(
             # Catalogo certificado: so os papeis que a independencia governa.
             # `openai` aparece nos dois lados de proposito -- ela executa em alta
             # complexidade e julga no caminho normal. A validacao exige que
@@ -368,7 +379,6 @@ def compor_orcamento_multi(
             RotaOrcadaCertificada("openai:gpt-5", "openai", frozenset({"executor", "verifier"})),
             RotaOrcadaCertificada("anthropic:sonnet-4-5", "anthropic", frozenset({"verifier"})),
         ),
-        teto_bootstrap,
     )
 
 
@@ -553,7 +563,10 @@ def compor_orcamento_omniroute(
         for chave, usos in vistos.items()
     )
     return DependenciasOrcamento(
-        _ClienteOmniSomenteOrcado(),
-        RepositorioOrcamento(Path(workspace) / "orcamento"),
-        fabricar, certificadas, teto_bootstrap,
+        cliente=_ClienteOmniSomenteOrcado(),
+        orcamentos={"BRL": OrcamentoMoeda(
+            RepositorioOrcamento(Path(workspace) / "orcamento"), teto_bootstrap,
+        )},
+        fabrica=fabricar,
+        rotas_certificadas=certificadas,
     )

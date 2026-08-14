@@ -5,6 +5,7 @@ import sqlite3
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from decimal import Decimal
 from operator import add
 from pathlib import Path
 from typing import Annotated, Any, cast
@@ -17,7 +18,9 @@ from langgraph.types import Command, interrupt
 from typing_extensions import TypedDict
 
 from motor.caixa import CaixaFundador, LedgerCaixa, rodar_com_caixa
+from motor.eventos import LogEventos
 from motor.modelos import ClienteStub
+from motor.orcamento import ReservaOrcamento
 from tests.audit_corpus import casos, executar_lote, materializar_corpus
 from tests.helpers_grafo import GerenciadorJobsTeste as GerenciadorJobs
 from tests.test_grafo import SPEC, faz_roteador
@@ -649,26 +652,50 @@ def test_servico_real_concorrente_persiste_decision_id_e_ack(tmp_path: Path) -> 
     jobs_b.fechar()
 
 
+def _novo_servico_leitura(db_path: Path, workspace: Path) -> GerenciadorJobs:
+    return GerenciadorJobs(
+        db_path=db_path,
+        workspace_base=workspace,
+        cliente=ClienteStub(faz_roteador()),
+        outbox_poll_s=0.01,
+        outbox_lease_s=5,
+    )
+
+
+def test_status_sem_ledger_nao_adquire_writer_exclusivo(tmp_path: Path) -> None:
+    db_path, workspace = tmp_path / "motor.sqlite", tmp_path / "runs"
+    origem = _novo_servico_leitura(db_path, workspace)
+    leitor = _novo_servico_leitura(db_path, workspace)
+    try:
+        origem.iniciar(spec=SPEC, thread_id="leitura-sem-ledger")
+        fim = time.time() + 3
+        while origem.status("leitura-sem-ledger")["estado"] == "em_execucao":
+            assert time.time() < fim
+            time.sleep(0.02)
+        repo = leitor._orcamentos["BRL"].repositorio
+        assert not repo.possui_ledger("leitura-sem-ledger")
+        writer = LogEventos(workspace / "leitura-sem-ledger" / "log.jsonl", truncar=False)
+        try:
+            assert leitor.status("leitura-sem-ledger")["estado"] == "gate_pendente"
+            assert not repo.possui_ledger("leitura-sem-ledger")
+        finally:
+            writer.fechar()
+    finally:
+        origem.fechar()
+        leitor.fechar()
+
+
 def test_servico_devolve_ocupado_em_leitura_concorrente_do_mesmo_job(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     db_path = tmp_path / "motor.sqlite"
     workspace = tmp_path / "runs"
 
-    def novo_servico() -> GerenciadorJobs:
-        return GerenciadorJobs(
-            db_path=db_path,
-            workspace_base=workspace,
-            cliente=ClienteStub(faz_roteador()),
-            outbox_poll_s=0.01,
-            outbox_lease_s=5,
-        )
-
-    origem = novo_servico()
-    leitor = novo_servico()
-    consulta = novo_servico()
-    resposta = novo_servico()
-    resumo = novo_servico()
+    origem = _novo_servico_leitura(db_path, workspace)
+    leitor = _novo_servico_leitura(db_path, workspace)
+    consulta = _novo_servico_leitura(db_path, workspace)
+    resposta = _novo_servico_leitura(db_path, workspace)
+    resumo = _novo_servico_leitura(db_path, workspace)
     entrou_no_dreno = threading.Event()
     liberar_dreno = threading.Event()
     resultado_leitura = None
@@ -680,6 +707,13 @@ def test_servico_devolve_ocupado_em_leitura_concorrente_do_mesmo_job(
             assert time.time() < fim
             time.sleep(0.02)
         assert status["estado"] == "gate_pendente"
+        repo = leitor._orcamentos["BRL"].repositorio
+        sessao = repo.sessao("leitura-concorrente", "leitura-concorrente", Decimal("10"))
+        reserva = ReservaOrcamento(
+            "reserva-relay-h11", "call-relay-h11", "rota-relay-h11", 1,
+            Decimal("1"), "pricing-h11",
+        )
+        assert repo.reservar_exclusiva(sessao, reserva).status == "NOVA"
 
         drenar_original = leitor._drenar_orcamento
 

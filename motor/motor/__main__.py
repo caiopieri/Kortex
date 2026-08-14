@@ -26,6 +26,7 @@ import sqlite3
 import subprocess
 import sys
 import time
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Protocol
 from uuid import uuid4
@@ -49,7 +50,12 @@ from .composicao_orcamento import (
 from .eventos import LogEventos
 from .grafo import construir_grafo
 from .modelos import ClienteClaudeCLI, ClienteModelo, ProvedorIndisponivel, cliente_de_config
-from .orcamento import ErroOrcamento, RepositorioOrcamento, publicar_um_pendente
+from .orcamento import (
+    ErroOrcamento,
+    Moeda,
+    RepositorioOrcamento,
+    publicar_pendentes_por_moeda,
+)
 from .runner import CommandResult, compor_sandbox
 from .spec import WorkflowSpec
 from .registro import (
@@ -114,7 +120,7 @@ def _preflight_modulos_sandbox(
 
 
 def _drenar_orcamento_cli(
-    repositorio: RepositorioOrcamento,
+    repositorios: Mapping[Moeda, RepositorioOrcamento],
     run_id: str,
     log: LogEventos,
     *,
@@ -122,11 +128,9 @@ def _drenar_orcamento_cli(
 ) -> bool:
     instante = int(time.time()) if agora is None else agora
     owner = f"cli-{uuid4().hex}"
-    while publicar_um_pendente(
-        repositorio, run_id, owner, instante, 30, log.publicar_orcamento,
-    ):
-        pass
-    return repositorio.listar_pendentes(run_id) == []
+    return publicar_pendentes_por_moeda(
+        repositorios, run_id, owner, instante, 30, log.publicar_orcamento,
+    )
 
 
 def construir_cliente(cfg_modelos: dict | None, dir_registro: str | None,
@@ -359,7 +363,12 @@ def main() -> int:
             deps_orcamento = compor(cfg_orcada, workspace_base)
             validar_independencia_orcada(deps_orcamento.rotas_certificadas)
             cliente = deps_orcamento.cliente
-            if not _drenar_orcamento_cli(deps_orcamento.repositorio, run_id, log):
+            orcamento_brl = deps_orcamento.orcamentos["BRL"]
+            repositorios_orcamento = {
+                moeda: orcamento.repositorio
+                for moeda, orcamento in deps_orcamento.orcamentos.items()
+            }
+            if not _drenar_orcamento_cli(repositorios_orcamento, run_id, log):
                 raise ErroOrcamento("relay monetario pendente")
         except ErroOrcamento as ex:
             print(f"erro: orçamento indisponível: {ex}")
@@ -386,9 +395,9 @@ def main() -> int:
                                         max_rodadas_reconciliacao=max_rodadas_reconciliacao,
                                         perfil_execucao=perfil_execucao,
                                         ferramentas_permitidas=ferramentas_permitidas,
-                                        repositorio_orcamento=deps_orcamento.repositorio,
+                                        repositorio_orcamento=orcamento_brl.repositorio,
                                         fabrica_tentativas_orcadas=deps_orcamento.fabrica,
-                                        teto_bootstrap=deps_orcamento.teto_bootstrap,
+                                        teto_bootstrap=orcamento_brl.teto_bootstrap,
                                         command_runner=command_runner)
                 caixa = CaixaFundador(dir_caixa, log)
                 resultado = rodar_com_caixa(grafo, entrada, config, caixa, log)
@@ -403,9 +412,9 @@ def main() -> int:
                                     max_rodadas_reconciliacao=max_rodadas_reconciliacao,
                                     perfil_execucao=perfil_execucao,
                                     ferramentas_permitidas=ferramentas_permitidas,
-                                    repositorio_orcamento=deps_orcamento.repositorio,
+                                    repositorio_orcamento=orcamento_brl.repositorio,
                                     fabrica_tentativas_orcadas=deps_orcamento.fabrica,
-                                    teto_bootstrap=deps_orcamento.teto_bootstrap,
+                                    teto_bootstrap=orcamento_brl.teto_bootstrap,
                                     command_runner=command_runner)
             resultado = grafo.invoke(entrada, config)
             while "__interrupt__" in resultado:  # gate do fundador
@@ -416,7 +425,7 @@ def main() -> int:
                 resultado = grafo.invoke(Command(resume=decisao), config)
 
         try:
-            if not _drenar_orcamento_cli(deps_orcamento.repositorio, run_id, log):
+            if not _drenar_orcamento_cli(repositorios_orcamento, run_id, log):
                 raise ErroOrcamento("relay monetario pendente")
         except Exception as ex:
             print(f"erro: relay monetário indisponível: {ex}")

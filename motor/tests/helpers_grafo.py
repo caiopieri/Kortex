@@ -6,7 +6,11 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from motor.composicao_orcamento import DependenciasOrcamento, RotaOrcadaCertificada
+from motor.composicao_orcamento import (
+    DependenciasOrcamento,
+    OrcamentoMoeda,
+    RotaOrcadaCertificada,
+)
 from motor.grafo import construir_grafo
 from motor.modelos import ClienteStub
 from motor.orcamento import (
@@ -64,8 +68,12 @@ def dependencias_stub(cliente: ClienteStub, raiz: Path | None = None) -> dict[st
 def composicao_stub(cliente: ClienteStub, raiz: Path | None = None) -> DependenciasOrcamento:
     deps = dependencias_stub(cliente, raiz)
     return DependenciasOrcamento(
-        cliente, deps["repositorio_orcamento"],
-        deps["fabrica_tentativas_orcadas"], topologia_stub(), Decimal("2"),
+        cliente=cliente,
+        orcamentos={"BRL": OrcamentoMoeda(
+            deps["repositorio_orcamento"], Decimal("2"),
+        )},
+        fabrica=deps["fabrica_tentativas_orcadas"],
+        rotas_certificadas=topologia_stub(),
     )
 
 
