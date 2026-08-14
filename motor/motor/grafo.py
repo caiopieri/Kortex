@@ -47,7 +47,7 @@ from .runner import (
     CommandRunner,
     DenyCommandRunner,
 )
-from .spec import WorkflowSpec
+from .spec import ConfigContem, WorkflowSpec
 
 try:
     from jsonschema import ValidationError as JsonSchemaValidationError  # type: ignore[import-untyped]
@@ -509,15 +509,12 @@ def _validar_schema_json(saida: str, config: dict[str, Any]) -> tuple[bool, str,
 
 
 def _validar_contem(saida: str, config: dict[str, Any]) -> tuple[bool, str, dict[str, Any]]:
-    requer = config.get("requer")
-    if not isinstance(requer, list) or not all(isinstance(item, str) for item in requer):
-        return False, "config.requer ausente ou inválido", {"faltantes": []}
-    minimo_bruto = config.get("min", len(requer))
     try:
-        minimo = int(minimo_bruto)
-    except (TypeError, ValueError):
-        return False, "config.min inválido", {"faltantes": requer}
-    minimo = max(0, min(minimo, len(requer)))
+        config_validada = ConfigContem.model_validate(config)
+    except ValidationError as ex:
+        return False, "config contem inválida", {"erro": str(ex)}
+    requer = config_validada.requer
+    minimo = config_validada.minimo
     texto = saida.casefold()
     presentes = [item for item in requer if item.casefold() in texto]
     faltantes = [item for item in requer if item not in presentes]
