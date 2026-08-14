@@ -285,11 +285,40 @@ Desenho fechado (ver `kortex-fase1-moeda-de-contencao` na memória):
       espelho: mista + catálogo grátis vencido reprova pelo catálogo). O código já exige, e
       eu provei por sonda, mas sonda não é teste de regressão. Lacuna levantada pelo próprio
       Codex em vez de deixada passar. *Despachado.*
-- [ ] **1c** — `chamar_orcado` resolvendo sessão **por moeda** ao longo da cadeia de
-      failover. É o nó real: hoje ele chama `sessao(...)` uma vez, antes da cadeia, com um
-      teto só — e executor grátis com verifier pago é o caso NORMAL, não a borda.
-      *Refutação a vigiar:* se aparecer código que assume "uma sessão por run" de um jeito
-      que dois arquivos quebrem, o desenho muda para migração paramétrica.
+- [x] **1b-bis — FECHADA** 2026-08-14, commit `d5e4595`. Teste causal de config mista + FX
+      vencido, isolando a causa. Provado por mutação (neutralizar a condição BRL derruba o
+      teste), refeita à mão antes de commitar.
+- [ ] **1c — o desenho NÃO foi refutado, mas o conserto estreito seria FAIL-OPEN.** Medido
+      em 2026-08-14, e é o achado mais importante da Onda 3.
+      **Por que trocar repo/sessão dentro do laço e continuar quando o retorno é `None` está
+      errado:** `executar_tentativa_custeada` devolve `None` em OITO pontos que não são a
+      mesma coisa — falta de adapter/cotação é pré-efeito segura, mas `reconciliar(None)`
+      depois de reservar é AMBÍGUA e status ≠ RECONCILED é terminal. Hoje a cadeia para
+      depois de falha ambígua **porque a sessão é compartilhada**: `reconciliar` grava
+      `INVALIDATED` (`orcamento.py:591`) e `reservar_exclusiva` recusa sessão que não esteja
+      `ACTIVE`. Essa segurança é por sessão, e **sessão é por moeda** — dois ledgers a
+      quebram por construção: invalidar A deixa B `ACTIVE`, e a cadeia seguiria para outra
+      moeda depois de um efeito externo que pode ter acontecido.
+      **Critério de pronto, portanto, não é "TOKEN chegou na rede":** é *nenhuma falha
+      ambígua em qualquer moeda permite efeito em outra, e nenhum outbox ou reserva fica
+      invisível para conclusão e recovery*.
+      **Fatiada em três, cada uma funcional:**
+      - [ ] **1c-i** — `DependenciasOrcamento` por moeda (sem alias `repositorio`, que
+            deixaria CLI/serviço drenando só BRL em silêncio) + relay/status/conclusão
+            varrendo todos os ledgers, consultando `possui_ledger` antes de drenar para
+            preservar criação lazy. Só BRL configurado ⇒ comportamento idêntico. *Em voo.*
+      - [ ] **1c-ii** — moeda explícita na rota + `teto_bootstrap_token` operator-owned, ao
+            lado de `teto_bootstrap_brl`. `restricoes.teto_custo` continua significando BRL
+            e **jamais** governa TOKEN (contrato S7).
+      - [ ] **1c-iii** — resolução lazy no laço + **resultado tipado** (sucesso / falha
+            pré-efeito segura / ambígua-terminal) + **taint de run** + testes de failover
+            atravessando moeda.
+      *Riscos já levantados e não resolvidos:* reserva órfã se o mesmo modelo migrar entre
+      `PRECOS` e `ROTAS_GRATIS` entre retomadas (não há transação atômica entre os dois
+      SQLite, e pôr moeda no `reservation_id` **não** resolve — só torna a duplicação mais
+      fácil de aceitar); e nenhum sweep final liberando reservas, porque para
+      `UNKNOWN_COST`/`RESERVED` isso destruiria a evidência de um efeito possivelmente
+      realizado — o encerramento deve marcar a run pendente, não fabricar certeza.
 
 ## ONDA 4 — evidência que não se mantém
 
