@@ -49,10 +49,22 @@ python3 -m bandit -r motor -q --severity-level high --confidence-level high
 python3 -m compileall -q motor tests
 ```
 
-**Baseline em 2026-08-13 (commit `81831fc`):** 1150 passam, **6 falham**, 35 pulados.
-As 6 são os achados abertos da auditoria — elas CAEM conforme esta campanha avança, e cada
-onda declara o número novo esperado. Qualquer falha fora dessa lista é regressão ou
-contaminação de medição.
+**Baseline em 2026-08-14 (commit `4883203`, Onda 1 fechada):** 1152–1153 passam, **3 falham
+fixas** (E-01/E-02/E-03), 35 pulados, **mais até UMA falha rotativa da família de
+concorrência**. As 3 fixas caem conforme a campanha avança, e cada onda declara o número
+novo esperado.
+
+**O baseline não é um número exato, e isso é medido, não desculpa.** Duas suítes completas
+consecutivas no mesmo checkout deram uma falha de concorrência cada, em teste DIFERENTE, as
+duas verdes isoladas — `test_hardening_h11::...persiste_decision_id_e_ack` e
+`test_servico::...renova_claim_sem_segundo_writer`. Causa raiz é a dívida 12 (o caminho de
+resposta escreve, então corrida legítima devolve `ServicoOcupado`/`transitorio`), e os
+testes aceitam menos desfechos do que a corrida produz. **Regressão é:** uma 4ª falha fora
+dessa família, uma 5ª qualquer, ou qualquer falha determinística (que reprova isolada).
+Antes de chamar de regressão, RODE O TESTE ISOLADO — se passar sozinho e for de
+`servico`/`hardening_h11`, é a família, não o seu diff.
+
+*Baseline anterior, para histórico:* 1150/6 em 2026-08-13 (`81831fc`).
 
 ---
 
@@ -88,23 +100,35 @@ contaminação de medição.
 
 ## ONDA 1 — portões que não porteiam (spec/kernel)
 
-Melhor retorno por linha do repositório: cada um deixa passar coisa que o contrato diz que
-não passa. Reprodutores já existem e reprovam hoje.
-*Esperado ao fim:* 6 falhas → **3**.
+**ONDA FECHADA em 2026-08-14.** Melhor retorno por linha do repositório: cada um deixava
+passar coisa que o contrato diz que não passa.
+*Esperado ao fim:* 6 falhas → 3. *Obtido:* 3 fixas + até 1 rotativa de concorrência — ver
+a nota de baseline abaixo, que é o resultado mais importante desta onda depois dos três
+consertos.
 
-- [ ] **A-03** — `spec.py` usa `list[str]` e não `list[NonBlank]`: rubrica `["   "]` valida
-      e o verifier julga contra critério vazio. *Reprodutor:*
-      `test_auditoria_anthropic_kernel_spec.py::test_A3_rubrica_e_criterios_em_branco_passam_na_validacao`
-- [ ] **A-04** — validador declarado em nó de modelo é **silenciosamente ignorado**.
-      *Reprodutor:* `...::test_A4_validador_declarado_em_no_modelo_e_silenciosamente_ignorado`
-- [ ] **A-05** — `grafo.py::_validar_contem` faz `max(0, min(minimo, len(requer)))`, e
-      `min: 0` — proibido por `ConfigContem` — vira **aprovação incondicional em runtime**.
-      O validador determinístico não reexecuta o contrato da spec.
-      *Reprodutor:* `...::test_A5_runtime_do_contem_aceita_min_zero_que_a_spec_proibe`
+- [x] **A-03** — FECHADO 2026-08-14, commit `102f95c`. `NonBlank` em `rubrica` e
+      `criterios_cobertura`, escopo estreito de propósito.
+- [x] **A-04** — FECHADO 2026-08-14, commit `5ee8c76`. A leitura estreita (exigir que
+      `valida` aponte para id existente) **já estava no código** desde sempre em
+      `spec.py:177` — só não rodava fora do `tipo: validador`. O que faltava era recusar
+      `valida`/`validador` em nó que não é validador.
+- [x] **A-05** — FECHADO 2026-08-14, commit `4883203`. Runtime reexecuta `ConfigContem`
+      em vez de fazer clamp. Fechou três buracos, não um: `min: 0`, `min > len(requer)`
+      (o clamp por cima) e `requer: []`, que também era aprovação incondicional.
 
-*Julgamento a pedir ANTES do código:* os três têm mais de uma leitura (rejeitar na
-validação da spec vs. tratar em runtime; que campos exatamente exigem não-branco; se
-rejeitar quebra spec existente em `exemplos/`).
+*Onda 1 fechada.* Medição que a fechou: com o diff **1152 passam / 4 falham**; revertendo
+SÓ `spec.py` e `grafo.py` com `git stash push` seletivo e mantendo os reprodutores,
+**1149 / 7** — os três voltam a reprovar, então o diff é o que os segura.
+
+**A quarta falha não é regressão, e virou achado próprio.** Uma falha de concorrência por
+rodada, em teste DIFERENTE a cada rodada (`test_hardening_h11::...decision_id_e_ack` com o
+diff, `test_servico::...sem_segundo_writer` sem ele), sempre verde isolado. O traceback que
+faltava para a dívida 14d foi capturado: `ServicoOcupado` / `transitorio: True` onde o teste
+só aceita `EstadoInvalido` — **fail-closed**, motor certo, teste enumerando menos desfechos
+do que a corrida produz. Ver dívida 14d reclassificada e dívida 12 (causa raiz).
+**Consequência para o baseline:** "1150/6" nunca mais é número exato. O baseline é
+1152–1153 passando com 3 falhas fixas (E-01/E-02/E-03) **mais até uma falha rotativa da
+família de concorrência**. Uma 5ª falha, ou uma 4ª fora dessa família, é que é regressão.
 
 ## ONDA 2 — ledger e eventos
 
@@ -194,6 +218,24 @@ porque aqui o sistema parece funcionar.
       fallback de `status()`, e ela abre o log do job: log genuinamente corrompido levanta
       `ValueError` cru para o chamador, exceção nua na mesma API que o F4 garantiu devolver
       erro estruturado. Mesma família do F4, um degrau acima.
+- [ ] **Dívida 15a (2026-08-14)** — `GateFundador` declarado e nunca executado. `spec.py:153`
+      tem `gates: list[GateFundador]` e nenhum ponto de `motor/*.py` lê `spec.gates`. Uma
+      spec pode declarar portão humano que o motor jamais abre, e validar. Mesma classe do
+      A-04, um nível acima: lá o campo era do subagente, aqui é do workflow. **Decidir
+      primeiro se o campo deve executar ou deve sumir** — não sair implementando.
+- [ ] **Dívida 15b (2026-08-14)** — `Subagente` sem `model_config`, herdando `extra="ignore"`
+      do pydantic, enquanto `ConfigContem`/`ConfigComando`/`Validador*` todos usam
+      `extra="forbid"`. Campo digitado errado é descartado em silêncio. Raio de explosão real:
+      pode reprovar spec que hoje passa, então **medir contra `exemplos/*.json` antes**.
+- [ ] **Dívida 15c (2026-08-14)** — `ConfigContem` aceita `requer` com termos repetidos.
+      Medido: `_validar_contem('so um X aqui', {'requer':['X','X'],'min':2})` → `True`.
+      Sobrevive ao A-05, porque `len(requer)` não deduplica. Fecha igual
+      `ConfigComando._modulos_sem_duplicatas`.
+- [ ] **Dívida 15d (2026-08-14)** — `contem` é substring casefold sem fronteira de token:
+      `'auth' in 'unauthorized'` aprova. O validador determinístico mais usado do motor
+      confunde presença de conceito com presença de sequência de caracteres. **Não é
+      conserto óbvio** — fronteira de token quebra termo com pontuação (`aresta.fluxo`,
+      `custo.tick` aparecem em spec real). Precisa de decisão de contrato antes de código.
 
 ## TRILHA BLOQUEADA — não é trabalho de agente de codificação
 
@@ -231,3 +273,12 @@ porque aqui o sistema parece funcionar.
       `test_responder_gate_preserva_erro_terminal_em_vez_de_estado_invalido`. Removida a
       preservação, o motor devolve `EstadoInvalido`/"job não está em gate_pendente" para um
       job que morreu com `ValueError` — afirmação falsa sobre o estado.
+- [x] **Onda 1 inteira** — A-03 (`102f95c`), A-04 (`5ee8c76`), A-05 (`4883203`), fechadas em
+      2026-08-14. Codex #2 escreveu, verificação independente aqui: diff lido linha a linha,
+      suíte rodada neste checkout com o lock tomado, e prova de carga por reversão seletiva
+      (1149/7 sem o diff → 1152/4 com ele). O commit de A-03 foi medido ISOLADO antes do de
+      A-04, para provar que fechava o próprio achado sem fechar o vizinho por acidente.
+- [x] **A dívida 14d saiu de "não classificado"** no mesmo trabalho, sem ter sido o alvo: o
+      traceback que faltava apareceu na falha rotativa, e classifica como **fail-closed**.
+      Não estava previsto no plano; caiu porque a suíte foi rodada duas vezes seguidas com
+      e sem o diff, e a comparação mostrou o teste mudando de nome entre as rodadas.
