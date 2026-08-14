@@ -182,6 +182,10 @@ class WorkflowSpec(BaseModel):
                     raise ValueError(f"subagente '{s.id}' do tipo validador exige valida em depende_de")
                 if s.validador is None:
                     raise ValueError(f"subagente '{s.id}' do tipo validador exige validador")
+            elif s.valida is not None or s.validador is not None:
+                raise ValueError(
+                    f"subagente '{s.id}' do tipo {s.tipo} não pode declarar valida ou validador"
+                )
             if len(s.produz_artefatos) > 1:
                 raise ValueError(f"subagente '{s.id}' declara mais de um artefato")
             for artefato in [*s.produz_artefatos, *s.produz]:
