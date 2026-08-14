@@ -34,6 +34,19 @@ def test_sidecar_impede_split_brain_apos_replace_do_log(tmp_path: Path) -> None:
     segundo.fechar()
 
 
+def test_conflito_no_lock_do_log_libera_sidecar_novo(tmp_path: Path) -> None:
+    path = tmp_path / "eventos.jsonl"
+    primeiro = LogEventos(path)
+    primeiro._lock_path.unlink()
+
+    with pytest.raises(RuntimeError, match="writer ativo"):
+        LogEventos(path)
+
+    primeiro.fechar()
+    terceiro = LogEventos(path)
+    terceiro.fechar()
+
+
 @pytest.mark.parametrize("tipo_link", ["symlink", "hardlink"])
 def test_log_recusa_links_sem_modificar_alvo(tmp_path: Path, tipo_link: str) -> None:
     vitima = tmp_path / "vitima.jsonl"
@@ -77,6 +90,29 @@ def test_criacao_sincroniza_entrada_no_diretorio(
 
     assert "file" in tipos
     assert "dir" in tipos
+
+
+def test_falha_ao_abrir_log_libera_lock_do_sidecar(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "eventos.jsonl"
+    abrir_real = eventos_mod._abrir_regular_sem_links
+    chamadas = 0
+
+    def falhar_segunda_abertura(path_alvo: Path, flags: int) -> tuple[int, bool]:
+        nonlocal chamadas
+        chamadas += 1
+        if chamadas == 2:
+            raise OSError("open log")
+        return abrir_real(path_alvo, flags)
+
+    monkeypatch.setattr(eventos_mod, "_abrir_regular_sem_links", falhar_segunda_abertura)
+    with pytest.raises(OSError, match="open log"):
+        LogEventos(path)
+
+    monkeypatch.setattr(eventos_mod, "_abrir_regular_sem_links", abrir_real)
+    segundo = LogEventos(path)
+    segundo.fechar()
 
 
 def test_falha_de_unlock_ainda_fecha_log_e_sidecar(

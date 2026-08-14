@@ -47,6 +47,20 @@ def test_writer_falha_se_path_desaparecer_e_libera_sidecar(tmp_path: Path) -> No
     segundo.fechar()
 
 
+def test_writer_falha_se_sidecar_desaparecer_e_libera_log(tmp_path: Path) -> None:
+    path = tmp_path / "eventos.jsonl"
+    primeiro = LogEventos(path)
+    primeiro._lock_path.unlink()
+
+    with pytest.raises(RuntimeError, match="sidecar desapareceu"):
+        primeiro.evento("tarefa.concluida", missao="recusada")
+
+    assert primeiro._f.closed
+    assert primeiro._lock_f.closed
+    segundo = LogEventos(path)
+    segundo.fechar()
+
+
 def test_writer_recusa_hardlink_criado_depois_da_abertura(tmp_path: Path) -> None:
     path = tmp_path / "eventos.jsonl"
     alias = tmp_path / "alias.jsonl"

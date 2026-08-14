@@ -89,6 +89,15 @@ def _fsync_diretorio(path: Path) -> None:
         os.close(fd)
 
 
+def _travar_writer(arquivo: BinaryIO) -> None:
+    try:
+        fcntl.flock(arquivo.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError as exc:
+        if exc.errno in (errno.EACCES, errno.EAGAIN):
+            raise WriterEventosOcupado("log de eventos ja possui writer ativo") from exc
+        raise
+
+
 class LogEventos:
     """Writer exclusivo; checks pre-write pressupõem um diretorio pai confiavel."""
 
@@ -104,11 +113,9 @@ class LogEventos:
             os.close(lock_fd)
             raise
         try:
-            fcntl.flock(self._lock_f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BaseException as exc:
+            _travar_writer(self._lock_f)
+        except BaseException:
             self._fechar_descritores()
-            if isinstance(exc, OSError) and exc.errno in (errno.EACCES, errno.EAGAIN):
-                raise WriterEventosOcupado("log de eventos ja possui writer ativo") from exc
             raise
 
         # A flag legada permanece na API, mas o writer v2 sempre abre em append.
@@ -121,6 +128,7 @@ class LogEventos:
             except BaseException:
                 os.close(arquivo_fd)
                 raise
+            _travar_writer(self._f)
             if lock_criado:
                 os.fsync(self._lock_f.fileno())
             if arquivo_criado:
@@ -212,16 +220,21 @@ class LogEventos:
         decorrido = max(0.0, time.monotonic() - self._inicio_monotonico)
         return max(self._ultimo_t, round(self._base_t + decorrido, 3))
 
-    def _validar_path_aberto(self) -> None:
+    @staticmethod
+    def _validar_identidade_aberta(path: Path, arquivo: BinaryIO, nome: str) -> None:
         try:
-            visivel = os.lstat(self.path)
+            visivel = os.lstat(path)
         except FileNotFoundError as exc:
-            raise RuntimeError("path do log desapareceu") from exc
-        aberto = os.fstat(self._f.fileno())
-        _validar_arquivo_regular(visivel, self.path)
+            raise RuntimeError(f"path do {nome} desapareceu") from exc
+        aberto = os.fstat(arquivo.fileno())
+        _validar_arquivo_regular(visivel, path)
         if (visivel.st_dev, visivel.st_ino) != (aberto.st_dev, aberto.st_ino):
-            raise RuntimeError("path do log foi substituido")
-        _validar_arquivo_regular(aberto, self.path)
+            raise RuntimeError(f"path do {nome} foi substituido")
+        _validar_arquivo_regular(aberto, path)
+
+    def _validar_path_aberto(self) -> None:
+        self._validar_identidade_aberta(self._lock_path, self._lock_f, "sidecar")
+        self._validar_identidade_aberta(self.path, self._f, "log")
 
     def evento(self, tipo_evento: str, **dados: Any) -> None:
         if {"evento", "t", "seq", "event_id"} & dados.keys():
@@ -280,9 +293,13 @@ class LogEventos:
         if arquivo is not None and not arquivo.closed:
             fd = arquivo.fileno()
             try:
-                arquivo.close()
+                fcntl.flock(fd, fcntl.LOCK_UN)
             except BaseException as exc:
                 erro = exc
+            try:
+                arquivo.close()
+            except BaseException as exc:
+                erro = erro or exc
                 try:
                     os.close(fd)
                 except OSError as close_exc:
