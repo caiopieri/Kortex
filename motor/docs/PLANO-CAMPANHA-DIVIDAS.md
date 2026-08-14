@@ -225,16 +225,29 @@ Desenho fechado (ver `kortex-fase1-moeda-de-contencao` na memória):
       devolve `usage` no formato que `omniroute_orcado._brl()` lê. **A moeda-token inteira
       depende disso.** Alibaba popula usage (deepseek-v3.2, glm-5.2, kimi-k2.7-code); NVIDIA
       é desconhecido para texto; 61 zeros da alibaba não estão explicados.
-      ~~*Bloqueado por:* FX vencido (Onda 0).~~ **FX desbloqueado em 2026-08-14 (`cc87838`).
-      Agora está BLOQUEADO NO FUNDADOR, por duas coisas que só ele tem:** (i) o OmniRoute
-      não está rodando — `http://localhost:20128/v1/models` não responde; (ii)
-      `OMNIROUTE_API_KEY` não está no ambiente. Não é trabalho de agente: precisa do proxy
-      de pé e da credencial real, e gasta requisição de verdade contra cada provedor.
-      *O que medir quando destravar, para não virar outra medição herdada:* o **corpo HTTP
-      da resposta** de uma chamada real por provedor grátis, conferindo se vem `usage` com
-      `prompt_tokens`/`completion_tokens` no formato que `omniroute_orcado._brl()` lê. Não
-      vale o `call_logs` do OmniRoute — ele prova que o PROXY contou, não que o provedor
-      devolveu.
+- [x] **1-pré — FEITA em 2026-08-14. A moeda-token é VIÁVEL, e a premissa herdada estava
+      errada.** O OmniRoute estava no ar o tempo todo (`REQUIRE_API_KEY=false`, nenhuma
+      credencial necessária); o "proxy fora do ar" foi erro de diagnóstico meu — o sandbox
+      bloqueia escrita em `/tmp`, então o `curl -o` falhava ao gravar, não ao conectar.
+      *Medido contra as CINCO exigências de `tentar_uma_vez`, não contra "tem usage":*
+      status 200, ausência de `error`, `modelo.endswith(model_ecoado)` (o proxy tira o
+      prefixo do gateway — `nvidia/meta/llama-3.1-8b-instruct` volta como
+      `meta/llama-3.1-8b-instruct`), e `prompt_tokens`/`completion_tokens` inteiros.
+      **5 rotas aprovam o leitor real, em 5 vendors distintos:**
+      `nvidia/meta/llama-3.1-8b-instruct` (40/2), `alibaba/deepseek-v3.2` (9/1),
+      `alibaba/glm-5.2` (17/17), `alibaba/kimi-k2.7-code` (13/65),
+      `gemini/gemini-2.0-flash-lite` (6/1). Fora: `nvidia/.../deepseek-v4-flash` (410 Gone,
+      modelo aposentado), `groq` e `cerebras` (403 — não provisionados neste install; é
+      problema de credencial, não de `usage`).
+      **NVIDIA popula `usage` para texto** — a dívida 10 registrava "desconhecido".
+      **Os "61 zeros da alibaba" eram artefato do instrumento.** Os zeros do `call_logs`
+      não são propriedade de provedor: com `status=200`, gemini tem 417/418 zeradas e nvidia
+      181/182 — e esses mesmos dois provedores devolveram `usage` populado na chamada direta
+      no mesmo dia. O `call_logs` registra tráfego majoritariamente streaming (SSE), onde o
+      proxy não agrega tokens; as minhas 10 chamadas com `stream: False` foram logadas
+      corretamente (9/1 e 17/17, batendo com o corpo). **Conclusão: `call_logs` não responde
+      esta pergunta, e `stream: False` — que o motor já força — é o que torna token
+      contável.** Script da medição: `scratchpad/medir_1pre.py`.
 - [x] **1a — FECHADA em 2026-08-14**, commits `51a373d` (moeda paramétrica) e `28819eb`
       (guard de `PRECOS`). Ponto público único: `RepositorioOrcamento(raiz, moeda="BRL")`,
       keyword-only, default preservando todos os chamadores. O `CHECK` **não** foi
