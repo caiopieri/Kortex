@@ -84,9 +84,11 @@ Antes de chamar de regressão, RODE O TESTE ISOLADO — se passar sozinho e for 
   rodar o **controle negativo** — o FX antigo tem que continuar sendo recusado. Sem o
   controle negativo, um gate quebrado dá o mesmo "aceitou" que um snapshot fresco.
 - **PRICING VENCE 2026-08-17T00:00Z.** `PRICING_CAPTURADO_EM = 1786320000`, janela de 7
-  dias. Vencido, o motor **recusa arrancar**. Ninguém vivo no projeto reconferiu esses 19
-  preços — vieram de antes da sessão anterior. Reconferir é manual contra
-  `openrouter.ai/models`, e o campo `vendor` é code-owned junto.
+  dias. Vencido, o motor **recusa arrancar**. Ninguém vivo no projeto reconferiu esses
+  **14** preços — vieram de antes da sessão anterior. São 14, não 19: o número 19 circulou
+  em duas sessões, entrou na dívida 10, no plano e no runbook, e nunca tinha sido contado.
+  Medido em 2026-08-14 — 14 entradas, 3 vendors (anthropic, google, openai). Reconferir é
+  manual contra `openrouter.ai/models`, e o campo `vendor` é code-owned junto.
 - **Custo em BRL é PREÇO-SOMBRA.** As rotas atuais são OAuth de assinatura e não vão na
   fatura. O teto existe para pegar loop, não para controlar dinheiro real. Rotas
   `auth_type: apikey` (nvidia, gemini, groq, cerebras, alibaba, openrouter...) **são**
@@ -103,7 +105,7 @@ Antes de chamar de regressão, RODE O TESTE ISOLADO — se passar sozinho e for 
       chamadores afetados, com o FX congelado junto (snapshot no futuro é recusado pelo
       motor). Verificado com plugin próprio, não com o do executor: revertendo só o diff
       dele a bomba volta; suíte a +1 ano dá 1150/6.
-- [ ] **Reconferir os 19 preços de `PRECOS`** contra os catálogos, ou aceitar
+- [ ] **Reconferir os 14 preços de `PRECOS`** contra os catálogos, ou aceitar
       conscientemente que o motor para em 17/ago. *Dono:* fundador decide; pesquisa manual.
 
 ## ONDA 1 — portões que não porteiam (spec/kernel)
@@ -201,7 +203,7 @@ corrompida de linha escrita por versão mais nova do schema.
 
 ## ONDA 3 — Fase 1: moeda de contenção para rota grátis
 
-Gargalo declarado pelo fundador. `PRECOS` tem 19 modelos code-owned e `modelo not in PRECOS`
+Gargalo declarado pelo fundador. `PRECOS` tem **14** modelos code-owned (medido 2026-08-14; "19" era herdado e errado) e `modelo not in PRECOS`
 reprova fechado, então NVIDIA/DeepSeek/GLM/Gemini-free/Alibaba não executam.
 **Preço zero é PROIBIDO:** silencia a única contenção monetária e faz o ledger mentir. Para
 rota grátis o escasso não é dinheiro — é cota e disponibilidade.
@@ -223,10 +225,26 @@ Desenho fechado (ver `kortex-fase1-moeda-de-contencao` na memória):
       devolve `usage` no formato que `omniroute_orcado._brl()` lê. **A moeda-token inteira
       depende disso.** Alibaba popula usage (deepseek-v3.2, glm-5.2, kimi-k2.7-code); NVIDIA
       é desconhecido para texto; 61 zeros da alibaba não estão explicados.
-      *Bloqueado por:* FX vencido (Onda 0).
-- [ ] **1a** — moeda paramétrica na criação do schema + arquivo separado, comportamento BRL
-      idêntico. Inclui o **guard obrigatório que reprova entrada de `PRECOS` com preço zero**
-      — sem ele a decisão vive só em prosa.
+      ~~*Bloqueado por:* FX vencido (Onda 0).~~ **FX desbloqueado em 2026-08-14 (`cc87838`).
+      Agora está BLOQUEADO NO FUNDADOR, por duas coisas que só ele tem:** (i) o OmniRoute
+      não está rodando — `http://localhost:20128/v1/models` não responde; (ii)
+      `OMNIROUTE_API_KEY` não está no ambiente. Não é trabalho de agente: precisa do proxy
+      de pé e da credencial real, e gasta requisição de verdade contra cada provedor.
+      *O que medir quando destravar, para não virar outra medição herdada:* o **corpo HTTP
+      da resposta** de uma chamada real por provedor grátis, conferindo se vem `usage` com
+      `prompt_tokens`/`completion_tokens` no formato que `omniroute_orcado._brl()` lê. Não
+      vale o `call_logs` do OmniRoute — ele prova que o PROXY contou, não que o provedor
+      devolveu.
+- [x] **1a — FECHADA em 2026-08-14**, commits `51a373d` (moeda paramétrica) e `28819eb`
+      (guard de `PRECOS`). Ponto público único: `RepositorioOrcamento(raiz, moeda="BRL")`,
+      keyword-only, default preservando todos os chamadores. O `CHECK` **não** foi
+      afrouxado — vira `CHECK (moeda='BRL')` ou `CHECK (moeda='TOKEN')`, nunca `IN (...)`.
+      Isolamento verificado em 7 cenários, incluindo o sutil: `CREATE TABLE IF NOT EXISTS`
+      é no-op silencioso se a tabela já existe com outro CHECK, então o repositório relê o
+      `sqlite_master` e exige o texto literal. `event_id` do BRL byte-idêntico ao antigo
+      (as duas outboxes convergem para o mesmo `LogEventos` e colidiriam). Guard de preço
+      roda no import e checa por tipo estrito — `0`, `0.0`, `"0"`, `Decimal("0.00")`,
+      negativo, NaN, infinito. Gate: 1186 passam, 1 falha (só E-02).
 - [ ] **1b** — tabela code-owned de rota grátis (modelo → vendor + classe de cota), cotação
       em token, mesma checagem vendor × provider_id, fail-closed para modelo fora das duas
       tabelas.

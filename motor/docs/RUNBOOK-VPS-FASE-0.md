@@ -145,7 +145,7 @@ falha diferentes. Isso é dívida aberta (ver Fase 2).
 ## Fica aberto para as fases seguintes
 
 - **Fase 1 — moeda de contenção para rota grátis.** `PRECOS` em `omniroute_orcado.py` tem
-  19 modelos code-owned; `modelo sem preco declarado` reprova fechado. NVIDIA, DeepSeek,
+  14 modelos code-owned (medido 2026-08-14); `modelo sem preco declarado` reprova fechado. NVIDIA, DeepSeek,
   GLM, Gemini free e Alibaba não rodam hoje. Cadastrar preço zero seria pior que o
   bloqueio: silencia a única contenção que o motor tem. Rota grátis precisa ser governada
   por **cota e disponibilidade**, não por BRL.
