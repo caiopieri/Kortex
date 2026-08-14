@@ -20,6 +20,9 @@ from .eventos_schema import valido
 Moeda = Literal["BRL", "TOKEN"]
 StatusSessao: TypeAlias = Literal["ACTIVE", "INVALIDATED"]
 StatusReserva: TypeAlias = Literal["RESERVED", "RECONCILED", "CONTRACT_VIOLATED", "UNKNOWN_COST"]
+StatusTentativaTerminal: TypeAlias = Literal[
+    "BLOQUEADA", "REPLAY_AMBIGUO", "REPLAY_FINALIZADO", "CONTRACT_VIOLATED", "UNKNOWN_COST",
+]
 _DECIMAL = re.compile(r"(?:0|[1-9][0-9]*)(?:\.[0-9]+)?\Z")
 _MAX_DECIMAL_CHARS = 128
 _PRECISAO_SOMA = 2 * _MAX_DECIMAL_CHARS + 1
@@ -85,6 +88,27 @@ class ResultadoTentativa:
             or not _identificador(self.usage_ref)
         ):
             raise ErroOrcamento("resultado invalido")
+
+
+@dataclass(frozen=True)
+class TentativaReconciliada:
+    resultado: ResultadoTentativa
+
+
+@dataclass(frozen=True)
+class TentativaBloqueadaPreEfeito:
+    motivo: Literal["sem_adapter", "sem_cotacao", "teto"]
+
+
+@dataclass(frozen=True)
+class TentativaTerminal:
+    motivo: str
+    status_reserva: StatusTentativaTerminal
+
+
+ResultadoExecucaoTentativa: TypeAlias = (
+    TentativaReconciliada | TentativaBloqueadaPreEfeito | TentativaTerminal
+)
 
 
 @dataclass(frozen=True)
@@ -710,7 +734,7 @@ def executar_tentativa_custeada(
     sessao: SessaoOrcamento,
     identidade: object,
     cliente: object,
-) -> ResultadoTentativa | None:
+) -> ResultadoExecucaoTentativa:
     """Executa uma única tentativa já identificada; retry/fallback pertencem ao caller."""
     if not isinstance(repositorio, RepositorioOrcamento):
         raise ErroOrcamento("repositorio invalido")
@@ -720,34 +744,50 @@ def executar_tentativa_custeada(
         tentar = object.__getattribute__(cliente, "tentar_uma_vez")
     except Exception:
         repositorio.bloquear(sessao, identidade, "sem_adapter")
-        return None
+        return TentativaBloqueadaPreEfeito("sem_adapter")
     if not callable(cotar) or not callable(tentar):
         repositorio.bloquear(sessao, identidade, "sem_adapter")
-        return None
+        return TentativaBloqueadaPreEfeito("sem_adapter")
     try:
         cotacao = cotar()
     except Exception:
         repositorio.bloquear(sessao, identidade, "sem_cotacao")
-        return None
+        return TentativaBloqueadaPreEfeito("sem_cotacao")
     if not _cotacao_tentativa_valida(cotacao, repositorio.moeda):
         repositorio.bloquear(sessao, identidade, "sem_cotacao")
-        return None
+        return TentativaBloqueadaPreEfeito("sem_cotacao")
     reserva = ReservaOrcamento(
         identidade.reservation_id, identidade.call_id, identidade.route_id,
         identidade.attempt, cotacao.maximo, cotacao.pricing_version,
     )
-    if repositorio.reservar_exclusiva(sessao, reserva).status != "NOVA":
-        return None
+    decisao = repositorio.reservar_exclusiva(sessao, reserva)
+    if decisao.status != "NOVA":
+        if decisao.status == "BLOQUEADA" and decisao.motivo == "teto excedido":
+            return TentativaBloqueadaPreEfeito("teto")
+        motivo = {
+            "BLOQUEADA": "sessao de orcamento inativa",
+            "REPLAY_AMBIGUO": "reserva anterior pode ter produzido efeito",
+            "REPLAY_FINALIZADO": "efeito anterior sem resposta recuperavel",
+        }[decisao.status]
+        return TentativaTerminal(motivo, decisao.status)
     try:
         resultado = tentar()
     except Exception:
-        repositorio.reconciliar(sessao, reserva, None)
-        return None
+        estado = repositorio.reconciliar(sessao, reserva, None)
+        return _tentativa_terminal("efeito externo com custo desconhecido", estado.status)
     if not _resultado_tentativa_valido(resultado):
-        repositorio.reconciliar(sessao, reserva, None)
-        return None
+        estado = repositorio.reconciliar(sessao, reserva, None)
+        return _tentativa_terminal("resultado sem custo confiavel", estado.status)
     estado = repositorio.reconciliar(sessao, reserva, resultado.custo_real, resultado.moeda)
-    return resultado if estado.status == "RECONCILED" else None
+    if estado.status == "RECONCILED":
+        return TentativaReconciliada(resultado)
+    return _tentativa_terminal("resultado violou contrato de custo", estado.status)
+
+
+def _tentativa_terminal(motivo: str, status: StatusReserva) -> TentativaTerminal:
+    if status not in ("CONTRACT_VIOLATED", "UNKNOWN_COST"):
+        raise ErroOrcamento("estado terminal de tentativa invalido")
+    return TentativaTerminal(motivo, status)
 
 
 def publicar_um_pendente(

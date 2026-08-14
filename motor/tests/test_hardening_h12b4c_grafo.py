@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+import motor.grafo as modulo_grafo
 from motor.eventos import LogEventos
 from motor.grafo import construir_grafo
 from motor.modelos import ClienteStub
@@ -14,6 +15,9 @@ from motor.orcamento import (
     RepositorioOrcamento,
     ResultadoTentativa,
     RotaTentativaCusteada,
+    TentativaBloqueadaPreEfeito,
+    TentativaReconciliada,
+    TentativaTerminal,
 )
 from motor.politica import PoliticaGates
 
@@ -86,6 +90,69 @@ def test_planner_reserva_antes_de_cada_retry_e_usa_identidades_distintas(tmp_pat
     assert len({linha[0] for linha in linhas}) == 2
     assert {linha[1] for linha in linhas} == {"planner-spec-1", "planner-spec-2"}
     assert all(linha[2:] == ("openai", 1, "RECONCILED") for linha in linhas)
+
+
+def test_grafo_tenta_rota_b_depois_de_bloqueio_pre_efeito(
+    tmp_path, monkeypatch,
+):
+    repo = RepositorioOrcamento(tmp_path / "runs-seguro")
+    chamadas = []
+
+    def executar(_repo, _sessao, identidade, _adaptador):
+        chamadas.append(identidade.route_id)
+        if identidade.route_id == "rota-a":
+            return TentativaBloqueadaPreEfeito("sem_cotacao")
+        return TentativaReconciliada(
+            ResultadoTentativa(json.dumps(SPEC), Decimal("0"), "BRL", "usage-b"),
+        )
+
+    def fabrica(*_):
+        return [
+            RotaTentativaCusteada("rota-a", "provedor-a", object()),
+            RotaTentativaCusteada("rota-b", "provedor-b", object()),
+        ]
+
+    monkeypatch.setattr(modulo_grafo, "executar_tentativa_custeada", executar)
+    grafo, _legado = _grafo(tmp_path, repo, fabrica)
+
+    resultado = grafo.invoke({
+        "missao_texto": "pesquise", "run_id": "run-seguro", "thread_id": "thread-seguro",
+    })
+
+    assert resultado["spec"]["versao"] == "0.1"
+    assert chamadas == ["rota-a", "rota-b"]
+
+
+def test_grafo_nao_tenta_rota_b_depois_de_terminal(tmp_path, monkeypatch):
+    repo = RepositorioOrcamento(tmp_path / "runs-terminal")
+    chamadas = []
+
+    def executar(_repo, _sessao, identidade, _adaptador):
+        chamadas.append(identidade.route_id)
+        if identidade.route_id == "rota-a":
+            return TentativaTerminal(
+                "reserva anterior pode ter produzido efeito", "REPLAY_AMBIGUO",
+            )
+        return TentativaReconciliada(
+            ResultadoTentativa(json.dumps(SPEC), Decimal("0"), "BRL", "usage-b"),
+        )
+
+    def fabrica(*_):
+        return [
+            RotaTentativaCusteada("rota-a", "provedor-a", object()),
+            RotaTentativaCusteada("rota-b", "provedor-b", object()),
+        ]
+
+    monkeypatch.setattr(modulo_grafo, "executar_tentativa_custeada", executar)
+    grafo, _legado = _grafo(tmp_path, repo, fabrica)
+
+    with pytest.raises(RuntimeError, match="planner não produziu"):
+        grafo.invoke({
+            "missao_texto": "pesquise", "run_id": "run-terminal",
+            "thread_id": "thread-terminal",
+        })
+
+    assert chamadas == ["rota-a", "rota-a", "rota-a"]
 
 
 @pytest.mark.parametrize("ausente", ["repo", "fabrica", "thread"])

@@ -17,6 +17,8 @@ dependencies = [
     # ela (grafo.py::_validar_schema_json). Ficou anos como import opcional com
     # fallback silencioso mais fraco -- achado A-06 da auditoria Anthropic.
     "jsonschema>=4,<5",
+    # `typing.assert_never` só existe no Python 3.11; o motor ainda suporta 3.10.
+    "typing-extensions>=4.1,<5",
     # Checkpointer durável (resume pós-crash, T3). sqlite-saver 2.x exige
     # langgraph-checkpoint<3, que conflita
     # com langgraph 1.x (exige checkpoint>=4.1). Só a linha 3.x do sqlite-saver

@@ -8,7 +8,7 @@ import pytest
 
 from motor.orcamento import CotacaoTentativa, ErroOrcamento, IdentidadeTentativaCusteada
 from motor.orcamento import RepositorioOrcamento, ReservaOrcamento, ResultadoTentativa
-from motor.orcamento import executar_tentativa_custeada
+from motor.orcamento import TentativaBloqueadaPreEfeito, executar_tentativa_custeada
 
 
 def _reserva(reservation_id: str = "reserva") -> ReservaOrcamento:
@@ -133,7 +133,10 @@ def test_cotacao_de_outra_moeda_bloqueia_antes_do_transporte(
     cliente = ClienteCruzado()
     identidade = IdentidadeTentativaCusteada("reserva", "call", "rota", 1)
 
-    assert executar_tentativa_custeada(repo, sessao, identidade, cliente) is None
+    assert isinstance(
+        executar_tentativa_custeada(repo, sessao, identidade, cliente),
+        TentativaBloqueadaPreEfeito,
+    )
     assert cliente.chamadas == 0
     evento = repo.listar_pendentes("run")[0]
     assert evento.tipo == "custo.bloqueado"

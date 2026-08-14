@@ -18,12 +18,17 @@ import time
 import urllib.request
 from typing import Any, Callable, Optional, Protocol, cast
 
+from typing_extensions import assert_never
+
 from .orcamento import (
     ClienteTentativaCusteada,
     ErroOrcamento,
     IdentidadeTentativaCusteada,
     RepositorioOrcamento,
     SessaoOrcamento,
+    TentativaBloqueadaPreEfeito,
+    TentativaReconciliada,
+    TentativaTerminal,
     executar_tentativa_custeada,
     validar_identidade_tentativa,
 )
@@ -529,8 +534,16 @@ class ClienteRoteador:
             resultado = executar_tentativa_custeada(
                 repositorio, sessao, identidade, adaptador,
             )
-            if resultado is not None and resultado.texto:
-                return resultado.texto
+            match resultado:
+                case TentativaReconciliada(resultado=tentativa):
+                    if tentativa.texto:
+                        return tentativa.texto
+                case TentativaBloqueadaPreEfeito():
+                    pass
+                case TentativaTerminal():
+                    return None
+                case _:
+                    assert_never(resultado)
             if indice + 1 < len(tentativas):
                 self._evento("modelo.fallback", papel="rota_custeada",
                              para=tentativas[indice + 1][0].route_id)

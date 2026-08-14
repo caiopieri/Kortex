@@ -10,7 +10,7 @@ from motor.openai_orcado import (
 )
 from motor.orcamento import (
     ErroOrcamento, IdentidadeTentativaCusteada, RepositorioOrcamento,
-    executar_tentativa_custeada,
+    TentativaReconciliada, TentativaTerminal, executar_tentativa_custeada,
 )
 
 _COTACAO_TESTE = Decimal("5")
@@ -70,7 +70,8 @@ def test_reserva_usa_pior_caso_nao_cached_e_arredonda_para_cima(tmp_path):
         * _COTACAO_TESTE * _MARGEM_TESTE
     )
     assert Decimal(maximo) == esperado > Decimal(real) > 0
-    assert status == "RECONCILED" and resultado.usage_ref == "req_123"
+    assert status == "RECONCILED" and isinstance(resultado, TentativaReconciliada)
+    assert resultado.resultado.usage_ref == "req_123"
 
 
 def test_fx_stale_bloqueia_antes_de_transporte():
@@ -108,7 +109,7 @@ def test_pricing_stale_ou_prompt_sem_limite_bloqueia_antes_do_transporte():
 ])
 def test_resposta_divergente_ou_usage_invalido_vira_unknown_cost(tmp_path, resposta):
     repo, resultado = _executar(tmp_path, _cliente(lambda *_: resposta))
-    assert resultado is None
+    assert isinstance(resultado, TentativaTerminal)
     maximo, real, status = _estado(repo)
     assert Decimal(maximo) > 0 and real is None and status == "UNKNOWN_COST"
 
@@ -120,7 +121,7 @@ def test_erro_apos_envio_mantem_reserva_e_invalida_sessao(tmp_path):
         chamadas += 1
         raise TimeoutError("depois do envio")
     repo, resultado = _executar(tmp_path, _cliente(falha))
-    assert chamadas == 1 and resultado is None
+    assert chamadas == 1 and isinstance(resultado, TentativaTerminal)
     maximo, real, status = _estado(repo)
     assert Decimal(maximo) > 0 and real is None and status == "UNKNOWN_COST"
     assert repo.sessao("run", "thread", Decimal("10")).status == "INVALIDATED"

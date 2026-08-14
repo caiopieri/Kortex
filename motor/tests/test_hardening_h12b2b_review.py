@@ -9,6 +9,8 @@ from motor.orcamento import (
     IdentidadeTentativaCusteada,
     RepositorioOrcamento,
     ResultadoTentativa,
+    TentativaBloqueadaPreEfeito,
+    TentativaTerminal,
     executar_tentativa_custeada,
 )
 
@@ -47,7 +49,10 @@ def test_cotacao_adulterada_bloqueia_sem_efeito(tmp_path, campo, valor):
     object.__setattr__(quote, campo, valor)
     fake = FakeCliente(quote=quote, result=object())
 
-    assert executar_tentativa_custeada(repo, sessao, identidade, fake) is None
+    assert isinstance(
+        executar_tentativa_custeada(repo, sessao, identidade, fake),
+        TentativaBloqueadaPreEfeito,
+    )
     assert fake.chamadas == 0
     assert [evento.payload["motivo"] for evento in repo.listar_pendentes("run")] == [
         "sem_cotacao"
@@ -77,7 +82,10 @@ def test_descriptors_hostis_bloqueiam_sem_vazar_segredo(tmp_path):
         identidade = IdentidadeTentativaCusteada(
             f"res-{indice}", f"call-{indice}", "rota", 1
         )
-        assert executar_tentativa_custeada(repo, sessao, identidade, cliente) is None
+        assert isinstance(
+            executar_tentativa_custeada(repo, sessao, identidade, cliente),
+            TentativaBloqueadaPreEfeito,
+        )
         bruto = json.dumps(repo.listar_pendentes("run")[0].payload)
         assert "SEGREDO_HOSTIL_DESC" not in bruto
         assert '"motivo": "sem_adapter"' in bruto
@@ -94,7 +102,9 @@ def test_resultado_adulterado_escala_gigante_invalida_sessao(tmp_path):
     fake = FakeCliente(
         quote=CotacaoTentativa(Decimal("2.0"), "BRL", "price-v1"), result=result
     )
-    assert executar_tentativa_custeada(repo, sessao, identidade, fake) is None
+    assert isinstance(
+        executar_tentativa_custeada(repo, sessao, identidade, fake), TentativaTerminal,
+    )
     sessao_atual = repo.sessao("run", "thread", Decimal("5.0"))
     assert (fake.chamadas, sessao_atual.reservado, sessao_atual.status) == (
         1,
@@ -154,7 +164,9 @@ def test_replay_e_nova_tentativa_explicita(tmp_path):
     fake2 = FakeCliente(
         quote=CotacaoTentativa(Decimal("2.0"), "BRL", "price-v1"), result=result
     )
-    assert executar_tentativa_custeada(repo, sessao, identidade1, fake2) is None
+    replay = executar_tentativa_custeada(repo, sessao, identidade1, fake2)
+    assert isinstance(replay, TentativaTerminal)
+    assert replay.status_reserva == "REPLAY_FINALIZADO"
     assert fake2.chamadas == 0
 
     identidade2 = IdentidadeTentativaCusteada("res-7", "call-6", "rota", 2)

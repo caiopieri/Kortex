@@ -14,8 +14,8 @@ from motor.eventos import LogEventos
 from motor.openai_orcado import PRICING_VERSION
 from motor.orcamento import (
     ErroOrcamento, IdentidadeTentativaCusteada, RequisitosTentativaCusteada,
-    ReservaOrcamento, RepositorioOrcamento, executar_tentativa_custeada,
-    publicar_um_pendente,
+    ReservaOrcamento, RepositorioOrcamento, TentativaBloqueadaPreEfeito,
+    executar_tentativa_custeada, publicar_um_pendente,
 )
 from tests.helpers_grafo import composicao_stub
 
@@ -153,7 +153,7 @@ def test_teto_bootstrap_dois_reais_bloqueia_antes_da_rede(tmp_path, monkeypatch)
         IdentidadeTentativaCusteada("reserva", "call", "openai", 1), adaptador,
     )
 
-    assert resultado is None and posts == []
+    assert isinstance(resultado, TentativaBloqueadaPreEfeito) and posts == []
 
 
 def test_provider_e_ferramenta_incompativeis_nao_criam_adapter(tmp_path, monkeypatch):

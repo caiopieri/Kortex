@@ -26,6 +26,7 @@ from uuid import uuid4
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send, interrupt
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from typing_extensions import assert_never
 
 from .eventos import LogEventos
 from .modelos import ClienteModelo, ClienteStub, extrai_json
@@ -36,6 +37,9 @@ from .orcamento import (
     RepositorioOrcamento,
     RespostaTentativaCusteada,
     RotaTentativaCusteada,
+    TentativaBloqueadaPreEfeito,
+    TentativaReconciliada,
+    TentativaTerminal,
     executar_tentativa_custeada,
 )
 from .politica import PoliticaGates
@@ -675,19 +679,29 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
             resultado = executar_tentativa_custeada(
                 repositorio_orcamento, sessao, identidade, adaptador,
             )
-            if resultado is not None and resultado.texto:
-                # Qual modelo REALMENTE atendeu. `executor.chamado` só consegue
-                # dizer "omniroute/roteado", porque a rota só é escolhida aqui,
-                # percorrendo a cadeia de failover.
-                #
-                # Não é cosmético: o curador perfila aptidão por modelo lendo o
-                # campo `modelo` do log. Sem este evento, Gemini, Opus e Codex
-                # caem todos no mesmo balde `omniroute/roteado` e o perfil por
-                # modelo -- a entrada do flywheel inteiro -- vira uma linha só.
-                log.evento("modelo.atendeu", papel=papel, fase=fase,
-                           modelo=route_id, provedor=provider_id,
-                           tentativa=indice)
-                return RespostaTentativaCusteada(resultado.texto, route_id, provider_id)
+            match resultado:
+                case TentativaReconciliada(resultado=resultado_reconciliado):
+                    if resultado_reconciliado.texto:
+                        # Qual modelo REALMENTE atendeu. `executor.chamado` só consegue
+                        # dizer "omniroute/roteado", porque a rota só é escolhida aqui,
+                        # percorrendo a cadeia de failover.
+                        #
+                        # Não é cosmético: o curador perfila aptidão por modelo lendo o
+                        # campo `modelo` do log. Sem este evento, Gemini, Opus e Codex
+                        # caem todos no mesmo balde `omniroute/roteado` e o perfil por
+                        # modelo -- a entrada do flywheel inteiro -- vira uma linha só.
+                        log.evento("modelo.atendeu", papel=papel, fase=fase,
+                                   modelo=route_id, provedor=provider_id,
+                                   tentativa=indice)
+                        return RespostaTentativaCusteada(
+                            resultado_reconciliado.texto, route_id, provider_id,
+                        )
+                case TentativaBloqueadaPreEfeito():
+                    pass
+                case TentativaTerminal():
+                    return None
+                case _:
+                    assert_never(resultado)
         return None
 
     def workspace_de(state: EstadoMotor) -> Path:
