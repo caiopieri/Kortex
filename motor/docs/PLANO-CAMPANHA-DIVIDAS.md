@@ -70,11 +70,19 @@ Antes de chamar de regressão, RODE O TESTE ISOLADO — se passar sozinho e for 
 
 ## Fatos operacionais vivos
 
-- **FX VENCIDO.** `cfg-omniroute.json` tem snapshot de 2026-08-11T16:42Z e janela de 24h.
-  **Nenhuma missão real roda até recapturar.** Comando:
-  `curl -s https://economia.awesomeapi.com.br/json/last/USD-BRL` → `cotacao_venda` =
-  campo **`USDBRL.ask`** (venda = ask; `bid` é compra e SUBFATURA). Atualizar os quatro
-  `cfg-*.json`.
+- **FX RECAPTURADO em 2026-08-14T13:17Z** (`ask` = 5.21128, versão
+  `awesomeapi-usdbrl-2026-08-14`), nos quatro `cfg-*.json`. **VENCE 2026-08-15T13:17Z** —
+  janela de 24h, e vence todo dia. Se a data de hoje passou disso, recapture ANTES de
+  qualquer coisa; nenhuma missão real roda com FX vencido.
+  Comando: `curl -s https://economia.awesomeapi.com.br/json/last/USD-BRL` → `cotacao_venda`
+  = campo **`USDBRL.ask`** (venda = ask; `bid` é compra e SUBFATURA). Use o
+  **`timestamp` da própria API** como `capturado_em`, não o relógio local: é quando a
+  cotação valeu, e snapshot no futuro é recusado pelo motor.
+  *Como verificar que funcionou, porque "o JSON é válido" não prova nada:* compor com
+  relógio real (`compor_orcamento_omniroute(cfg, workspace)`, com `OMNIROUTE_API_KEY`
+  qualquer no ambiente, pois o check de credencial vem ANTES do de FX e curto-circuita) e
+  rodar o **controle negativo** — o FX antigo tem que continuar sendo recusado. Sem o
+  controle negativo, um gate quebrado dá o mesmo "aceitou" que um snapshot fresco.
 - **PRICING VENCE 2026-08-17T00:00Z.** `PRICING_CAPTURADO_EM = 1786320000`, janela de 7
   dias. Vencido, o motor **recusa arrancar**. Ninguém vivo no projeto reconferiu esses 19
   preços — vieram de antes da sessão anterior. Reconferir é manual contra

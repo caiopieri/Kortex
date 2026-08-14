@@ -88,9 +88,9 @@
     }
   },
   "fx": {
-    "versao": "awesomeapi-usdbrl-2026-08-11",
-    "capturado_em": 1786466552,
-    "cotacao_venda": "5.1623"
+    "versao": "awesomeapi-usdbrl-2026-08-14",
+    "capturado_em": 1786713448,
+    "cotacao_venda": "5.21128"
   },
   "fx_max_age_s": 86400,
   "margem": "1.20",
