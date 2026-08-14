@@ -22,8 +22,10 @@ from motor.omniroute_orcado import (
     PRICING_SOURCE,
     PRICING_VERSION,
     ClienteOmniRouteCusteado,
+    PrecoModelo,
     SnapshotFX,
     SnapshotPricing,
+    _validar_precos,
 )
 from motor.orcamento import ErroOrcamento, RequisitosTentativaCusteada
 
@@ -118,6 +120,51 @@ def test_modelo_sem_preco_declarado_nao_roda() -> None:
     """Fail-closed: executar com custo desconhecido é pior que não executar."""
     with pytest.raises(ErroOrcamento, match="sem preco declarado"):
         _cliente(lambda *_: _resposta(), modelo="inventado/modelo-x")
+
+
+def test_tabela_code_owned_tem_somente_precos_positivos() -> None:
+    _validar_precos(PRECOS)
+
+
+@pytest.mark.parametrize(
+    ("campo", "valor"),
+    [
+        ("entrada", None),
+        ("entrada", 0),
+        ("entrada", 0.0),
+        ("entrada", "0"),
+        ("entrada", Decimal("0.00")),
+        ("cached", Decimal("0")),
+        ("saida", Decimal("0")),
+        ("saida", Decimal("-0.01")),
+        ("saida", Decimal("NaN")),
+        ("saida", Decimal("Infinity")),
+    ],
+)
+def test_guard_precos_reprova_ausente_zero_negativo_e_nao_finito(
+    campo: str, valor: object
+) -> None:
+    campos: dict[str, object] = {
+        "entrada": Decimal("1"),
+        "cached": Decimal("1"),
+        "saida": Decimal("1"),
+    }
+    campos[campo] = valor
+    preco = PrecoModelo(
+        campos["entrada"],  # type: ignore[arg-type]
+        campos["cached"],  # type: ignore[arg-type]
+        campos["saida"],  # type: ignore[arg-type]
+        "vendor",
+    )
+
+    with pytest.raises(ErroOrcamento, match="preco invalido"):
+        _validar_precos({"modelo": preco})
+
+
+@pytest.mark.parametrize("entrada", [None, {}, object()])
+def test_guard_precos_reprova_entrada_que_nao_e_preco(entrada: object) -> None:
+    with pytest.raises(ErroOrcamento, match="preco invalido"):
+        _validar_precos({"modelo": entrada})
 
 
 def test_stream_false_e_obrigatorio_no_payload() -> None:

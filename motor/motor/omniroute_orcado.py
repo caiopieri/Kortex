@@ -132,6 +132,19 @@ PRECOS: dict[str, PrecoModelo] = {
 }
 
 
+def _validar_precos(precos: Mapping[str, object]) -> None:
+    for modelo, preco in precos.items():
+        if type(preco) is not PrecoModelo:
+            raise ErroOrcamento(f"preco invalido em PRECOS: {modelo!r}")
+        for campo in ("entrada", "cached", "saida"):
+            valor = getattr(preco, campo, None)
+            if type(valor) is not Decimal or not valor.is_finite() or valor <= 0:
+                raise ErroOrcamento(f"preco invalido em PRECOS: {modelo!r}.{campo}")
+
+
+_validar_precos(PRECOS)
+
+
 def _horas(segundos: int) -> str:
     return f"{segundos / 3600:.1f}h"
 
