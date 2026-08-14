@@ -25,13 +25,30 @@ de escolher em silêncio — é o que rende as melhores contribuições dele.
 
 **Verificação — nunca aceitar "green" auto-reportado, de agente nenhum:**
 1. Reproduzir o comando eu mesmo, em estado limpo.
-2. Provar que o teste novo não é vazio: `git stash push -- <fontes>` revertendo SÓ o
-   código-fonte e mantendo os testes; o teste tem que reprovar.
+2. Provar que o teste novo não é vazio, revertendo SÓ o código-fonte e mantendo os testes;
+   o teste tem que reprovar. **⚠️ O COMO depende de o alvo estar commitado, e confundir os
+   dois DESTRÓI trabalho — aconteceu em 2026-08-14, custou a reconstrução inteira de
+   `servico.py`:**
+   - alvo **já commitado** → `git stash push -- <fontes>` e depois `git stash pop`, ou
+     `git checkout -- <arquivo>`. Seguro, porque o git tem para onde voltar.
+   - alvo **NÃO commitado** (o caso normal ao revisar worktree de agente) → **copie o
+     arquivo antes** e restaure a cópia. **NUNCA `git checkout`**: ele restaura para HEAD,
+     não para o estado pré-mutação, e leva junto todo o trabalho não commitado.
+   O erro foi repetir um comando que tinha funcionado antes sem verificar a pré-condição que
+   o tornava seguro — na vez anterior o arquivo mutado estava commitado, e por isso deu certo.
 3. Comparar artefato por AST, não por impressão.
 4. Conferir a premissa dele ANTES de contestar (já quase reverti decisão correta por
    premissa minha errada).
 5. Exigir que ele JULGUE o veredito que recebe, não só reporte — ele já passou adiante
    falso positivo de evaluator sem marcar como tal.
+6. **Comparar a CONTAGEM de testes coletados entre rodadas, não só o número de falhas.**
+   Consolidação de testes some com cobertura e a suíte fica verde a perda inteira. Na 1c-i,
+   três testes novos viraram um e o que sumiu era justamente o que fixava a criação lazy;
+   só apareceu porque o total caiu de 1240 para 1238. `pytest -q --collect-only | tail -1`.
+7. **Verde na suíte não vê mudança de concorrência.** Duas regressões da 1c-i passaram
+   verdes: o writer novo em `status()` (achado lendo o diff) e a perda de cobertura (achada
+   contando testes). Enquanto a dívida 12 existir, qualquer fatia que toque relay, status ou
+   lock precisa de leitura de diff — o gate não decide.
 
 **Regra de medição (custou um dia inteiro para ser descoberta):** rodar a suíte completa
 **UM DE CADA VEZ por checkout**. `motor/__main__.py` abre o `log.jsonl` da raiz sob flock
@@ -303,11 +320,19 @@ Desenho fechado (ver `kortex-fase1-moeda-de-contencao` na memória):
       ambígua em qualquer moeda permite efeito em outra, e nenhum outbox ou reserva fica
       invisível para conclusão e recovery*.
       **Fatiada em três, cada uma funcional:**
-      - [ ] **1c-i** — `DependenciasOrcamento` por moeda (sem alias `repositorio`, que
-            deixaria CLI/serviço drenando só BRL em silêncio) + relay/status/dreno
-            **iterando o mapa**, consultando `possui_ledger` antes de drenar cada moeda para
-            preservar criação lazy, com ordem de dreno fixa e declarada. Só BRL configurado
-            ⇒ mapa de uma entrada ⇒ **comportamento idêntico, sem asterisco**. *Em voo.*
+      - [x] **1c-i — FECHADA** 2026-08-14, commit `fd35973`. Mapa por moeda sem alias
+            singular; união permissiva também removida de `_drenar_orcamento_cli`, porque
+            assinatura que aceita o singular é alias com outro nome. `ORDEM_DRENO_MOEDAS` é
+            constante, não ordem de dict. **Regressão pega na revisão com a suíte VERDE:** a
+            primeira versão abria o `LogEventos` do relay em `_status_duravel` sem guard — e
+            como `_log_do_job(truncar=False)` devolve `_LogConsulta` (leitura pura, sem
+            lock), o caminho sem ledger passaria a tomar **writer exclusivo** onde antes não
+            tomava nenhum. Dívida 12 pior, e fonte nova de `ServicoOcupado` na família da
+            falha rotativa — o pior tipo de regressão, porque o nosso próprio baseline manda
+            descartá-la como ruído. Guard aplicado; ele decide **existência** de ledger, não
+            pendência, então reproduz o contrato anterior em vez de mudá-lo.
+            Cinco migrações mecânicas conferidas uma a uma; três testes novos provados por
+            mutação. Gate: 1239 coletados (+3), 1203 passam, 1 falha (só E-02).
             *Colisão de restrições resolvida em 2026-08-14:* quatro pontos de teste leem os
             campos singulares (`h12b4f:125`, `h12b4f:150-152`, `composicao_multi:215`,
             `helpers_grafo:64-69`), então "não editar teste" e "remover o campo singular" não
