@@ -423,6 +423,7 @@ def test_provider_id_que_contradiz_o_vendor_do_modelo_recusa(credencial, tmp_pat
 
 def test_rota_gratis_nao_pula_guard_de_vendor(credencial, tmp_path) -> None:
     cfg = _cfg(ROTAS_GRATIS_CAPTURADO_EM)
+    cfg["teto_bootstrap_token"] = "100000"
     cfg["omniroute"]["papeis"]["executor"][0] = {
         "modelo": "nvidia/meta/llama-3.1-8b-instruct",
         "provider_id": "nvidia",
@@ -437,6 +438,7 @@ def test_rota_gratis_nao_pula_guard_de_vendor(credencial, tmp_path) -> None:
 
 def test_composicao_gratis_produz_cotacao_token(credencial, tmp_path) -> None:
     cfg = _cfg(ROTAS_GRATIS_CAPTURADO_EM)
+    cfg["teto_bootstrap_token"] = "100000"
     cfg["omniroute"]["papeis"]["executor"][0] = {
         "modelo": "nvidia/meta/llama-3.1-8b-instruct",
         "provider_id": "meta",
@@ -457,6 +459,7 @@ def test_frescor_gratis_e_condicional_ao_catalogo_usado(credencial, tmp_path) ->
     compor_orcamento_omniroute(cfg_pago, tmp_path, relogio=lambda: agora)
 
     cfg_gratis = _cfg(agora)
+    cfg_gratis["teto_bootstrap_token"] = "100000"
     cfg_gratis["omniroute"]["papeis"]["executor"][0] = {
         "modelo": "alibaba/glm-5.2",
         "provider_id": "zhipu",
@@ -471,6 +474,7 @@ def test_frescor_gratis_e_condicional_ao_catalogo_usado(credencial, tmp_path) ->
 def test_config_mista_com_fx_vencido_reprova_por_fx(credencial, tmp_path) -> None:
     agora = ROTAS_GRATIS_CAPTURADO_EM
     cfg = _cfg(agora)
+    cfg["teto_bootstrap_token"] = "100000"
     cfg["fx"]["capturado_em"] = agora - cfg["fx_max_age_s"] - 1
     cfg["omniroute"]["papeis"]["executor"][0] = {
         "modelo": "alibaba/glm-5.2",
@@ -491,6 +495,7 @@ def test_composicao_so_token_nao_depende_do_frescor_monetario(
         "motor.omniroute_orcado.ROTAS_GRATIS_CAPTURADO_EM", agora,
     )
     cfg = _cfg(agora)
+    cfg["teto_bootstrap_token"] = "100000"
     papeis = cfg["omniroute"]["papeis"]
     for papel, modelo, vendor in (
         ("planner", "nvidia/meta/llama-3.1-8b-instruct", "meta"),

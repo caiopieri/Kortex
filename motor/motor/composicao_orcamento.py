@@ -160,6 +160,13 @@ def _decimal(dados: dict, nome: str) -> Decimal:
     return valor
 
 
+def _teto_token(dados: dict) -> Decimal:
+    bruto = dados.get("teto_bootstrap_token")
+    if not isinstance(bruto, str) or re.fullmatch(r"[1-9][0-9]{0,15}", bruto) is None:
+        raise ErroOrcamento("teto_bootstrap_token invalido")
+    return Decimal(bruto)
+
+
 def compor_orcamento_openai(
     cfg: dict, workspace: str | Path, *,
     relogio: Callable[[], int] = lambda: int(time.time()),
@@ -212,7 +219,9 @@ def compor_orcamento_openai(
             agora=agora, fx_max_age_s=fx_max_age, pricing_max_age_s=PRICING_MAX_AGE_S,
             margem=margem, timeout=timeout, **kwargs,
         )
-        return [RotaTentativaCusteada("openai:gpt-5", "openai", adaptador)]
+        return [RotaTentativaCusteada(
+            "openai:gpt-5", "openai", adaptador, moeda="BRL",
+        )]
 
     return DependenciasOrcamento(
         cliente=ClienteSomenteOrcado(),
@@ -360,7 +369,9 @@ def compor_orcamento_multi(
                 pricing_max_age_s=PRICING_MAX_AGE_S, margem=margem,
                 timeout=timeout, **kwargs,
             )
-            return [RotaTentativaCusteada(route_id, provider_id, adaptador)]
+            return [RotaTentativaCusteada(
+                route_id, provider_id, adaptador, moeda="BRL",
+            )]
         return []
 
     return DependenciasOrcamento(
@@ -393,7 +404,7 @@ def compor_orcamento_multi(
 # nao serve para o curador decidir promocao de modelo.
 
 _ESPERADOS_OMNI = {
-    "omniroute", "fx", "fx_max_age_s", "margem", "teto_bootstrap_brl", "timeout",
+    "omniroute", "fx", "fx_max_age_s", "margem", "timeout",
 }
 _ESPERADOS_BLOCO_OMNI = {"base_url", "api_key_env", "papeis"}
 _ESPERADOS_PAPEL_OMNI = {
@@ -406,7 +417,7 @@ class _ClienteOmniSomenteOrcado(ClienteSomenteOrcado):
     modelo = "roteado"
 
 
-def _rota_omniroute(**kwargs: Any) -> RotaTentativaCusteada:
+def _rota_omniroute(*, moeda: Moeda, **kwargs: Any) -> RotaTentativaCusteada:
     """Monta uma rota custeada; o route_id sai do nome do modelo, saneado."""
     modelo = str(kwargs["modelo"])
     provider_id = str(kwargs.pop("provider_id"))
@@ -414,6 +425,7 @@ def _rota_omniroute(**kwargs: Any) -> RotaTentativaCusteada:
         re.sub(r"[^a-z0-9_.:-]", "-", modelo.lower()),
         provider_id,
         ClienteOmniRouteCusteado(**kwargs),
+        moeda=moeda,
     )
 
 
@@ -442,13 +454,13 @@ def compor_orcamento_omniroute(
     # no, e um papel com uma alternativa so fica sem rota sempre que o produtor
     # coincide com ele. Com Anthropic planejando, um verifier exclusivamente
     # Anthropic nunca roda -- foi exatamente o que derrubou a missao antes.
-    papeis: dict[str, list[tuple[str, str, int, int]]] = {}
-    moedas_usadas: set[str] = set()
+    papeis: dict[str, list[tuple[str, str, int, int, Moeda]]] = {}
+    moedas_usadas: set[Moeda] = set()
     for papel, bruto in papeis_bruto.items():
         itens = bruto if isinstance(bruto, list) else [bruto]
         if not isinstance(papel, str) or not itens:
             raise ErroOrcamento(f"papel omniroute invalido: {papel}")
-        alternativas: list[tuple[str, str, int, int]] = []
+        alternativas: list[tuple[str, str, int, int, Moeda]] = []
         for item in itens:
             if not isinstance(item, dict) or set(item) != _ESPERADOS_PAPEL_OMNI:
                 raise ErroOrcamento(f"papel omniroute invalido: {papel}")
@@ -472,6 +484,7 @@ def compor_orcamento_omniroute(
                 _inteiro(item, "max_completion_tokens"),
                 _inteiro(item, "max_input_tokens",
                          maximo=omniroute_orcado.MAX_INPUT_TOKENS),
+                resolucao.moeda,
             ))
         papeis[papel] = alternativas
 
@@ -505,7 +518,18 @@ def compor_orcamento_omniroute(
         omniroute_orcado.exigir_rotas_gratis_frescas(relogio())
     timeout = _inteiro(bloco_raiz, "timeout", maximo=600)
     margem = _decimal(bloco_raiz, "margem")
-    teto_bootstrap = _decimal(bloco_raiz, "teto_bootstrap_brl")
+    raiz_orcamento = Path(workspace) / "orcamento"
+    orcamentos: dict[Moeda, OrcamentoMoeda] = {}
+    if "BRL" in moedas_usadas:
+        orcamentos["BRL"] = OrcamentoMoeda(
+            RepositorioOrcamento(raiz_orcamento),
+            _decimal(bloco_raiz, "teto_bootstrap_brl"),
+        )
+    if "TOKEN" in moedas_usadas:
+        orcamentos["TOKEN"] = OrcamentoMoeda(
+            RepositorioOrcamento(raiz_orcamento, moeda="TOKEN"),
+            _teto_token(bloco_raiz),
+        )
 
     kwargs = {} if transporte is None else {"transporte": transporte}
 
@@ -534,8 +558,9 @@ def compor_orcamento_omniroute(
         # item so jogava esse failover fora -- bastava o provedor preferido estar
         # sem cota para o papel inteiro morrer, com "modelo nao respondeu".
         rotas: list[RotaTentativaCusteada] = []
-        for modelo, provider_id, tokens, entrada_max in candidatas:
+        for modelo, provider_id, tokens, entrada_max, moeda in candidatas:
             rotas.append(_rota_omniroute(
+                moeda=moeda,
                 provider_id=provider_id,
                 api_key=api_key, base_url=base_url, modelo=modelo, prompt=prompt,
                 max_input_tokens=entrada_max, max_completion_tokens=tokens,
@@ -552,7 +577,7 @@ def compor_orcamento_omniroute(
 
     vistos: dict[str, set[str]] = {}
     for papel in ("executor", "verifier"):
-        for modelo, provider_id, _t, _e in papeis[papel]:
+        for modelo, provider_id, _t, _e, _moeda in papeis[papel]:
             vistos.setdefault(f"{modelo}|{provider_id}", set()).add(papel)
     certificadas = tuple(
         RotaOrcadaCertificada(
@@ -564,9 +589,7 @@ def compor_orcamento_omniroute(
     )
     return DependenciasOrcamento(
         cliente=_ClienteOmniSomenteOrcado(),
-        orcamentos={"BRL": OrcamentoMoeda(
-            RepositorioOrcamento(Path(workspace) / "orcamento"), teto_bootstrap,
-        )},
+        orcamentos=orcamentos,
         fabrica=fabricar,
         rotas_certificadas=certificadas,
     )

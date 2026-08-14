@@ -145,9 +145,15 @@ class RotaTentativaCusteada:
     route_id: str
     provider_id: str
     adaptador: ClienteTentativaCusteada
+    moeda: Moeda = "BRL"
 
     def __post_init__(self) -> None:
-        if not _identificador(self.route_id) or not _identificador(self.provider_id):
+        if (
+            not _identificador(self.route_id)
+            or not _identificador(self.provider_id)
+            or type(self.moeda) is not str
+            or self.moeda not in _ARQUIVO_POR_MOEDA
+        ):
             raise ErroOrcamento("identidade de rota custeada invalida")
 
 
