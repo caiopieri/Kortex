@@ -23,6 +23,12 @@ from motor.orcamento import (
 from motor.servico import GerenciadorJobs
 
 
+# Espelha teto_bootstrap_brl de exemplos/cfg-omniroute.json (150.0), o config
+# de operador real. O lado de teste modela um operador realista, nao um numero
+# escolhido pra fazer a suite passar.
+TETO_OPERADOR_TESTE = Decimal("150")
+
+
 def topologia_stub() -> tuple[RotaOrcadaCertificada, ...]:
     """Topologia offline explícita; não é evidência de providers reais."""
     return (
@@ -83,12 +89,13 @@ def dependencias_servico_stub(
     return {
         **dependencias_stub(cliente, raiz),
         "rotas_certificadas": topologia_stub(),
-        "teto_bootstrap": Decimal("2"),
+        "teto_bootstrap": TETO_OPERADOR_TESTE,
     }
 
 
 def construir_grafo_teste(cliente: Any, log: Any, **kwargs: Any):
     """Compila Stub offline com custo fake somente quando não há deps explícitas."""
+    kwargs.setdefault("teto_bootstrap", TETO_OPERADOR_TESTE)
     repo = kwargs.get("repositorio_orcamento")
     fabrica = kwargs.get("fabrica_tentativas_orcadas")
     if (repo is None) != (fabrica is None):

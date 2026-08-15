@@ -10,6 +10,7 @@ from motor.eventos import LogEventos
 from motor.grafo import construir_grafo
 from motor.orcamento import CotacaoTentativa, RepositorioOrcamento, ResultadoTentativa, RotaTentativaCusteada
 from motor.politica import PoliticaGates
+from tests.helpers_grafo import TETO_OPERADOR_TESTE
 
 
 def test_resume_manual_preserva_veredito_sem_recobrar_evaluator(tmp_path):
@@ -52,6 +53,7 @@ def test_resume_manual_preserva_veredito_sem_recobrar_evaluator(tmp_path):
         LogEventos(tmp_path / "eventos.jsonl"), checkpointer=InMemorySaver(),
         politica=PoliticaGates(overrides={"plano": "prosseguir"}),
         repositorio_orcamento=repo, fabrica_tentativas_orcadas=fabrica,
+        teto_bootstrap=TETO_OPERADOR_TESTE,
     )
     config = {"configurable": {"thread_id": "thread-manual"}}
     pausado = grafo.invoke(
@@ -112,6 +114,7 @@ def test_duas_reconciliacoes_nao_reusam_identidade_executor_verifier(tmp_path):
         politica=PoliticaGates(overrides={"plano": "prosseguir", "cobertura": "preencher"}),
         max_rodadas_reconciliacao=2, repositorio_orcamento=repo,
         fabrica_tentativas_orcadas=fabrica,
+        teto_bootstrap=TETO_OPERADOR_TESTE,
     )
     resultado = grafo.invoke({"spec": spec, "run_id": "run-r", "thread_id": "thread-r"})
 

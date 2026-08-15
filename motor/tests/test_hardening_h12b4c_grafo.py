@@ -20,6 +20,7 @@ from motor.orcamento import (
     TentativaTerminal,
 )
 from motor.politica import PoliticaGates
+from tests.helpers_grafo import TETO_OPERADOR_TESTE
 
 
 SPEC = json.loads(
@@ -53,6 +54,7 @@ def _grafo(tmp_path, repo=None, fabrica=None, legado=None):
         politica=PoliticaGates(overrides={"plano": "abortar"}),
         repositorio_orcamento=repo,
         fabrica_tentativas_orcadas=fabrica,
+        teto_bootstrap=TETO_OPERADOR_TESTE,
     )
     return grafo, legado
 
