@@ -10,7 +10,7 @@
       "modelo de dados da fatia 2 coerente com o schema da fatia 1 (RLS por empresa, FK para veiculo)"
     ]
   },
-  "restricoes": { "teto_custo": 2.0, "max_subagentes": 4, "max_tentativas": 3 },
+  "restricoes": { "teto_custo": 60.0, "max_subagentes": 4, "max_tentativas": 3 },
   "subagentes": [
     {
       "id": "custos-alfa",

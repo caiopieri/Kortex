@@ -7,7 +7,7 @@
     "contexto": "Mede se contexto recuperado de um dataset sobre Rust ownership melhora a resposta do especialista.",
     "criterios_cobertura": ["explica por que o valor foi movido", "mostra uma correcao compilavel", "aborda Result e o operador ?"]
   },
-  "restricoes": {"teto_custo": 2.0, "max_subagentes": 1, "max_tentativas": 2},
+  "restricoes": {"teto_custo": 60.0, "max_subagentes": 1, "max_tentativas": 2},
   "subagentes": [{
     "id": "especialista-rust",
     "tipo": "modelo",

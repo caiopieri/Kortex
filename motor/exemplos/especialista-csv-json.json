@@ -2,7 +2,7 @@
   "versao": "0.1",
   "padrao": "grafo_dependencias",
   "missao": {"id": "especialista-csv-json", "objetivo": "Converter CSV pequeno de pedido em JSON com totais por linha.", "contexto": "Experimento item 13: especialista barato+RAG contra generalista topo sem RAG.", "criterios_cobertura": ["schema_json aprovado"]},
-  "restricoes": {"teto_custo": 2.0, "max_subagentes": 2, "max_tentativas": 1},
+  "restricoes": {"teto_custo": 60.0, "max_subagentes": 2, "max_tentativas": 1},
   "subagentes": [
     {
       "id": "transformador-csv-json", "tipo": "modelo", "papel": "executor",

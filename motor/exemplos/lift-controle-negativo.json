@@ -7,7 +7,7 @@
     "contexto": "Controle negativo do item 3 red-team: o dataset RAG menciona os mesmos jargoes do lift v2, mas em contexto deliberadamente irrelevante.",
     "criterios_cobertura": ["resposta validada pelo validador deterministico contem"]
   },
-  "restricoes": {"teto_custo": 2.0, "max_subagentes": 2, "max_tentativas": 1},
+  "restricoes": {"teto_custo": 60.0, "max_subagentes": 2, "max_tentativas": 1},
   "subagentes": [
     {
       "id": "especialista-docs",

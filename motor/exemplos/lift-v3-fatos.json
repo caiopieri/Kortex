@@ -7,7 +7,7 @@
     "contexto": "Experimento v3 do item 3B: os fatos exigidos devem vir do corpus recuperado, nao de fluencia generica.",
     "criterios_cobertura": ["resposta validada pelo validador deterministico contem"]
   },
-  "restricoes": {"teto_custo": 2.0, "max_subagentes": 2, "max_tentativas": 1},
+  "restricoes": {"teto_custo": 60.0, "max_subagentes": 2, "max_tentativas": 1},
   "subagentes": [
     {
       "id": "especialista-fatos-internos",

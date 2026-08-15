@@ -12,7 +12,7 @@
     ]
   },
   "restricoes": {
-    "teto_custo": 2.0,
+    "teto_custo": 60.0,
     "max_subagentes": 10,
     "max_tentativas": 3
   },

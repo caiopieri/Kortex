@@ -7,7 +7,7 @@
     "contexto": "Experimento item 3 red-team: a resposta precisa combinar a descricao da Fase C nos docs de produto com a regra de honestidade visual do validador no brief de design.",
     "criterios_cobertura": ["JSON validado por schema_json com campos derivados"]
   },
-  "restricoes": {"teto_custo": 2.0, "max_subagentes": 2, "max_tentativas": 1},
+  "restricoes": {"teto_custo": 60.0, "max_subagentes": 2, "max_tentativas": 1},
   "subagentes": [
     {
       "id": "analista-derivacao",
