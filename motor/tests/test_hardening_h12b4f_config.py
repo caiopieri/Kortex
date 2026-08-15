@@ -1,6 +1,7 @@
 import json
 import sys
 from decimal import Decimal
+from types import SimpleNamespace
 
 import pytest
 
@@ -314,6 +315,89 @@ def test_cli_nao_engole_falha_do_relay_durante_excecao(tmp_path, monkeypatch):
     assert str(capturada.value.__cause__) == "relay indisponivel"
     assert isinstance(capturada.value.__cause__.__context__, ValueError)
     assert str(capturada.value.__cause__.__context__) == "falha original"
+
+
+def _preparar_cli_com_gate(
+    tmp_path, monkeypatch, *, flags, portao, tty, ao_input,
+):
+    cfg = tmp_path / "modelos-gate.json"
+    cfg.write_text(json.dumps(_cfg()), encoding="utf-8")
+    cliente = ClienteStub(lambda *_args: "ok")
+    deps = composicao_stub(cliente, tmp_path / "orcamento-gate")
+    caminho_log = tmp_path / "eventos-gate.jsonl"
+    invocacoes = []
+    drenos = []
+
+    class Grafo:
+        def invoke(self, entrada, _config):
+            invocacoes.append(entrada)
+            if len(invocacoes) == 1:
+                return {"__interrupt__": [SimpleNamespace(value={
+                    "portao": portao,
+                    "pergunta": "decidir",
+                    "lacunas": [],
+                    "opcoes": ["prosseguir", "abortar"],
+                })]}
+            return {"resposta_final": "ok"}
+
+    monkeypatch.setattr(
+        "motor.__main__.compor_orcamento_openai",
+        lambda *_args, **_kwargs: deps,
+    )
+    monkeypatch.setattr("motor.__main__.construir_grafo", lambda *_args, **_kwargs: Grafo())
+    monkeypatch.setattr("motor.__main__.LogEventos", lambda _path: LogEventos(caminho_log))
+    monkeypatch.setattr(
+        "motor.__main__._drenar_orcamento_cli",
+        lambda *_args: drenos.append(True) or True,
+    )
+    monkeypatch.setattr("builtins.input", ao_input)
+    monkeypatch.setattr(sys, "stdin", SimpleNamespace(isatty=lambda: tty))
+    monkeypatch.setattr(sys, "argv", [
+        "motor", "missao", "--modelos", str(cfg), "--workspace", str(tmp_path),
+        "--run-id", "run-gate", *flags,
+    ])
+    return invocacoes, drenos
+
+
+def test_cli_auto_falha_fechado_sem_pedir_decisao_apos_escalada(
+    tmp_path, monkeypatch, capsys,
+):
+    invocacoes, drenos = _preparar_cli_com_gate(
+        tmp_path, monkeypatch, flags=["--auto"], portao="cobertura", tty=True,
+        ao_input=lambda _prompt: pytest.fail("--auto não pode chamar input"),
+    )
+
+    assert main() == 1
+    assert len(invocacoes) == 1
+    assert len(drenos) == 2
+    assert "execução desassistida encerrada" in capsys.readouterr().out
+
+
+def test_cli_sem_tty_falha_fechado_em_vez_de_chamar_input(
+    tmp_path, monkeypatch, capsys,
+):
+    invocacoes, _drenos = _preparar_cli_com_gate(
+        tmp_path, monkeypatch, flags=[], portao="cobertura", tty=False,
+        ao_input=lambda _prompt: pytest.fail("stdin não interativo não pode chamar input"),
+    )
+
+    assert main() == 1
+    assert len(invocacoes) == 1
+    assert "gate 'cobertura' requer decisão humana" in capsys.readouterr().out
+
+
+def test_cli_auto_respeita_override_manual_em_tty(tmp_path, monkeypatch):
+    invocacoes, drenos = _preparar_cli_com_gate(
+        tmp_path, monkeypatch,
+        flags=["--auto", "--gate", "cobertura=manual"],
+        portao="cobertura", tty=True,
+        ao_input=lambda _prompt: "prosseguir",
+    )
+
+    assert main() == 0
+    assert len(invocacoes) == 2
+    assert invocacoes[1].resume == "prosseguir"
+    assert len(drenos) == 2
 
 
 def test_cli_redelivera_outbox_apos_lease_sem_ack(tmp_path):

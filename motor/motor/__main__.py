@@ -283,7 +283,7 @@ def main() -> int:
     # --auto / --gate <id>=<modo>: política de gates (Corte C). --auto liga o
     # master (tudo automático); --gate crava exceção por gate (repetível). Também
     # lê "politica_gates" da config de --modelos. CLI tem precedência.
-    from .politica import politica_de_config
+    from .politica import GATES_SENSIVEIS, politica_de_config
     politica = politica_de_config((cfg_modelos or {}).get("politica_gates"))
     if "--auto" in args:
         politica.auto_mode = True
@@ -425,6 +425,17 @@ def main() -> int:
                 pedido = resultado["__interrupt__"][0].value
                 print(f"\n[GATE {pedido['portao']}] {pedido['pergunta']}")
                 print(f"  lacunas: {pedido.get('lacunas')}\n  opções: {pedido['opcoes']}")
+                portao = pedido["portao"]
+                manual_intencional = (
+                    politica.overrides.get(portao) == "manual"
+                    or portao in GATES_SENSIVEIS
+                )
+                if (politica.auto_mode and not manual_intencional) or not sys.stdin.isatty():
+                    print(
+                        f"erro: gate '{portao}' requer decisão humana; "
+                        "execução desassistida encerrada"
+                    )
+                    return 1
                 decisao = input("decisão> ").strip()
                 resultado = grafo.invoke(Command(resume=decisao), config)
 
