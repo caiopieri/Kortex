@@ -126,16 +126,22 @@ def _invocar(
 
 
 @pytest.mark.parametrize(
-    ("fronteira", "motivo"),
+    ("fronteira", "motivos_esperados"),
     [
-        ("executor", "falha externa do executor"),
-        ("verifier", "falha externa do verifier"),
+        (
+            "executor",
+            [
+                "efeito externo com custo desconhecido (UNKNOWN_COST)",
+                "sessao de orcamento inativa (BLOQUEADA)",
+            ],
+        ),
+        ("verifier", ["sessao de orcamento inativa (BLOQUEADA)"]),
     ],
 )
 def test_excecao_externa_preserva_retry_sem_vazar_detalhe(
     tmp_path: Path,
     fronteira: str,
-    motivo: str,
+    motivos_esperados: list[str],
 ) -> None:
     class Cliente:
         def __init__(self) -> None:
@@ -157,8 +163,11 @@ def test_excecao_externa_preserva_retry_sem_vazar_detalhe(
     assert estado["resultados"][0]["aprovado"] is False
     assert cliente.chamadas["A"] == 1
     assert cliente.chamadas["verifier"] == (1 if fronteira == "verifier" else 0)
-    erros = [dados for tipo, dados in log.eventos if tipo == "executor.erro"]
-    assert any(dados["motivo"] == "modelo não respondeu" for dados in erros)
+    erros = [
+        dados for tipo, dados in log.eventos
+        if tipo == "executor.erro" and dados["executor"] == "A"
+    ]
+    assert [dados["motivo"] for dados in erros] == motivos_esperados
     assert "detalhe confidencial" not in json.dumps(log.eventos, ensure_ascii=False)
 
 

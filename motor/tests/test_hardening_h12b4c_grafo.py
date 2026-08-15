@@ -59,6 +59,66 @@ def _grafo(tmp_path, repo=None, fabrica=None, legado=None):
     return grafo, legado
 
 
+def _invocar_executor_com_resultado(
+    tmp_path, monkeypatch, resultado_executor,
+):
+    repo = RepositorioOrcamento(tmp_path / "runs-executor")
+    log = LogEventos(tmp_path / "eventos-executor.jsonl")
+    chamadas = []
+
+    def executar(_repo, _sessao, identidade, _adaptador):
+        chamadas.append(identidade.route_id)
+        if identidade.route_id.startswith("executor-"):
+            return resultado_executor(identidade.route_id)
+        respostas = {
+            "apoio-verifier": json.dumps({"aprovado": True, "motivo": "ok"}),
+            "apoio-evaluator": json.dumps({"aprovado": True, "lacunas": []}),
+            "apoio-synthesizer": "síntese",
+        }
+        return TentativaReconciliada(ResultadoTentativa(
+            respostas[identidade.route_id], Decimal("0"), "BRL", "usage-apoio",
+        ))
+
+    def fabrica(papel, *_):
+        if papel == "pesquisador":
+            return [
+                RotaTentativaCusteada("executor-a", "provedor-a", object()),
+                RotaTentativaCusteada("executor-b", "provedor-b", object()),
+            ]
+        return [RotaTentativaCusteada(
+            f"apoio-{papel}", f"provedor-{papel}", object(),
+        )]
+
+    spec = json.loads(json.dumps(SPEC))
+    spec["subagentes"] = [spec["subagentes"][0]]
+    spec["restricoes"]["max_tentativas"] = 1
+    spec["restricoes"]["teto_custo"] = 2
+    monkeypatch.setattr(modulo_grafo, "executar_tentativa_custeada", executar)
+    grafo = construir_grafo(
+        ClienteStub(lambda *_: pytest.fail("cliente legado não deve ser chamado")),
+        log,
+        politica=PoliticaGates(overrides={"plano": "prosseguir"}),
+        repositorio_orcamento=repo,
+        fabrica_tentativas_orcadas=fabrica,
+        teto_bootstrap=TETO_OPERADOR_TESTE,
+    )
+    try:
+        grafo.invoke({"spec": spec, "run_id": "run-executor", "thread_id": "thread"})
+    finally:
+        log.fechar()
+    eventos = [
+        json.loads(linha)
+        for linha in (tmp_path / "eventos-executor.jsonl").read_text().splitlines()
+    ]
+    chamadas_executor = [rota for rota in chamadas if rota.startswith("executor-")]
+    motivos_executor = [
+        evento["motivo"] for evento in eventos
+        if evento["evento"] == "executor.erro"
+        and evento["executor"] == SPEC["subagentes"][0]["id"]
+    ]
+    return chamadas_executor, motivos_executor
+
+
 def test_planner_reserva_antes_de_cada_retry_e_usa_identidades_distintas(tmp_path):
     repo = RepositorioOrcamento(tmp_path / "runs")
     eventos = []
@@ -155,6 +215,60 @@ def test_grafo_nao_tenta_rota_b_depois_de_terminal(tmp_path, monkeypatch):
         })
 
     assert chamadas == ["rota-a", "rota-a", "rota-a"]
+
+
+def test_executor_loga_teto_quando_toda_cadeia_e_bloqueada_antes_do_efeito(
+    tmp_path, monkeypatch,
+):
+    chamadas, motivos = _invocar_executor_com_resultado(
+        tmp_path, monkeypatch, lambda _rota: TentativaBloqueadaPreEfeito("teto"),
+    )
+
+    assert chamadas == ["executor-a", "executor-b"]
+    assert motivos == [
+        "bloqueio pré-efeito: executor-a=teto; executor-b=teto",
+    ]
+    assert "modelo não respondeu" not in motivos
+
+
+def test_executor_loga_terminal_e_nao_tenta_fallback(tmp_path, monkeypatch):
+    chamadas, motivos = _invocar_executor_com_resultado(
+        tmp_path,
+        monkeypatch,
+        lambda _rota: TentativaTerminal(
+            "reserva anterior pode ter produzido efeito", "REPLAY_AMBIGUO",
+        ),
+    )
+
+    assert chamadas == ["executor-a"]
+    assert motivos == [
+        "reserva anterior pode ter produzido efeito (REPLAY_AMBIGUO)",
+    ]
+
+
+def test_executor_preserva_status_terminal_ao_truncar_motivo(tmp_path, monkeypatch):
+    _chamadas, motivos = _invocar_executor_com_resultado(
+        tmp_path,
+        monkeypatch,
+        lambda _rota: TentativaTerminal("x" * 500, "REPLAY_AMBIGUO"),
+    )
+
+    assert motivos == [f"{'x' * 360} (REPLAY_AMBIGUO)"]
+
+
+def test_executor_so_diz_modelo_nao_respondeu_apos_chamada_reconciliada_sem_texto(
+    tmp_path, monkeypatch,
+):
+    chamadas, motivos = _invocar_executor_com_resultado(
+        tmp_path,
+        monkeypatch,
+        lambda _rota: TentativaReconciliada(
+            ResultadoTentativa(None, Decimal("0"), "BRL", "usage-sem-texto"),
+        ),
+    )
+
+    assert chamadas == ["executor-a", "executor-b"]
+    assert motivos == ["modelo não respondeu"]
 
 
 @pytest.mark.parametrize("ausente", ["repo", "fabrica", "thread"])

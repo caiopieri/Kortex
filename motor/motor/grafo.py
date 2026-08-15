@@ -17,10 +17,11 @@ import hashlib
 import json
 import os
 import shlex
+from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Annotated, Any, Callable, Mapping, Optional, Sequence, TypedDict, cast
+from typing import Annotated, Any, Callable, Mapping, Optional, Sequence, TypeAlias, TypedDict, cast
 from uuid import uuid4
 
 from langgraph.graph import END, START, StateGraph
@@ -37,6 +38,7 @@ from .orcamento import (
     RepositorioOrcamento,
     RespostaTentativaCusteada,
     RotaTentativaCusteada,
+    StatusTentativaTerminal,
     TentativaBloqueadaPreEfeito,
     TentativaReconciliada,
     TentativaTerminal,
@@ -81,6 +83,30 @@ class EstadoMotor(TypedDict, total=False):
     preenchimento_vazio: bool
     decisao_cobertura: str
     escaladas_cobertura: int
+
+
+@dataclass(frozen=True)
+class ChamadaOrcadaSemResposta:
+    pass
+
+
+@dataclass(frozen=True)
+class ChamadaOrcadaBloqueada:
+    motivo: str
+
+
+@dataclass(frozen=True)
+class ChamadaOrcadaTerminal:
+    motivo: str
+    status_reserva: StatusTentativaTerminal
+
+
+ResultadoChamadaOrcada: TypeAlias = (
+    RespostaTentativaCusteada
+    | ChamadaOrcadaSemResposta
+    | ChamadaOrcadaBloqueada
+    | ChamadaOrcadaTerminal
+)
 
 
 class _VereditoVerifier(BaseModel):
@@ -621,10 +647,26 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         fase: str = "spec",
     ) -> str | None:
         thread_id = state.get("thread_id") or (run_id if isinstance(cliente, ClienteStub) else None)
-        resposta = chamar_orcado(
+        resultado = chamar_orcado(
             run_id, thread_id, teto_bootstrap, "planner", fase, "planner", prompt, tentativa,
         )
+        resposta = resposta_orcada_ou_none(resultado)
         return resposta.texto if resposta is not None else None
+
+    def resposta_orcada_ou_none(
+        resultado: ResultadoChamadaOrcada,
+    ) -> RespostaTentativaCusteada | None:
+        match resultado:
+            case RespostaTentativaCusteada():
+                return resultado
+            case (
+                ChamadaOrcadaSemResposta()
+                | ChamadaOrcadaBloqueada()
+                | ChamadaOrcadaTerminal()
+            ):
+                return None
+            case _:
+                assert_never(resultado)
 
     def chamar_orcado(
         run_id: object,
@@ -637,7 +679,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         tentativa: int,
         requisitos: RequisitosTentativaCusteada | None = None,
         ciclo: int = 0,
-    ) -> RespostaTentativaCusteada | None:
+    ) -> ResultadoChamadaOrcada:
         if repositorio_orcamento is None:
             raise ErroOrcamento("repositorio de orcamento ausente")
         if fabrica_tentativas_orcadas is None:
@@ -656,6 +698,8 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         )
         if not isinstance(cadeia, list) or not cadeia:
             raise ErroOrcamento("adaptador custeado ausente")
+        bloqueios: list[tuple[str, str]] = []
+        modelo_sem_resposta = False
         for indice, item in enumerate(cadeia, start=1):
             if not isinstance(item, RotaTentativaCusteada):
                 raise ErroOrcamento("adaptador custeado invalido")
@@ -696,13 +740,21 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                         return RespostaTentativaCusteada(
                             resultado_reconciliado.texto, route_id, provider_id,
                         )
-                case TentativaBloqueadaPreEfeito():
-                    pass
-                case TentativaTerminal():
-                    return None
+                    modelo_sem_resposta = True
+                case TentativaBloqueadaPreEfeito(motivo=motivo):
+                    bloqueios.append((route_id, motivo))
+                case TentativaTerminal(motivo=motivo, status_reserva=status_reserva):
+                    return ChamadaOrcadaTerminal(motivo, status_reserva)
                 case _:
                     assert_never(resultado)
-        return None
+        if modelo_sem_resposta:
+            return ChamadaOrcadaSemResposta()
+        if bloqueios:
+            detalhes = "; ".join(
+                f"{route_id}={motivo}" for route_id, motivo in bloqueios
+            )
+            return ChamadaOrcadaBloqueada(f"bloqueio pré-efeito: {detalhes}")
+        return ChamadaOrcadaBloqueada("nenhuma rota elegível")
 
     def workspace_de(state: EstadoMotor) -> Path:
         return workspace_base / state["run_id"] / "artefatos"
@@ -971,7 +1023,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                 feedback=bloco_feedback,
             )
             try:
-                resposta_executor = chamar_orcado(
+                resultado_executor = chamar_orcado(
                     payload.get("run_id"), payload.get("thread_id"),
                     spec["restricoes"]["teto_custo"], sub["papel"], "executor",
                     sub["id"], prompt_subagente, tentativa,
@@ -982,7 +1034,6 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                     ),
                     int(payload.get("ciclo_reconciliacao", 0)),
                 )
-                ultima = resposta_executor.texto if resposta_executor is not None else None
             except Exception as erro:
                 # O modelo continua recebendo texto genérico -- devolver a
                 # exceção crua para dentro do prompt é entregar detalhe interno
@@ -1001,13 +1052,37 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                     tentativa=tentativa,
                 )
                 continue
-            if not ultima:
-                feedback = "modelo não respondeu"
-                log.evento("executor.erro", executor=sub["id"], motivo=feedback, tentativa=tentativa)
-                continue
+            match resultado_executor:
+                case RespostaTentativaCusteada():
+                    resposta_executor = resultado_executor
+                    ultima = resposta_executor.texto
+                case ChamadaOrcadaSemResposta():
+                    feedback = "modelo não respondeu"
+                    log.evento(
+                        "executor.erro", executor=sub["id"],
+                        motivo=feedback, tentativa=tentativa,
+                    )
+                    continue
+                case ChamadaOrcadaBloqueada(motivo=motivo):
+                    feedback = "falha externa do executor"
+                    log.evento(
+                        "executor.erro", executor=sub["id"],
+                        motivo=motivo[:400], tentativa=tentativa,
+                    )
+                    continue
+                case ChamadaOrcadaTerminal(motivo=motivo, status_reserva=status_reserva):
+                    feedback = "falha externa do executor"
+                    log.evento(
+                        "executor.erro", executor=sub["id"],
+                        motivo=f"{motivo[:360]} ({status_reserva})",
+                        tentativa=tentativa,
+                    )
+                    continue
+                case _:
+                    assert_never(resultado_executor)
             log.evento("executor.respondeu", executor=sub["id"], tentativa=tentativa)
             try:
-                resposta_verifier_orcada = chamar_orcado(
+                resultado_verifier_orcado = chamar_orcado(
                     payload.get("run_id"), payload.get("thread_id"),
                     spec["restricoes"]["teto_custo"], "verifier", "verifier",
                     sub["id"],
@@ -1020,14 +1095,17 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                     tentativa,
                     RequisitosTentativaCusteada(
                         evitar_provedor=(
-                            resposta_executor.provider_id if resposta_executor is not None else None
+                            resposta_executor.provider_id
                         ),
                     ),
                     int(payload.get("ciclo_reconciliacao", 0)),
                 )
+                resposta_verifier_orcada = resposta_orcada_ou_none(
+                    resultado_verifier_orcado,
+                )
                 resposta_verifier = (
                     resposta_verifier_orcada.texto
-                    if resposta_verifier_orcada is not None else None
+                    if resposta_verifier_orcada else None
                 )
             except Exception:
                 feedback = "falha externa do verifier"
@@ -1439,7 +1517,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         log.evento("executor.chamado", executor="global_evaluator",
                    modelo=_descricao_modelo("evaluator"),
                    **_template_evento(spec))
-        resposta = chamar_orcado(
+        resultado_chamada = chamar_orcado(
             state.get("run_id"), state.get("thread_id"), spec["restricoes"]["teto_custo"],
             "evaluator", "evaluator", "global_evaluator",
             PROMPT_EVALUATOR.format(
@@ -1450,6 +1528,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
             ordinal,
             RequisitosTentativaCusteada(evitar_provedor=evitar_provedor),
         )
+        resposta = resposta_orcada_ou_none(resultado_chamada)
         if resposta is None:
             raise ErroOrcamento("evaluator orcado indisponivel")
         bruto_veredito = extrai_json(resposta.texto)
@@ -1722,7 +1801,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                    modelo=_descricao_modelo("synthesizer"),
                    **_template_evento(spec))
         try:
-            resposta_orcada = chamar_orcado(
+            resultado_chamada = chamar_orcado(
                 state.get("run_id"), state.get("thread_id"), spec["restricoes"]["teto_custo"],
                 "synthesizer", "synthesizer", "synthesizer",
                 PROMPT_SYNTHESIZER.format(
@@ -1740,6 +1819,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                 ),
                 1,
             )
+            resposta_orcada = resposta_orcada_ou_none(resultado_chamada)
         except ErroOrcamento:
             resposta_orcada = None
         if resposta_orcada is None:
