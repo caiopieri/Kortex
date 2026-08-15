@@ -2,6 +2,7 @@ import time
 import json
 import sqlite3
 import threading
+from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -120,9 +121,15 @@ def test_servico_certificado_injeta_orcamento_e_identidade_estavel(tmp_path):
         ledger = tmp_path / "orcamento" / "servico-orcado" / "orcamento.sqlite3"
         assert ledger.is_file()
         with sqlite3.connect(f"file:{ledger}?mode=ro", uri=True) as con:
-            assert con.execute(
+            linhas = con.execute(
                 "SELECT run_id,thread_id,teto,status FROM budget_session"
-            ).fetchall() == [("servico-orcado", "servico-orcado", "2", "ACTIVE")]
+            ).fetchall()
+            assert len(linhas) == 1
+            run_id_obs, thread_id_obs, teto_obs, status_obs = linhas[0]
+            assert (run_id_obs, thread_id_obs, status_obs) == (
+                "servico-orcado", "servico-orcado", "ACTIVE",
+            )
+            assert Decimal(teto_obs) == Decimal(str(SPEC["restricoes"]["teto_custo"]))
             assert con.execute("SELECT COUNT(*) FROM budget_outbox").fetchone()[0] > 0
             assert con.execute(
                 "SELECT DISTINCT estado FROM budget_outbox_claim"

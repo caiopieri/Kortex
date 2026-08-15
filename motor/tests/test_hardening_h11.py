@@ -375,9 +375,15 @@ def test_servico_reconcilia_automaticamente_apos_restart_de_processo(
     ledger_orcamento = workspace / ".orcamento-teste" / "restart-h11" / "orcamento.sqlite3"
     assert ledger_orcamento.is_file()
     with sqlite3.connect(f"file:{ledger_orcamento}?mode=ro", uri=True) as con:
-        assert con.execute(
+        linhas = con.execute(
             "SELECT run_id,thread_id,teto,status FROM budget_session"
-        ).fetchall() == [("restart-h11", "restart-h11", "2", "ACTIVE")]
+        ).fetchall()
+        assert len(linhas) == 1
+        run_id_obs, thread_id_obs, teto_obs, status_obs = linhas[0]
+        assert (run_id_obs, thread_id_obs, status_obs) == (
+            "restart-h11", "restart-h11", "ACTIVE",
+        )
+        assert Decimal(teto_obs) == Decimal(str(SPEC["restricoes"]["teto_custo"]))
         assert con.execute("SELECT COUNT(*) FROM budget_outbox").fetchone()[0] > 0
         assert con.execute(
             "SELECT DISTINCT estado FROM budget_outbox_claim"

@@ -56,6 +56,10 @@ de escolher em silêncio — é o que rende as melhores contribuições dele.
    verdes: o writer novo em `status()` (achado lendo o diff) e a perda de cobertura (achada
    contando testes). Enquanto a dívida 12 existir, qualquer fatia que toque relay, status ou
    lock precisa de leitura de diff — o gate não decide.
+9. **Commit que altera arquivo em `exemplos/` roda a suíte completa antes de subir.**
+   `exemplos/missao-pesquisa.json` é fixture de `tests/test_grafo.py:30` e chega por
+   reexportação em `test_servico.py` e `test_hardening_h11.py`. Mudar um número lá dentro
+   é mudar a suíte, e não parece que é.
 
 **Regra de medição (custou um dia inteiro para ser descoberta):** rodar a suíte completa
 **UM DE CADA VEZ por checkout**. `motor/__main__.py` abre o `log.jsonl` da raiz sob flock
