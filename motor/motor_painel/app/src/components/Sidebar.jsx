@@ -17,6 +17,7 @@ const NAV = [
     zone: 'Projeto: Todos',
     items: [
       { label: 'Dashboard', path: '/dashboard' },
+      { label: 'Canvas', path: '/canvas' },
       { label: 'Grafo 2D', path: '/grafo' },
       { label: 'Grafo 3D', path: '/grafo3d' },
       { label: 'Workflows', path: '/workflows' },

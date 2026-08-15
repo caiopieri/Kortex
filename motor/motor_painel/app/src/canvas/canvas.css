@@ -1,0 +1,1520 @@
+/* Kortex · Canvas — estilos base
+ *
+ * DOIS EIXOS, independentes:
+ *   data-theme = dark | light   → luminosidade
+ *   data-pele  = origem | bruma → linguagem visual
+ *
+ * `origem` e o sistema de marca portado da landing (branch landing-page):
+ * off-white quente, raio generoso, micro-rotulo em versal espacado, ativo por
+ * INVERSAO. `bruma` e a linguagem de ferramenta densa — preto azulado, raio
+ * curto, tipografia sem versal, ativo por DEGRAU DE LUZ em vez de inversao.
+ *
+ * A regra que sobrevive nas duas, porque e de marca e nao de estilo: cor
+ * cromatica e reservada a telemetria semantica, nunca a interface. Nenhuma pele
+ * pode introduzir azul de UI, botao roxo ou gradiente de acento.
+ *
+ * ZERO cor fora deste arquivo: componente consome var(--token).
+ * Pele ausente cai em `origem` — os blocos de `bruma` tem especificidade maior
+ * de proposito, entao sao override e nao base.
+ */
+
+.kxc {
+  --ease: cubic-bezier(0.22, 0.8, 0.24, 1);
+  /* Reservado a telemetria. Nenhum controle de UI pode usar. */
+  --green: #3dc97e;
+
+  /* --- forma e tipo da pele `origem` --- */
+  --fonte-ui: 'Archivo', system-ui, -apple-system, sans-serif;
+  --raio-g: 16px;
+  --raio-capsula: 14px;
+  --raio-m: 10px;
+  --raio-p: 3px;
+  --raio-selo: 99px;
+  --alt-btn: 32px;
+  --corpo-espaco: 0.01em;
+  --micro-tam: 9px;
+  --micro-espaco: 0.16em;
+  --micro-caixa: uppercase;
+  --micro-peso: 600;
+}
+
+/* Raio curto e constante, tipografia sem versal, controle 2px mais baixo. A
+   densidade e metade do conforto: versal espacado e raio grande sao exatamente
+   o que faz uma ferramenta parecer landing page. */
+.kxc[data-pele='bruma'] {
+  --fonte-ui: 'Inter', system-ui, -apple-system, sans-serif;
+  --raio-g: 10px;
+  --raio-capsula: 9px;
+  --raio-m: 6px;
+  --raio-p: 4px;
+  --raio-selo: 6px;
+  --alt-btn: 30px;
+  --corpo-espaco: -0.006em;
+  --micro-tam: 11px;
+  --micro-espaco: 0;
+  --micro-caixa: none;
+  --micro-peso: 500;
+}
+
+.kxc[data-theme='dark'] {
+  --bg: #0b0c0e;
+  --bg-alt: #0e1013;
+  --surface: #111318;
+  --surface-2: #161920;
+  --line: rgba(235, 236, 240, 0.09);
+  --line-strong: rgba(235, 236, 240, 0.18);
+  --text: #f2f1ed;
+  --text-soft: #a7aab2;
+  --text-faint: #6c7077;
+  --accent: #f2f1ed;
+  --inv-bg: #f2f1ed;
+  --inv-fg: #0b0c0e;
+  --sel-bg: #f2f1ed;
+  --sel-fg: #0b0c0e;
+  --sel-linha: transparent;
+  --grade: rgba(235, 236, 240, 0.05);
+  --grade-forte: rgba(235, 236, 240, 0.09);
+  --sombra: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 28px rgba(0, 0, 0, 0.45);
+  --plano: #14161b;
+}
+
+.kxc[data-theme='light'] {
+  --bg: #e8e8e4;
+  --bg-alt: #edece6;
+  --surface: #ffffff;
+  --surface-2: #f8f7f3;
+  --line: rgba(23, 24, 26, 0.1);
+  --line-strong: rgba(23, 24, 26, 0.22);
+  --text: #141518;
+  --text-soft: #4c4f54;
+  --text-faint: #8b8e93;
+  --accent: #141518;
+  --inv-bg: #141518;
+  --inv-fg: #f4f3ef;
+  --sel-bg: #141518;
+  --sel-fg: #f4f3ef;
+  --sel-linha: transparent;
+  --grade: rgba(23, 24, 26, 0.055);
+  --grade-forte: rgba(23, 24, 26, 0.1);
+  --sombra: 0 1px 2px rgba(23, 24, 26, 0.06), 0 8px 28px rgba(23, 24, 26, 0.1);
+  --plano: #fbfbfa;
+}
+
+/* --- paleta de `bruma` ---
+   Cinzas com fundo azul-violeta (r < g < b por 1-2 pontos). Cinza puro chapa
+   e cinza quente amarela; o desvio minimo para o azul e o que da profundidade
+   sem introduzir cor. O painel e MAIS CLARO que o plano do canvas: painel
+   flutua, nao afunda. E o degrau entre camadas e proposital de 3-5% — degrau
+   grande com borda forte e a assinatura de interface gerada, nao de ferramenta. */
+.kxc[data-pele='bruma'][data-theme='dark'] {
+  --bg: #08090b;
+  --bg-alt: #0b0c0e;
+  --surface: #131417;
+  --surface-2: #1b1c20;
+  --line: rgba(255, 255, 255, 0.07);
+  --line-strong: rgba(255, 255, 255, 0.14);
+  --text: #f2f3f5;
+  --text-soft: #9297a1;
+  --text-faint: #61656e;
+  --accent: #f2f3f5;
+  --inv-bg: #f2f3f5;
+  --inv-fg: #08090b;
+  /* Ativo por degrau de luz + borda, nao por inversao: a inversao e legivel mas
+     grita, e gritar e o oposto de confortavel. */
+  --sel-bg: #26282e;
+  --sel-fg: #ffffff;
+  --sel-linha: rgba(255, 255, 255, 0.1);
+  --grade: rgba(255, 255, 255, 0.035);
+  --grade-forte: rgba(255, 255, 255, 0.065);
+  /* Anel de 1px + queda difusa + realce interno no topo. O realce e o que faz
+     a borda superior do painel parecer captar luz em vez de ser desenhada. */
+  --sombra: 0 0 0 1px rgba(0, 0, 0, 0.45), 0 10px 30px -8px rgba(0, 0, 0, 0.75),
+    inset 0 1px 0 rgba(255, 255, 255, 0.045);
+  --plano: #0e0f12;
+}
+
+.kxc[data-pele='bruma'][data-theme='light'] {
+  --bg: #f6f6f7;
+  --bg-alt: #f0f0f2;
+  --surface: #ffffff;
+  --surface-2: #f2f2f4;
+  --line: rgba(9, 9, 11, 0.08);
+  --line-strong: rgba(9, 9, 11, 0.16);
+  --text: #18191c;
+  --text-soft: #5f636b;
+  --text-faint: #8d919a;
+  --accent: #18191c;
+  --inv-bg: #18191c;
+  --inv-fg: #ffffff;
+  --sel-bg: #e8e8ec;
+  --sel-fg: #0f1013;
+  --sel-linha: rgba(9, 9, 11, 0.09);
+  --grade: rgba(9, 9, 11, 0.045);
+  --grade-forte: rgba(9, 9, 11, 0.085);
+  --sombra: 0 0 0 1px rgba(9, 9, 11, 0.045), 0 8px 24px -8px rgba(9, 9, 11, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  --plano: #fafafb;
+}
+
+.kxc, .kxc * {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.kxc {
+  font-family: var(--fonte-ui);
+  font-size: 14px;
+  line-height: 1.5;
+  letter-spacing: var(--corpo-espaco);
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+.kxc .mono {
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+/* Em `bruma` a mono para de ser decoracao e vira SINAL: fica so no que e valor
+   reportado pela maquina — zoom, contagem, rodape de estado. Rotulo de secao e
+   texto humano e volta para a fonte de interface. Mono em rotulo estrutural e
+   uma das coisas que faz a tela parecer disfarce de terminal em vez de
+   ferramenta. */
+[data-pele='bruma'] .menu-titulo,
+.kxc[data-pele='bruma'] .pp-titulo {
+  font-family: var(--fonte-ui);
+}
+
+.kxc button {
+  font: inherit;
+  color: inherit;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+.kxc button:disabled {
+  cursor: default;
+  opacity: 0.38;
+}
+
+/* Montado DENTRO do painel: preenche o `<main>`, nao a janela. `position:
+   fixed` aqui cobriria a sidebar e a topbar. */
+.kxc {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.kxc .app {
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+  transition:
+    background 0.35s var(--ease),
+    color 0.35s var(--ease);
+}
+
+/* ---------- superficie infinita ---------- */
+
+.kxc .superficie {
+  position: absolute;
+  inset: 0;
+  background-color: var(--plano);
+  cursor: grab;
+  touch-action: none;
+}
+
+.kxc .superficie[data-arrastando='sim'] {
+  cursor: grabbing;
+}
+
+.kxc .grade {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.kxc .mundo {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+/* Marca d'agua da origem do mundo — a unica pista de que 0,0 existe. */
+.kxc .origem {
+  position: absolute;
+  width: 13px;
+  height: 13px;
+  margin: -7px 0 0 -7px;
+  border-left: 1px solid var(--line-strong);
+  border-top: 1px solid var(--line-strong);
+}
+
+/* ---------- vista de andares (perspectiva) ---------- */
+
+.kxc .pilha {
+  position: absolute;
+  inset: 0;
+  perspective: 1500px;
+  perspective-origin: 50% 42%;
+  transform-style: preserve-3d;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.kxc .plano {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 62vw;
+  height: 34.9vw;
+  margin: -17.45vw 0 0 -31vw;
+  border: 1px solid var(--line);
+  border-radius: var(--raio-p);
+  background-color: var(--plano);
+  box-shadow: var(--sombra);
+  /* Sem preserve-3d o filho e achatado no plano do pai e a contra-rotacao do
+     rotulo vira um esmagamento vertical em vez de endireitar o texto. */
+  transform-style: preserve-3d;
+  /* `transform` vem inline do React: o mesmo valor carrega o nivel do andar e o
+     estado entrando/saindo. Aqui fica so a transicao que o anima. */
+  transition:
+    transform 0.42s var(--ease),
+    opacity 0.42s var(--ease),
+    filter 0.42s var(--ease);
+  cursor: pointer;
+}
+
+/* Contra-rotaciona a inclinacao do plano: sem isso o rotulo deita junto com a
+   superficie e vira um risco ilegivel. Ancorado no canto inferior esquerdo,
+   que e o unico ponto que nao se desloca ao desfazer a rotacao. */
+.kxc .plano-rotulo {
+  position: absolute;
+  left: 0;
+  bottom: 100%;
+  transform: rotateX(-58deg);
+  transform-origin: 0 100%;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 0 0 7px 2px;
+  font-size: 12px;
+  letter-spacing: var(--corpo-espaco);
+  color: var(--text-soft);
+  white-space: nowrap;
+}
+
+.kxc .plano-rotulo b {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.kxc .plano-rotulo span {
+  font-size: var(--micro-tam);
+  letter-spacing: var(--micro-espaco);
+  text-transform: var(--micro-caixa);
+  color: var(--text-faint);
+}
+
+/* ---------- cromo flutuante ---------- */
+
+.kxc .canto {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 10;
+}
+
+.kxc .canto-se {
+  top: 14px;
+  left: 14px;
+}
+.kxc .canto-sd {
+  top: 14px;
+  right: 14px;
+}
+.kxc .canto-id {
+  bottom: 14px;
+  right: 14px;
+  align-items: flex-end;
+  flex-direction: column;
+  gap: 10px;
+}
+.kxc .canto-topo {
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.kxc .capsula {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: var(--raio-capsula);
+  background: var(--surface);
+  box-shadow: var(--sombra);
+}
+
+.kxc .capsula-linha {
+  flex-direction: row;
+}
+
+.kxc .btn {
+  display: grid;
+  place-items: center;
+  width: var(--alt-btn);
+  height: var(--alt-btn);
+  border-radius: var(--raio-m);
+  color: var(--text-soft);
+  transition:
+    background 0.18s var(--ease),
+    color 0.18s var(--ease);
+}
+
+.kxc .btn:hover:not(:disabled) {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.kxc .btn[aria-pressed='true'] {
+  background: var(--sel-bg);
+  color: var(--sel-fg);
+  box-shadow: inset 0 0 0 1px var(--sel-linha);
+}
+
+.kxc .btn svg {
+  width: 17px;
+  height: 17px;
+}
+
+/* Variante com rotulo: precisa de flex, nao do grid centrado do .btn, senao
+   icone e texto empilham. */
+.kxc .btn-texto {
+  display: flex;
+  width: auto;
+  gap: 7px;
+  padding: 0 12px;
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+/* Seletor de pele: controle de COMPARACAO, nao cromo de produto. Existe para
+   decidir qual linguagem fica no Kortex; some quando a decisao for tomada. */
+.kxc .pele-op {
+  height: var(--alt-btn);
+  padding: 0 11px;
+  border-radius: var(--raio-m);
+  font-size: var(--micro-tam);
+  font-weight: var(--micro-peso);
+  letter-spacing: var(--micro-espaco);
+  text-transform: var(--micro-caixa);
+  color: var(--text-faint);
+  transition:
+    background 0.18s var(--ease),
+    color 0.18s var(--ease);
+}
+
+.kxc .pele-op:hover {
+  color: var(--text);
+}
+
+.kxc .pele-op[aria-pressed='true'] {
+  background: var(--sel-bg);
+  color: var(--sel-fg);
+  box-shadow: inset 0 0 0 1px var(--sel-linha);
+}
+
+/* Marca: sem pilula. Ela e a identidade da tela, nao um controle — caixa,
+   borda e sombra a faziam ler como botao ao lado do botao de menu de verdade.
+   Solta e maior, ocupa a altura da capsula vizinha e volta a ser assinatura. */
+.kxc .marca {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 0 6px;
+  color: var(--text);
+}
+
+.kxc .marca-simbolo {
+  width: 30px;
+  height: 30px;
+  flex: none;
+}
+
+/* Proporcao do sistema de marca: logotipo com metade da altura do simbolo. */
+.kxc .marca-nome {
+  height: 15px;
+  width: auto;
+  flex: none;
+}
+
+/* ---------- menu de navegacao ---------- */
+
+.kxc .menu {
+  position: absolute;
+  top: calc(100% + 9px);
+  left: 0;
+  width: 236px;
+  /* Para acima do selo do andar, no canto inferior esquerdo — os dois moram na
+     mesma coluna e se sobrepunham em janela baixa. */
+  max-height: calc(100vh - 112px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+  padding: 9px 8px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--raio-g);
+  background: var(--surface);
+  box-shadow: var(--sombra);
+}
+
+.kxc .menu-zona + .menu-zona {
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.kxc .menu-titulo {
+  padding: 7px 10px 5px;
+  font-size: var(--micro-tam);
+  font-weight: var(--micro-peso);
+  letter-spacing: var(--micro-espaco);
+  text-transform: var(--micro-caixa);
+  color: var(--text-faint);
+}
+
+.kxc .menu-item {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  border-radius: var(--raio-m);
+  font-size: 13px;
+  text-align: left;
+  color: var(--text-soft);
+  transition:
+    background 0.16s var(--ease),
+    color 0.16s var(--ease);
+}
+
+.kxc .menu-item:hover:not(:disabled) {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+/* Item sem destino: legivel, mas inconfundivelmente inerte. O tracejado a
+   esquerda e o sinal a distancia de que a aba existe e a rota nao. */
+.kxc .menu-item:disabled {
+  opacity: 1;
+  color: var(--text-faint);
+  border-left: 1px dashed var(--line-strong);
+  border-radius: 0 var(--raio-m) var(--raio-m) 0;
+  padding-left: 12px;
+}
+
+.kxc .menu-rodape {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 8px;
+  padding: 8px 10px 3px;
+  border-top: 1px solid var(--line);
+  font-size: var(--micro-tam);
+  letter-spacing: var(--micro-espaco);
+  text-transform: var(--micro-caixa);
+  color: var(--text-faint);
+}
+
+.kxc .menu-rodape i {
+  width: 6px;
+  height: 6px;
+  border: 1px solid var(--text-faint);
+  border-radius: 50%;
+  flex: none;
+}
+
+/* zoom */
+
+.kxc .zoom {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--raio-capsula);
+  background: var(--surface);
+  box-shadow: var(--sombra);
+}
+
+.kxc .zoom-valor {
+  min-width: 54px;
+  height: 28px;
+  padding: 0 4px;
+  border-radius: var(--raio-m);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-soft);
+  transition: background 0.18s var(--ease);
+}
+
+.kxc .zoom-valor:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.kxc .zoom .btn {
+  width: 28px;
+  height: 28px;
+}
+
+/* ---------- painel de andar e projeto ---------- */
+
+.kxc .pp {
+  --dx: 0px;
+  --dy: 0px;
+  width: 246px;
+  padding: 6px 9px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--raio-g);
+  background: var(--surface);
+  box-shadow: var(--sombra);
+  transform: translate(var(--dx), var(--dy));
+}
+
+/* Pegador: a unica area que arrasta. Arrastar pelo corpo inteiro brigaria com
+   o clique nos chips e nos itens da lista. */
+.kxc .pp-pegador {
+  display: flex;
+  justify-content: center;
+  padding: 3px 0 9px;
+  cursor: grab;
+  touch-action: none;
+}
+
+.kxc .pp-pegador[data-arrastando='sim'] {
+  cursor: grabbing;
+}
+
+.kxc .pp-pegador span {
+  width: 34px;
+  height: 3px;
+  border-radius: var(--raio-p);
+  background: var(--line-strong);
+}
+
+.kxc .pp-pegador:hover span {
+  background: var(--text-faint);
+}
+
+.kxc .pp-secao + .pp-secao {
+  margin-top: 6px;
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
+}
+
+.kxc .pp-titulo {
+  padding: 0 3px 7px;
+  font-size: var(--micro-tam);
+  font-weight: var(--micro-peso);
+  letter-spacing: var(--micro-espaco);
+  text-transform: var(--micro-caixa);
+  color: var(--text-faint);
+}
+
+/* Andar rola na horizontal — percorrer o predio. */
+.kxc .pp-trilho {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 3px;
+  scrollbar-width: none;
+}
+
+.kxc .pp-trilho::-webkit-scrollbar {
+  display: none;
+}
+
+.kxc .pp-chip {
+  flex: none;
+  padding: 6px 13px;
+  border: 1px solid var(--line);
+  border-radius: var(--raio-selo);
+  font-size: 12.5px;
+  white-space: nowrap;
+  color: var(--text-soft);
+  transition:
+    background 0.16s var(--ease),
+    color 0.16s var(--ease),
+    border-color 0.16s var(--ease);
+}
+
+.kxc .pp-chip:hover {
+  color: var(--text);
+  border-color: var(--line-strong);
+}
+
+.kxc .pp-chip[data-ativo='sim'] {
+  background: var(--sel-bg);
+  border-color: var(--sel-linha);
+  color: var(--sel-fg);
+}
+
+/* Projeto rola na vertical — lista. */
+.kxc .pp-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 184px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+.kxc .pp-item {
+  flex: none;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--raio-m);
+  font-size: 13px;
+  text-align: left;
+  color: var(--text-soft);
+  transition:
+    background 0.16s var(--ease),
+    color 0.16s var(--ease),
+    border-color 0.16s var(--ease);
+}
+
+.kxc .pp-item:hover {
+  color: var(--text);
+  border-color: var(--line-strong);
+}
+
+.kxc .pp-item[data-ativo='sim'] {
+  background: var(--sel-bg);
+  border-color: var(--sel-linha);
+  color: var(--sel-fg);
+}
+
+.kxc .pp-rodape {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 9px;
+  padding: 8px 3px 2px;
+  border-top: 1px solid var(--line);
+  font-size: var(--micro-tam);
+  letter-spacing: var(--micro-espaco);
+  text-transform: var(--micro-caixa);
+  color: var(--text-faint);
+}
+
+.kxc .pp-rodape i {
+  width: 6px;
+  height: 6px;
+  border: 1px solid var(--text-faint);
+  border-radius: 50%;
+  flex: none;
+}
+
+/* ---------- minimapa ---------- */
+
+.kxc .minimapa {
+  padding: 6px 6px 0;
+  border: 1px solid var(--line);
+  border-radius: var(--raio-capsula);
+  background: var(--surface);
+  box-shadow: var(--sombra);
+}
+
+.kxc .mm-tela {
+  display: block;
+  border-radius: var(--raio-m);
+  background: var(--plano);
+  cursor: crosshair;
+}
+
+.kxc .mm-vista {
+  fill: color-mix(in srgb, var(--accent) 9%, transparent);
+  stroke: var(--line-strong);
+  stroke-width: 1;
+}
+
+.kxc .mm-origem {
+  stroke: var(--text-faint);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+}
+
+.kxc .mm-rodape {
+  padding: 6px 4px 5px;
+  font-size: var(--micro-tam);
+  letter-spacing: var(--micro-espaco);
+  text-transform: var(--micro-caixa);
+  text-align: center;
+  color: var(--text-faint);
+}
+
+/* ---------- painel de andares ---------- */
+
+.kxc .andares {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 7px;
+}
+
+.kxc .andar-novo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 13px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--raio-capsula);
+  font-size: 12.5px;
+  color: var(--text-soft);
+  background: color-mix(in srgb, var(--surface) 60%, transparent);
+  transition:
+    color 0.18s var(--ease),
+    border-color 0.18s var(--ease);
+}
+
+.kxc .andar-novo:hover {
+  color: var(--text);
+  border-color: var(--text-faint);
+}
+
+.kxc .andar-novo svg {
+  width: 13px;
+  height: 13px;
+}
+
+.kxc .andar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--raio-capsula);
+  background: var(--surface);
+  box-shadow: var(--sombra);
+  font-size: 12.5px;
+  color: var(--text-soft);
+  transition:
+    background 0.18s var(--ease),
+    color 0.18s var(--ease);
+}
+
+.kxc .andar:hover {
+  color: var(--text);
+}
+
+.kxc .andar[data-ativo='sim'] {
+  background: var(--sel-bg);
+  border-color: var(--sel-linha);
+  color: var(--sel-fg);
+}
+
+.kxc .andar-nome {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+
+.kxc .andar svg {
+  width: 14px;
+  height: 14px;
+  opacity: 0.65;
+}
+
+.kxc .andar-fechar {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  margin-right: -4px;
+  border-radius: 50%;
+  color: inherit;
+  opacity: 0.5;
+}
+
+.kxc .andar-fechar:hover {
+  opacity: 1;
+}
+
+.kxc .andar-fechar svg {
+  width: 9px;
+  height: 9px;
+  opacity: 1;
+}
+
+/* Contagem de objetos do andar. So aparece com objeto real — nada de numero
+   decorativo: nada existe por estar no canvas. */
+.kxc .andar-conta {
+  min-width: 17px;
+  height: 17px;
+  padding: 0 5px;
+  border-radius: var(--raio-selo);
+  background: var(--sel-bg);
+  color: var(--sel-fg);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 17px;
+  text-align: center;
+}
+
+.kxc .andar[data-ativo='sim'] .andar-conta {
+  background: var(--sel-fg);
+  color: var(--sel-bg);
+}
+
+/* ---------- aviso de superficie sem dado ---------- */
+
+.kxc .selo-vazio {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  z-index: 10;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--raio-selo);
+  background: color-mix(in srgb, var(--surface) 60%, transparent);
+  font-size: var(--micro-tam);
+  letter-spacing: var(--micro-espaco);
+  text-transform: var(--micro-caixa);
+  color: var(--text-faint);
+  pointer-events: none;
+}
+
+.kxc .selo-vazio i {
+  width: 6px;
+  height: 6px;
+  border: 1px solid var(--text-faint);
+  border-radius: 50%;
+}
+
+/* ---------- entrada e saida ----------
+   TRANSICAO, nunca keyframe. Keyframe tem inicio e fim fixos: interrompido no
+   meio, o elemento salta para o comeco da animacao contraria. Transicao parte
+   sempre do valor computado no instante da troca, entao clicar para abrir no
+   meio do fechamento continua de onde estava, so que abrindo.
+   Trocar qualquer `transition` daqui por `animation` quebra exatamente isso. */
+
+.menu,
+.minimapa,
+.kxc .andares {
+  transition:
+    opacity 0.2s var(--ease),
+    transform 0.2s var(--ease);
+}
+
+.menu[data-dentro='nao'],
+.minimapa[data-dentro='nao'],
+.kxc .andares[data-dentro='nao'] {
+  opacity: 0;
+  transform: translateY(7px) scale(0.985);
+  /* Painel saindo nao intercepta clique: durante a saida ele ainda esta na
+     tela e engoliria o clique destinado ao que esta atras. */
+  pointer-events: none;
+}
+
+/* O painel arrastavel compoe a saida COM o deslocamento do arrasto, senao ele
+   salta para o canto ao fechar. */
+.kxc .pp {
+  transition:
+    opacity 0.2s var(--ease),
+    transform 0.2s var(--ease);
+}
+
+.kxc .pp[data-dentro='nao'] {
+  opacity: 0;
+  transform: translate(var(--dx), calc(var(--dy) + 7px)) scale(0.985);
+  pointer-events: none;
+}
+
+/* Enquanto arrasta nao ha transicao: ela poria o painel atras do ponteiro. */
+.kxc .pp[data-arrastando='sim'] {
+  transition: none;
+}
+
+/* A pilha se desdobra do plano ao entrar e se deita de volta ao sair, com a
+   superficie plana montada por baixo o tempo todo. O `transform` de cada plano
+   vem do React (carrega o nivel do andar junto), a transicao vem daqui. */
+.kxc .pilha {
+  transition: opacity 0.38s var(--ease);
+}
+
+.kxc .pilha[data-dentro='nao'] {
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plano,
+  .pilha,
+  .menu,
+  .minimapa,
+  .andares,
+.kxc .pp {
+    transition: none;
+  }
+}
+
+/* ---------- grafo da run na superficie ----------
+   Tudo aqui vive dentro de `.mundo`, entao as medidas sao unidades de MUNDO e
+   a escala do viewport cuida do resto. */
+
+.kxc .fluxo {
+  position: absolute;
+  overflow: visible;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+}
+
+.kxc .fluxo-aresta {
+  fill: none;
+  stroke: var(--line-strong);
+  stroke-width: 1.5;
+}
+
+.kxc .no {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 260px;
+  padding: 9px 11px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--raio-g);
+  background: var(--surface);
+  box-shadow: var(--sombra);
+}
+
+/* Contorno mais forte no no que falhou. A cor semantica fica nos itens de
+   falha; a borda so chama atencao sem afirmar causa. */
+.kxc .no[data-estado='falhou'] {
+  border-color: var(--line-strong);
+}
+
+.kxc .no-topo {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 7px;
+}
+
+.kxc .no-id {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.kxc .no-papel {
+  font-size: var(--micro-tam);
+  letter-spacing: var(--micro-espaco);
+  text-transform: var(--micro-caixa);
+  color: var(--text-faint);
+}
+
+.kxc .no-artefato {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 8px;
+  margin-top: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--raio-m);
+  font-size: 12px;
+  text-align: left;
+  color: var(--text-soft);
+  transition:
+    background 0.16s var(--ease),
+    color 0.16s var(--ease);
+}
+
+.kxc .no-artefato:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--surface-2);
+}
+
+.kxc .no-artefato[data-aberto='sim'] {
+  background: var(--sel-bg);
+  color: var(--sel-fg);
+  border-color: var(--sel-linha);
+}
+
+.kxc .no-artefato span:last-child {
+  font-size: var(--micro-tam);
+  color: var(--text-faint);
+}
+
+/* ---------- falhas ----------
+   O `data-forma` e a unica coisa que separa "nada aconteceu" de "pode ter
+   acontecido e nao sabemos". Cor AQUI e permitida: e telemetria semantica, nao
+   cromo. Mas nunca fica so na cor — cada falha tambem diz o efeito por escrito
+   em `.falha-efeito`, senao a distincao morre para quem nao enxerga cor. */
+
+.no-falha,
+.kxc .estacao-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 5px;
+  padding: 6px 8px;
+  border-left: 2px solid var(--text-faint);
+  border-radius: 0 var(--raio-p) var(--raio-p) 0;
+  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+  font-size: 11.5px;
+  color: var(--text-soft);
+}
+
+/* Nada aconteceu: seguro, retentavel. */
+.no-falha[data-forma='bloqueio-pre-efeito'],
+.kxc .estacao-item[data-forma='bloqueio-pre-efeito'] {
+  border-left-color: var(--green);
+}
+
+/* A cadeia parou e pode ter havido efeito cobrado. Exige run nova, nunca retry. */
+.no-falha[data-forma='terminal-ambiguo'],
+.kxc .estacao-item[data-forma='terminal-ambiguo'] {
+  border-left-color: #e0553d;
+  border-left-width: 3px;
+}
+
+.kxc .falha-efeito {
+  font-style: normal;
+  font-size: var(--micro-tam);
+  letter-spacing: var(--micro-espaco);
+  color: var(--text-faint);
+}
+
+.kxc .falha-rotas {
+  font-size: 10.5px;
+  color: var(--text-faint);
+  word-break: break-word;
+}
+
+/* ---------- estacao de pre-voo ----------
+   Ponto FIXO do mundo. Falha sistemica nao ganha posicao propria: ganha este
+   destino, sempre o mesmo. Tracejada porque nao e um no do grafo. */
+
+.kxc .estacao {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 300px;
+  padding: 10px 12px 12px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--raio-g);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+}
+
+.kxc .estacao[data-carregada='sim'] {
+  border-style: solid;
+  box-shadow: var(--sombra);
+}
+
+.kxc .estacao-topo {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.kxc .estacao-topo span {
+  font-size: var(--micro-tam);
+  letter-spacing: var(--micro-espaco);
+  text-transform: var(--micro-caixa);
+  color: var(--text-faint);
+}
+
+.kxc .estacao-regra {
+  margin-top: 5px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-faint);
+}
+
+/* ---------- visor de artefato ---------- */
+
+.kxc .artefato {
+  position: absolute;
+  top: 62px;
+  right: 14px;
+  bottom: 62px;
+  z-index: 11;
+  display: flex;
+  flex-direction: column;
+  width: 460px;
+  max-width: calc(100vw - 28px);
+  border: 1px solid var(--line);
+  border-radius: var(--raio-g);
+  background: var(--surface);
+  box-shadow: var(--sombra);
+  overflow: hidden;
+}
+
+.kxc .artefato-topo {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 8px 7px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.kxc .artefato-topo b {
+  font-size: 13px;
+}
+
+.kxc .artefato-topo span {
+  flex: 1;
+  font-size: var(--micro-tam);
+  letter-spacing: var(--micro-espaco);
+  color: var(--text-faint);
+}
+
+.kxc .artefato-corpo {
+  flex: 1;
+  overflow: auto;
+  padding: 12px;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre;
+  tab-size: 4;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+.kxc .artefato-rodape {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 12px;
+  border-top: 1px solid var(--line);
+  font-size: var(--micro-tam);
+  letter-spacing: var(--micro-espaco);
+  color: var(--text-faint);
+  word-break: break-all;
+}
+
+.kxc .artefato-rodape i {
+  width: 6px;
+  height: 6px;
+  border: 1px solid var(--text-faint);
+  border-radius: 50%;
+  flex: none;
+}
+
+/* ---------- selo de leitura e lista de runs ---------- */
+
+.kxc .selo-vazio[data-alerta='sim'] {
+  border-color: var(--line-strong);
+  color: var(--text-soft);
+}
+
+.kxc .selo-vazio[data-alerta='sim'] i {
+  border-color: var(--text-soft);
+  background: var(--text-soft);
+}
+
+.kxc .selo-acao {
+  margin-left: 4px;
+  padding: 1px 7px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--raio-p);
+  font: inherit;
+  color: var(--text-soft);
+  pointer-events: auto;
+}
+
+.kxc .selo-acao:hover {
+  color: var(--text);
+  border-color: var(--text-faint);
+}
+
+/* O selo inteiro e `pointer-events: none` para nao engolir arrasto da
+   superficie; so o botao volta a receber clique. */
+.kxc .selo-vazio {
+  pointer-events: none;
+}
+
+.kxc .pp-run {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 9px;
+}
+
+.kxc .pp-run-seq {
+  font-size: 10px;
+  color: var(--text-faint);
+}
+
+.kxc .pp-run[data-ativo='sim'] .pp-run-seq {
+  color: inherit;
+  opacity: 0.7;
+}
+
+/* Run que abortou fica marcada na lista: escolher uma run e escolher o que
+   investigar, e o desfecho e a informacao que orienta a escolha. */
+.kxc .pp-run[data-desfecho='tarefa.abortada'] .pp-run-nome::after {
+  content: ' ·  abortada';
+  font-size: 10px;
+  color: var(--text-faint);
+}
+
+.kxc .pp-vazio {
+  padding: 8px 3px;
+  font-size: var(--micro-tam);
+  letter-spacing: var(--micro-espaco);
+  color: var(--text-faint);
+}
+
+.kxc .artefato {
+  transition:
+    opacity 0.2s var(--ease),
+    transform 0.2s var(--ease);
+}
+
+.kxc .artefato[data-dentro='nao'] {
+  opacity: 0;
+  transform: translateX(10px) scale(0.99);
+  pointer-events: none;
+}
+
+.kxc .no-mais {
+  margin-top: 5px;
+  padding-left: 8px;
+  font-size: var(--micro-tam);
+  letter-spacing: var(--micro-espaco);
+  color: var(--text-faint);
+}
+
+/* Altura de cada pedaco de falha e FIXA porque `layout.js` estima a altura do
+   cartao a partir dela. Tirar o corte de linhas devolve a sobreposicao. */
+.kxc .falha-motivo {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.kxc .falha-rotas {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Evento e tentativa na MESMA linha: `.no-falha` e coluna, entao sem isto cada
+   um ocupava uma linha e a altura estimada em layout.js errava por bloco. */
+.kxc .falha-cabeca {
+  display: block;
+}
+
+.kxc .falha-efeito {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Terminal nao DESCARTADO: a falha nao declara efeito e o `(status_reserva)`
+   pode ter sido cortado pelo truncamento em 400. Tracejado na cor de terminal —
+   marca a duvida sem afirmar o pior, que seria tao errado quanto ignorar. */
+.no-falha[data-terminal-descartado='nao'],
+.kxc .estacao-item[data-terminal-descartado='nao'] {
+  border-left-style: dashed;
+  border-left-color: #b8683f;
+}
+
+/* Confirmado terminal continua solido e mais grosso: duvida e certeza nao podem
+   ler igual. */
+.no-falha[data-forma='terminal-ambiguo'],
+.kxc .estacao-item[data-forma='terminal-ambiguo'] {
+  border-left-style: solid;
+}
+
+/* ---------- painel de notificacoes ----------
+   Mesma casca do painel de projeto (`.pp`), com a lista propria. */
+
+.kxc .pn {
+  width: 320px;
+}
+
+.kxc .pn-topo {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.kxc .pn-limpar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--raio-m);
+  font-size: 11.5px;
+  color: var(--text-soft);
+  transition:
+    color 0.16s var(--ease),
+    border-color 0.16s var(--ease);
+}
+
+.kxc .pn-limpar:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--line-strong);
+}
+
+.kxc .pn-limpar svg {
+  width: 13px;
+  height: 13px;
+}
+
+.kxc .pn-lista {
+  max-height: 300px;
+  gap: 5px;
+}
+
+.kxc .pn-item {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+  border-radius: var(--raio-m);
+  overflow: hidden;
+}
+
+/* Cor semantica: telemetria, nao cromo. Mesma escala do grafo, para o olho
+   ligar a notificacao a falha desenhada. */
+.kxc .pn-item[data-severidade='terminal'] {
+  border-left-color: #e0553d;
+}
+.kxc .pn-item[data-severidade='sistemica'] {
+  border-left-color: #b8683f;
+}
+.kxc .pn-item[data-severidade='localizada'] {
+  border-left-color: var(--text-faint);
+}
+.kxc .pn-item[data-severidade='leitura'] {
+  border-left-color: var(--line-strong);
+  border-left-style: dashed;
+}
+
+.kxc .pn-ir {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 8px 10px;
+  text-align: left;
+  color: var(--text-soft);
+  transition: background 0.16s var(--ease);
+}
+
+.kxc .pn-ir:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+.kxc .pn-cabeca {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  min-width: 0;
+}
+
+.kxc .pn-cabeca b {
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kxc .pn-tag {
+  flex: none;
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.kxc .pn-detalhe {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.kxc .pn-destino {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  color: var(--text-faint);
+}
+
+.kxc .pn-destino svg {
+  width: 11px;
+  height: 11px;
+}
+
+.kxc .pn-dispensar {
+  flex: none;
+  width: 26px;
+  color: var(--text-faint);
+  font-size: 15px;
+  line-height: 1;
+  transition:
+    color 0.16s var(--ease),
+    background 0.16s var(--ease);
+}
+
+.kxc .pn-dispensar:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+
+/* ---------- contagem no sino ---------- */
+
+.kxc .btn-sino {
+  position: relative;
+  overflow: visible;
+}
+
+.kxc .btn-conta {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+  border-radius: 99px;
+  background: var(--inv-bg);
+  color: var(--inv-fg);
+  font-size: 9.5px;
+  font-weight: 600;
+  line-height: 15px;
+  text-align: center;
+}

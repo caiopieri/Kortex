@@ -105,6 +105,24 @@ body {
   gap: 20px;
 }
 
+/* Rota que renderiza uma superficie em vez de uma pagina: sem padding, sem
+   rolagem do container e sem gap. So o canvas usa. */
+.mf-main--cheio {
+  padding: 0;
+  overflow: hidden;
+  gap: 0;
+}
+
+/* `.mf-root` e `min-height: 100vh` porque pagina cresce com o conteudo. Uma
+   superficie nao cresce: ela ocupa o que ha e navega por dentro. Sem travar a
+   altura aqui, `.mf-main--cheio` nao tem limite de onde herdar e o canvas
+   empurra o rodape para fora da janela. */
+.mf-root--fixo {
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
+}
+
 /* Tipografia */
 .eyebrow {
   font-family: 'IBM Plex Mono', monospace;
