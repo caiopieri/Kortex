@@ -338,6 +338,9 @@ def main() -> int:
 
     raiz = Path(__file__).parent.parent
     log = LogEventos(raiz / "log.jsonl")
+    repositorios_orcamento: dict[Moeda, RepositorioOrcamento] = {}
+    dreno_emergencial_habilitado = False
+    dreno_final_tentado = False
     try:
         config = {"configurable": {"thread_id": run_id}}
         ferramentas = ferramentas_de_registro(dir_registro) if dir_registro is not None else {}
@@ -370,6 +373,7 @@ def main() -> int:
             }
             if not _drenar_orcamento_cli(repositorios_orcamento, run_id, log):
                 raise ErroOrcamento("relay monetario pendente")
+            dreno_emergencial_habilitado = True
         except ErroOrcamento as ex:
             print(f"erro: orçamento indisponível: {ex}")
             return 1
@@ -425,6 +429,7 @@ def main() -> int:
                 resultado = grafo.invoke(Command(resume=decisao), config)
 
         try:
+            dreno_final_tentado = True
             if not _drenar_orcamento_cli(repositorios_orcamento, run_id, log):
                 raise ErroOrcamento("relay monetario pendente")
         except Exception as ex:
@@ -434,7 +439,19 @@ def main() -> int:
         print(resultado.get("resposta_final", "(missão abortada)"))
         return 0
     finally:
-        log.fechar()
+        try:
+            if dreno_emergencial_habilitado and not dreno_final_tentado:
+                try:
+                    if not _drenar_orcamento_cli(
+                        repositorios_orcamento, run_id, log,
+                    ):
+                        raise ErroOrcamento("relay monetario pendente")
+                except Exception as erro_relay:
+                    raise ErroOrcamento(
+                        "execucao falhou e relay monetario ficou pendente"
+                    ) from erro_relay
+        finally:
+            log.fechar()
 
 
 if __name__ == "__main__":

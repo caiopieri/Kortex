@@ -237,6 +237,85 @@ def test_cli_injeta_identidade_repositorio_e_fabrica(tmp_path, monkeypatch):
     assert drains == ["run-config-1", "run-config-1"]
 
 
+def _preparar_cli_excepcional(tmp_path, monkeypatch, ao_invocar):
+    cfg = tmp_path / "modelos-excepcional.json"
+    cfg.write_text(json.dumps(_cfg()), encoding="utf-8")
+    cliente = ClienteStub(lambda *_args: "ok")
+    deps = composicao_stub(cliente, tmp_path / "orcamento-excepcional")
+    repo = deps.orcamentos["BRL"].repositorio
+    caminho_log = tmp_path / "eventos-excepcional.jsonl"
+
+    class Grafo:
+        def invoke(self, entrada, config):
+            return ao_invocar(repo, entrada, config)
+
+    monkeypatch.setattr(
+        "motor.__main__.compor_orcamento_openai",
+        lambda *_args, **_kwargs: deps,
+    )
+    monkeypatch.setattr("motor.__main__.construir_grafo", lambda *_args, **_kwargs: Grafo())
+    monkeypatch.setattr("motor.__main__.LogEventos", lambda _path: LogEventos(caminho_log))
+    monkeypatch.setattr(sys, "argv", [
+        "motor", "missao", "--modelos", str(cfg), "--workspace", str(tmp_path),
+        "--run-id", "run-excepcional",
+    ])
+    return repo, caminho_log
+
+
+def test_cli_drena_evidencia_duravel_quando_grafo_levanta(tmp_path, monkeypatch):
+    def falhar_depois_do_bloqueio(repo, entrada, _config):
+        sessao = repo.sessao(entrada["run_id"], entrada["thread_id"], Decimal("2"))
+        reserva = ReservaOrcamento(
+            "reserva-teto", "call-teto", "rota-teto", 1, Decimal("3"), "v1",
+        )
+        assert repo.reservar_exclusiva(sessao, reserva).status == "BLOQUEADA"
+        raise RuntimeError("falha da missao")
+
+    repo, caminho_log = _preparar_cli_excepcional(
+        tmp_path, monkeypatch, falhar_depois_do_bloqueio,
+    )
+
+    with pytest.raises(RuntimeError, match="falha da missao"):
+        main()
+
+    eventos = [
+        json.loads(linha) for linha in caminho_log.read_text().splitlines()
+    ]
+    bloqueados = [evento for evento in eventos if evento["evento"] == "custo.bloqueado"]
+    assert [evento["motivo"] for evento in bloqueados] == ["teto"]
+    assert repo.listar_pendentes("run-excepcional") == []
+    reaberto = LogEventos(caminho_log, truncar=False)
+    reaberto.fechar()
+
+
+def test_cli_nao_engole_falha_do_relay_durante_excecao(tmp_path, monkeypatch):
+    def falhar(_repo, _entrada, _config):
+        raise ValueError("falha original")
+
+    _preparar_cli_excepcional(tmp_path, monkeypatch, falhar)
+    chamadas = 0
+
+    def drenar(*_args):
+        nonlocal chamadas
+        chamadas += 1
+        if chamadas == 1:
+            return True
+        raise RuntimeError("relay indisponivel")
+
+    monkeypatch.setattr("motor.__main__._drenar_orcamento_cli", drenar)
+
+    with pytest.raises(
+        ErroOrcamento, match="execucao falhou e relay monetario ficou pendente",
+    ) as capturada:
+        main()
+
+    assert chamadas == 2
+    assert isinstance(capturada.value.__cause__, RuntimeError)
+    assert str(capturada.value.__cause__) == "relay indisponivel"
+    assert isinstance(capturada.value.__cause__.__context__, ValueError)
+    assert str(capturada.value.__cause__.__context__) == "falha original"
+
+
 def test_cli_redelivera_outbox_apos_lease_sem_ack(tmp_path):
     repo = RepositorioOrcamento(tmp_path / "orcamento")
     sessao = repo.sessao("run", "run", Decimal("10"))
