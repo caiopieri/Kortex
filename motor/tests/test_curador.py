@@ -2,6 +2,8 @@ import json
 import subprocess
 import sys
 
+import pytest
+
 from motor.curador import analisar, carregar_runs, certificar_sombra, formatar_custo_markdown, formatar_markdown, preparar_promocao_gated, propor, rodar_sombra
 
 
@@ -768,30 +770,27 @@ def test_markdown_e_cli_json(tmp_path):
 def test_rodar_sombra_agrega_titular_e_candidato():
     proposta = {"slot": "executor/simples", "titular": "modelo-atual", "candidato": "modelo-novo"}
     casos = [
-        {
-            "id": "caso-1",
-            "slot": "executor/simples",
-            "entrada": {"prompt": "..."},
-            "titular": {"modelo": "modelo-atual", "aprovado": True, "custo_usd": 0.02},
-        },
-        {
-            "id": "caso-2",
-            "slot": "executor/simples",
-            "entrada": {"prompt": "..."},
-            "titular": {"modelo": "modelo-atual", "aprovado": False, "custo_usd": 0.02},
-        },
+        {"id": "caso-1", "slot": "executor/simples", "entrada": {"prompt": "..."}},
+        {"id": "caso-2", "slot": "executor/simples", "entrada": {"prompt": "..."}},
     ]
 
+    # Os DOIS modelos passam pelo runner, nos mesmos casos: o titular nao vem
+    # mais de um dict do chamador.
     respostas = {
-        "caso-1": {"aprovado": True, "custo_usd": 0.01, "saida": "ok", "motivo": ""},
-        "caso-2": {"aprovado": False, "custo_usd": 0.01, "saida": "n/d", "motivo": "raso"},
+        ("caso-1", "modelo-atual"): {"aprovado": True, "custo_usd": 0.02},
+        ("caso-2", "modelo-atual"): {"aprovado": False, "custo_usd": 0.02},
+        ("caso-1", "modelo-novo"): {"aprovado": True, "custo_usd": 0.01, "saida": "ok"},
+        ("caso-2", "modelo-novo"): {"aprovado": False, "custo_usd": 0.01, "motivo": "raso"},
     }
+    chamadas: list[tuple[str, str]] = []
 
     def runner(caso, modelo):
-        assert modelo == "modelo-novo"
-        return respostas[caso["id"]]
+        chamadas.append((caso["id"], modelo))
+        return dict(respostas[(caso["id"], modelo)])
 
     evidencia = rodar_sombra(proposta, casos, runner)
+
+    assert sorted(chamadas) == sorted(respostas)
 
     assert evidencia["status"] == "sombra_concluida"
     assert evidencia["slot"] == "executor/simples"
@@ -872,21 +871,55 @@ def test_rodar_sombra_emite_evento_read_only():
     assert evidencia["status"] == "sombra_concluida"
 
 
-def _evidencia(taxa_t, custo_t, taxa_c, custo_c, slot="executor/simples"):
-    return {
-        "status": "sombra_concluida",
+# Chave de teste. A real mora fora do repo; o que importa aqui e que exista uma,
+# porque sem chave `certificar_sombra` recusa tudo -- e um teste que passasse sem
+# chave estaria provando o caminho errado.
+CHAVE = b"chave-de-teste-do-curador-32bytes!!"
+
+
+@pytest.fixture(autouse=True)
+def chave_no_ambiente(tmp_path_factory, monkeypatch):
+    """Publica a MESMA chave em `KORTEX_CURADOR_CHAVE`.
+
+    Autouse porque `preparar_promocao_gated` e a CLI nao recebem a chave por
+    parametro -- eles carregam do ambiente, que e o caminho de producao. Sem
+    isto, esses testes passariam a exercitar o caminho "sem chave" achando que
+    exercitam o caminho feliz.
+    """
+    arquivo = tmp_path_factory.mktemp("chave") / "curador.key"
+    arquivo.write_bytes(CHAVE)
+    arquivo.chmod(0o600)
+    monkeypatch.setenv("KORTEX_CURADOR_CHAVE", str(arquivo))
+    return arquivo
+
+
+def _evidencia(taxa_t, custo_t, taxa_c, custo_c, slot="executor/simples", titular="t", candidato="c"):
+    # 40 casos: acima do PISO_CASOS de 30. Com 10 nao ha o que certificar, e essa
+    # e a mudanca -- amostra minuscula deixou de ser uma opcao do proponente.
+    total = 40
+    casos = [{
+        "id": str(i),
         "slot": slot,
-        "titular": {"modelo": "t", "aprovados": 1, "total": 1, "taxa_aprovacao": taxa_t, "custo_medio_usd": custo_t},
-        "candidato": {"modelo": "c", "aprovados": 1, "total": 1, "taxa_aprovacao": taxa_c, "custo_medio_usd": custo_c},
-        "casos": [],
-        "casos_ignorados": 0,
-    }
+        "meta": {"split": "held-out", "proveniencia": "suite-curador"},
+    } for i in range(total)]
+
+    def runner(caso, modelo):
+        taxa, custo = (taxa_t, custo_t) if modelo == titular else (taxa_c, custo_c)
+        return {"aprovado": int(caso["id"]) < round(taxa * total), "custo_usd": custo}
+
+    return rodar_sombra(
+        {"slot": slot, "titular": titular, "candidato": candidato,
+         "politica": {"min_casos": 30}},
+        casos,
+        runner,
+        chave=CHAVE,
+    )
 
 
 def test_certificar_aprova_quando_candidato_melhor_em_qualidade_e_custo():
     evid = _evidencia(taxa_t=0.5, custo_t=0.02, taxa_c=0.8, custo_c=0.01)
 
-    resultado = certificar_sombra(evid)
+    resultado = certificar_sombra(evid, chave=CHAVE)
 
     assert resultado["status"] == "certificado"
     assert "candidato vence titular" in resultado["motivo"]
@@ -895,7 +928,7 @@ def test_certificar_aprova_quando_candidato_melhor_em_qualidade_e_custo():
 def test_certificar_rejeita_candidato_mais_barato_com_qualidade_menor():
     evid = _evidencia(taxa_t=0.8, custo_t=0.02, taxa_c=0.5, custo_c=0.01)
 
-    resultado = certificar_sombra(evid)
+    resultado = certificar_sombra(evid, chave=CHAVE)
 
     assert resultado["status"] == "rejeitado"
     assert "nao vence titular" in resultado["motivo"]
@@ -904,16 +937,19 @@ def test_certificar_rejeita_candidato_mais_barato_com_qualidade_menor():
 def test_certificar_rejeita_qualidade_igual_mesmo_com_custo_menor():
     evid = _evidencia(taxa_t=0.8, custo_t=0.02, taxa_c=0.8, custo_c=0.01)
 
-    resultado = certificar_sombra(evid)
+    resultado = certificar_sombra(evid, chave=CHAVE)
 
     assert resultado["status"] == "rejeitado"
     assert "nao vence titular" in resultado["motivo"]
 
 
 def test_certificar_rejeita_custo_ausente():
-    evid = _evidencia(taxa_t=0.8, custo_t=None, taxa_c=0.9, custo_c=0.01)
+    # Vantagem de qualidade grande de proposito: o veto por custo so e alcancado
+    # depois que a qualidade passa no teste, entao 0.8 vs 0.9 (p=0.0625) pararia
+    # antes e o teste estaria medindo outra coisa.
+    evid = _evidencia(taxa_t=0.5, custo_t=None, taxa_c=0.9, custo_c=0.01)
 
-    resultado = certificar_sombra(evid)
+    resultado = certificar_sombra(evid, chave=CHAVE)
 
     assert resultado["status"] == "rejeitado"
     assert resultado["motivo"] == "custo incomparavel"
@@ -922,7 +958,7 @@ def test_certificar_rejeita_custo_ausente():
 def test_certificar_rejeita_custo_candidato_ausente():
     evid = _evidencia(taxa_t=0.5, custo_t=0.02, taxa_c=0.8, custo_c=None)
 
-    resultado = certificar_sombra(evid)
+    resultado = certificar_sombra(evid, chave=CHAVE)
 
     assert resultado["status"] == "rejeitado"
     assert resultado["motivo"] == "custo incomparavel"
@@ -932,7 +968,10 @@ def test_certificar_emite_evento_certificou():
     eventos = []
     evid = _evidencia(taxa_t=0.5, custo_t=0.02, taxa_c=0.9, custo_c=0.01)
 
-    certificar_sombra(evid, emitir_evento=lambda nome, payload: eventos.append((nome, payload)))
+    certificar_sombra(
+        evid, emitir_evento=lambda nome, payload: eventos.append((nome, payload)),
+        chave=CHAVE,
+    )
 
     assert len(eventos) == 1
     assert eventos[0][0] == "curador.certificou"
@@ -943,7 +982,10 @@ def test_certificar_emite_evento_rejeitou():
     eventos = []
     evid = _evidencia(taxa_t=0.5, custo_t=None, taxa_c=0.9, custo_c=0.01)
 
-    certificar_sombra(evid, emitir_evento=lambda nome, payload: eventos.append((nome, payload)))
+    certificar_sombra(
+        evid, emitir_evento=lambda nome, payload: eventos.append((nome, payload)),
+        chave=CHAVE,
+    )
 
     assert len(eventos) == 1
     assert eventos[0][0] == "curador.rejeitou"
@@ -970,28 +1012,37 @@ def test_rodar_sombra_cust_none_nao_vira_zero_na_evidencia():
     assert evidencia["candidato"]["custo_medio_usd"] is None
 
 
-def _certificacao_aprovada(slot="executor/simples", titular="modelo-t", candidato="modelo-c"):
-    return {
-        "status": "certificado",
-        "slot": slot,
-        "titular": {"modelo": titular, "aprovados": 1, "total": 2, "taxa_aprovacao": 0.5, "custo_medio_usd": 0.02},
-        "candidato": {"modelo": candidato, "aprovados": 2, "total": 2, "taxa_aprovacao": 1.0, "custo_medio_usd": 0.01},
-        "motivo": "candidato vence titular: aprovacao 1.0000 > 0.5000, custo 0.01 < 0.02",
-    }
+class _RepositorioCertificacoesFake:
+    def __init__(self, registro):
+        self.registro = registro
+
+    def obter(self, certification_id):
+        if certification_id != self.registro["certification_id"]:
+            return None
+        return self.registro
 
 
-def _certificacao_rejeitada():
-    return {
-        "status": "rejeitado",
-        "slot": "executor/simples",
-        "titular": {"modelo": "t", "aprovados": 1, "total": 1, "taxa_aprovacao": 0.5, "custo_medio_usd": 0.02},
-        "candidato": {"modelo": "c", "aprovados": 1, "total": 1, "taxa_aprovacao": 0.5, "custo_medio_usd": 0.01},
-        "motivo": "candidato nao vence titular em ambos os eixos",
+def _registro_certificacao(*, aprovado=True):
+    evidencia = _evidencia(
+        taxa_t=0.5,
+        custo_t=0.02,
+        taxa_c=1.0 if aprovado else 0.5,
+        custo_c=0.01,
+        titular="modelo-t",
+        candidato="modelo-c",
+    )
+    certification_id = "cert-1"
+    registro = {
+        "certification_id": certification_id,
+        "evidencia": evidencia,
+        "decisao": certificar_sombra(evidencia),
     }
+    return certification_id, _RepositorioCertificacoesFake(registro)
 
 
 def test_preparar_promocao_gera_intencao_pendente_quando_certificado():
-    intencao = preparar_promocao_gated(_certificacao_aprovada())
+    certification_id, repo = _registro_certificacao()
+    intencao = preparar_promocao_gated(certification_id, repo)
 
     assert intencao["status"] == "promocao_pendente"
     assert intencao["slot"] == "executor/simples"
@@ -1004,10 +1055,11 @@ def test_preparar_promocao_gera_intencao_pendente_quando_certificado():
 
 
 def test_preparar_promocao_veta_certificacao_rejeitada():
-    intencao = preparar_promocao_gated(_certificacao_rejeitada())
+    certification_id, repo = _registro_certificacao(aprovado=False)
+    intencao = preparar_promocao_gated(certification_id, repo)
 
     assert intencao["status"] == "promocao_vetada"
-    assert "certificacao nao aprovada" in intencao["motivo"]
+    assert "nao aprovada" in intencao["motivo"]
 
 
 def test_preparar_promocao_veta_certificacao_com_status_desconhecido():
@@ -1018,8 +1070,10 @@ def test_preparar_promocao_veta_certificacao_com_status_desconhecido():
 
 def test_preparar_promocao_emite_evento_pendente():
     eventos = []
+    certification_id, repo = _registro_certificacao()
     intencao = preparar_promocao_gated(
-        _certificacao_aprovada(),
+        certification_id,
+        repo,
         emitir_evento=lambda nome, payload: eventos.append((nome, payload)),
     )
 
@@ -1033,8 +1087,10 @@ def test_preparar_promocao_emite_evento_pendente():
 
 def test_preparar_promocao_nao_emite_evento_quando_vetada():
     eventos = []
+    certification_id, repo = _registro_certificacao(aprovado=False)
     intencao = preparar_promocao_gated(
-        _certificacao_rejeitada(),
+        certification_id,
+        repo,
         emitir_evento=lambda nome, payload: eventos.append((nome, payload)),
     )
 
@@ -1047,12 +1103,18 @@ def test_cli_sombra_certificacao_e_promocao_read_only(tmp_path):
     evidencia_out = tmp_path / "evidencia-out.json"
     sombra_json.write_text(
         json.dumps({
-            "proposta": {"slot": "executor/simples", "titular": "modelo-t", "candidato": "modelo-c"},
+            "proposta": {
+                "slot": "executor/simples",
+                "titular": "modelo-t",
+                "candidato": "modelo-c",
+                "politica": {"min_casos": 1},
+            },
             "casos": [
                 {
                     "id": "caso-1",
                     "slot": "executor/simples",
                     "entrada": {"prompt": "held-out"},
+                    "meta": {"split": "held-out", "proveniencia": "suite-cli"},
                     "titular": {"modelo": "modelo-t", "aprovado": True, "custo_usd": 0.02},
                     "candidato": {"aprovado": True, "custo_usd": 0.01, "motivo": "ok"},
                 }
@@ -1072,7 +1134,11 @@ def test_cli_sombra_certificacao_e_promocao_read_only(tmp_path):
     assert "- slot: executor/simples" in sombra.stdout
     assert "- modelo: modelo-c" in sombra.stdout
     evidencia_cli = json.loads(evidencia_out.read_text(encoding="utf-8"))
-    assert evidencia_cli["status"] == "sombra_concluida"
+    # `sombra_simulada`, nao `sombra_concluida`: o runner do `--sombra` da CLI so
+    # ecoa o campo `candidato` do arquivo de entrada -- nenhum modelo foi chamado.
+    # Este teste ANTES exigia `sombra_concluida`, ou seja, travava o defeito: uma
+    # evidencia escrita a mao saia selada e passava na certificacao.
+    assert evidencia_cli["status"] == "sombra_simulada"
     assert evidencia_cli["candidato"]["custo_medio_usd"] == 0.01
 
     evidencia_json = tmp_path / "evidencia.json"
@@ -1096,7 +1162,7 @@ def test_cli_sombra_certificacao_e_promocao_read_only(tmp_path):
 
     certificacao_json = tmp_path / "certificacao.json"
     promocao_out = tmp_path / "promocao-out.json"
-    certificacao_json.write_text(json.dumps(_certificacao_aprovada()), encoding="utf-8")
+    certificacao_json.write_text(json.dumps(certificacao_cli), encoding="utf-8")
 
     promocao = subprocess.run(
         [sys.executable, "-m", "motor.curador", "--promocao", str(certificacao_json), "--json", str(promocao_out)],
@@ -1106,9 +1172,90 @@ def test_cli_sombra_certificacao_e_promocao_read_only(tmp_path):
     )
 
     assert "# Intencao de Promocao" in promocao.stdout
-    assert "- status: promocao_pendente" in promocao.stdout
-    assert "- requer_gate: True" in promocao.stdout
+    assert "- status: promocao_vetada" in promocao.stdout
     assert "curador.promoveu" not in promocao.stdout
     promocao_cli = json.loads(promocao_out.read_text(encoding="utf-8"))
-    assert promocao_cli["status"] == "promocao_pendente"
-    assert promocao_cli["requer_gate"] is True
+    assert promocao_cli["status"] == "promocao_vetada"
+
+
+def test_evidencia_do_runner_cli_nao_pode_ser_certificada() -> None:
+    """U-06a: o `--sombra` da CLI fabricava evidência certificável.
+
+    `_runner_cli_read_only` ecoa `caso["candidato"]` do arquivo de entrada e a
+    evidência saía selada como `sombra_concluida` — zero chamada de modelo, e
+    passava na certificação. Qualquer um que escrevesse o JSON certificava a
+    troca de modelo que quisesse.
+
+    A marca é `sombra_simulada`, e a certificação a recusa. Este teste falha se
+    alguém devolver o status antigo ao caminho da CLI.
+    """
+    from motor.curador import _runner_cli_read_only, certificar_sombra, rodar_sombra
+
+    proposta = {
+        "slot": "executor/simples",
+        "titular": "modelo-t",
+        "candidato": "modelo-c",
+        "politica": {"min_casos": 1},
+    }
+    casos = [{
+        "id": "c1",
+        "slot": "executor/simples",
+        "meta": {"origem": "held-out", "split": "held-out", "proveniencia": "real"},
+        "titular": {"modelo": "modelo-t", "aprovado": False, "custo_usd": 0.02},
+        "candidato": {"modelo": "modelo-c", "aprovado": True, "custo_usd": 0.01},
+    }]
+
+    simulada = rodar_sombra(
+        proposta, casos, _runner_cli_read_only, runner_executa_modelo=False,
+    )
+    assert simulada["status"] == "sombra_simulada"
+    assert certificar_sombra(simulada)["status"] != "certificado"
+
+    # O mesmo caminho, declarando execução real, segue produzindo evidência apta:
+    # o fix marca a PROVENIÊNCIA, não quebra a sombra.
+    real = rodar_sombra(proposta, casos, _runner_cli_read_only)
+    assert real["status"] == "sombra_concluida"
+
+
+def test_modelo_atendeu_resolve_o_modelo_generico_do_omniroute(tmp_path):
+    """Sob OmniRoute, `executor.chamado` só diz `omniroute/roteado`.
+
+    O curador perfila aptidão POR MODELO lendo esse campo. Sem resolver, Gemini,
+    Opus e Codex caem no mesmo balde e o perfil por modelo — a entrada do
+    flywheel — vira uma linha só. Descoberto rodando a missão do eBay pelo
+    Gemini em 2026-07-29; o log dizia um modelo e o ledger dizia outro.
+    """
+    log = _jsonl(tmp_path, "roteado.jsonl", [
+        {"t": 0.0, "evento": "executor.chamado", "executor": "a", "papel": "executor",
+         "tier": "simples", "tentativa": 1, "modelo": "omniroute/roteado"},
+        {"t": 0.1, "evento": "modelo.atendeu", "papel": "executor", "fase": "executor",
+         "modelo": "agy-gemini-3.1-pro-high", "provedor": "google", "tentativa": 1},
+        {"t": 1.0, "evento": "executor.respondeu", "executor": "a", "tentativa": 1},
+        {"t": 1.1, "evento": "modelo.atendeu", "papel": "verifier", "fase": "verifier",
+         "modelo": "agy-claude-opus-4-6-thinking", "provedor": "anthropic", "tentativa": 1},
+        {"t": 2.0, "evento": "executor.chamado", "executor": "b", "papel": "synthesizer",
+         "tentativa": 1, "modelo": "omniroute/roteado"},
+        {"t": 2.1, "evento": "modelo.atendeu", "papel": "synthesizer", "fase": "synthesizer",
+         "modelo": "codex-gpt-5.6-luna", "provedor": "openai", "tentativa": 1},
+        {"t": 3.0, "evento": "executor.respondeu", "executor": "b", "tentativa": 1},
+    ])
+
+    perfil = analisar([log])
+
+    assert set(perfil["por_modelo"]) == {"agy-gemini-3.1-pro-high", "codex-gpt-5.6-luna"}
+    assert perfil["por_slot_modelo"]["executor/simples"].keys() == {"agy-gemini-3.1-pro-high"}
+
+
+def test_log_sem_modelo_atendeu_passa_intacto(tmp_path):
+    """Log antigo não pode ser corrompido pela resolução.
+
+    O outro desfecho: sem isto, "resolveu tudo" seria indistinguível de
+    "apagou o modelo de todo log anterior ao evento novo".
+    """
+    log = _jsonl(tmp_path, "antigo.jsonl", [
+        {"t": 0.0, "evento": "executor.chamado", "executor": "a", "papel": "executor",
+         "tier": "simples", "tentativa": 1, "modelo": "modelo-antigo"},
+        {"t": 1.0, "evento": "executor.respondeu", "executor": "a", "tentativa": 1},
+    ])
+
+    assert set(analisar([log])["por_modelo"]) == {"modelo-antigo"}

@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics="">
+<script src="mf-themes.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;family=Inter:wght@400;500;600&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+  body{margin:0;background:#0B0C0E}
+  .mf-root{
+    --bg:#0B0C0E;--surface:#121417;--surface2:#17191D;--border:#26292E;--focus:#3E434A;
+    --text:#E8E6E1;--text2:#8A8F98;--text3:#5A5F66;--accent:#E8A33D;
+    --red:#E5484D;--amber:#E8A33D;--green:#30A46C;--blue:#3E63DD;--inv-bg:#E8E6E1;--inv-text:#0B0C0E;
+    min-height:100vh;background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif;font-size:14px;display:flex;flex-direction:column;
+  }
+  .mf-root[data-theme="stark"]{
+    --bg:#E4E9F2;--surface:#FAFBFD;--surface2:#EDF0F6;--border:#D2DAE7;--focus:#9AA8BF;
+    --text:#26324B;--text2:#4D5B76;--text3:#7E8AA1;--accent:#9A6A1A;
+    --red:#B0413E;--amber:#9A6A1A;--green:#3B7D5D;--blue:#3F62A8;--inv-bg:#26324B;--inv-text:#FAFBFD;
+    --card-shadow:0 1px 2px rgba(38,50,75,.06),0 4px 14px rgba(38,50,75,.07);
+  }
+  .mf-top{display:flex;align-items:center;gap:12px;height:52px;padding:0 18px;border-bottom:1px solid var(--border);background:var(--surface);flex:none}
+  .mf-body{display:flex;flex:1;min-height:0}
+  .mf-side{width:238px;flex:none;border-right:1px solid var(--border);background:var(--surface);overflow:auto;padding:8px 0}
+  .eyebrow{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3)}
+  .num{font-family:'IBM Plex Mono',monospace;font-size:10.5px;font-weight:600;letter-spacing:1.4px;color:var(--text2);text-transform:uppercase}
+  .mono{font-family:'IBM Plex Mono',monospace}
+  .title{font-family:'Space Grotesk',system-ui;font-weight:600;letter-spacing:.2px}
+  .pill{display:inline-flex;align-items:center;gap:6px;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.6px;padding:5px 9px;border:1px solid var(--border);border-radius:2px;color:var(--text2);background:transparent;cursor:pointer}
+  .pill:hover{border-color:var(--focus);color:var(--text)}
+  .pill.on{color:var(--text);border-color:var(--accent);background:var(--surface2)}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;font-family:Inter;font-weight:600;font-size:12px;padding:8px 13px;border-radius:2px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer}
+  .btn-primary{background:var(--inv-bg);color:var(--inv-text);border-color:var(--inv-bg)}
+  .btn-amber{background:var(--amber);color:#0B0C0E;border-color:var(--amber)}
+  .btn-sm{padding:6px 11px;font-size:11px}
+  .zt{display:flex;justify-content:space-between;align-items:center;padding:15px 18px 6px;font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:600;letter-spacing:1.6px;text-transform:uppercase;color:var(--text3)}
+  .zt.fixed{color:var(--accent)}
+  .ni{display:flex;align-items:center;gap:9px;padding:7px 18px;font-size:13px;color:var(--text2);cursor:pointer;border-left:2px solid transparent}
+  .ni:hover{color:var(--text);background:var(--surface2)}
+  .ni.on{color:var(--text);background:var(--surface2);border-left-color:var(--accent);font-weight:600}
+  .badge{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;background:var(--accent);color:#0B0C0E;border-radius:2px;padding:1px 6px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:2px;box-shadow:var(--card-shadow,none)}
+  .sh{flex:none;display:inline-block}
+  .sh.amber{width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:9px solid var(--amber)}
+  table.cmp{width:100%;border-collapse:collapse;font-family:'IBM Plex Mono',monospace;font-size:11.5px}
+  table.cmp th{text-align:right;color:var(--text3);font-weight:600;padding:8px 10px;border-bottom:1px solid var(--border);text-transform:uppercase;letter-spacing:.5px;font-size:9px;cursor:pointer;white-space:nowrap;user-select:none}
+  table.cmp th:hover{color:var(--text)}
+  table.cmp th.l,table.cmp td.l{text-align:left}
+  table.cmp th.key{color:var(--accent)}
+  table.cmp td{text-align:right;padding:8px 10px;border-bottom:1px solid var(--border);color:var(--text2);white-space:nowrap}
+  table.cmp tr:hover td{background:var(--surface2)}
+  table.cmp td.mdl{color:var(--text)}
+  .lnk{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.6px;text-transform:uppercase;color:var(--text2);cursor:pointer}
+  .lnk:hover{color:var(--text)}
+  /* Tweaks · Conforto visual */
+  .mf-root{--sans:Inter,system-ui,sans-serif}
+  .mf-root[data-fonte="jakarta"]{--sans:'Plus Jakarta Sans',Inter,system-ui,sans-serif}
+  .mf-root[data-acento="ciano"]{--accent:#1FB6CB;--amber:#1FB6CB}
+  .mf-root[data-acento="ciano"][data-theme="stark"]{--accent:#0E7490;--amber:#0E7490}
+  .mf-root[data-acento="azul"]{--accent:#6C8EEF;--amber:#6C8EEF}
+  .mf-root[data-acento="azul"][data-theme="stark"]{--accent:#3F62A8;--amber:#3F62A8}
+  .mf-root[data-acento="aco"]{--accent:#7FA3C8;--amber:#7FA3C8}
+  .mf-root[data-acento="aco"][data-theme="stark"]{--accent:#54718D;--amber:#54718D}
+  .mf-root[data-contraste="suave"]{--text2:#98A0AB;--text3:#6E757F}
+  .mf-root[data-contraste="suave"][data-theme="stark"]{--text2:#54627E;--text3:#8592A9}
+  .mf-root[data-estilo="confortavel"]{font-family:var(--sans)}
+  .mf-root[data-estilo="confortavel"] .ni{font-family:var(--sans);letter-spacing:0;padding:8px 18px}
+  .mf-root[data-estilo="confortavel"] .zt{font-family:var(--sans);font-size:10.5px;letter-spacing:.8px}
+  .mf-root[data-estilo="confortavel"] .zt.fixed{color:var(--text3)}
+  .mf-root[data-estilo="confortavel"] .title{font-family:var(--sans);letter-spacing:0}
+  .mf-root[data-estilo="confortavel"] .pill{font-family:var(--sans);letter-spacing:0;font-size:11px;border-radius:4px}
+  .mf-root[data-estilo="confortavel"] .btn{font-family:var(--sans);border-radius:4px}
+  .mf-root[data-estilo="confortavel"] .num{font-family:var(--sans);letter-spacing:.5px;font-size:11px;text-transform:none;font-weight:600}
+  .mf-root[data-estilo="confortavel"] .eyebrow{font-size:10px;letter-spacing:1px}
+  .mf-root[data-estilo="confortavel"] .card{border-radius:6px}
+  .mf-root[data-estilo="confortavel"] table.cmp th,.mf-root[data-estilo="confortavel"] table.cmp td{padding:10px 13px}
+  .mf-root[data-tags="suave"] .pill{border-color:transparent;background:var(--surface2);color:var(--text2)}
+  .mf-root[data-tags="suave"] .pill:hover{border-color:transparent;color:var(--text)}
+  .mf-root[data-tags="suave"] .pill.on{border-color:transparent;background:var(--surface2);color:var(--accent);font-weight:600}
+  /* Tweak · skin Framer (só no tema escuro) */
+  .mf-root[data-framer="on"]:not([data-theme="stark"]){
+    --bg:#0A0A0A;--surface:#161616;--surface2:#232323;--border:#2A2A2A;--focus:#4B4B4B;
+    --text:#F2F2F2;--text2:#B3B3B3;--text3:#7A7A7A;--accent:#0099FF;
+    --red:#FF5555;--amber:#FFB443;--green:#30C453;--blue:#0099FF;--inv-bg:#0099FF;--inv-text:#FFFFFF;
+    font-family:Inter,system-ui,sans-serif;
+  }
+  .mf-root[data-framer="on"]:not([data-theme="stark"]) .card{border-radius:12px;background:var(--surface);border-color:var(--border)}
+  .mf-root[data-framer="on"]:not([data-theme="stark"]) .pill{border-radius:8px;border-color:transparent;background:var(--surface2);color:var(--text2);font-family:Inter,sans-serif;letter-spacing:0;font-weight:500}
+  .mf-root[data-framer="on"]:not([data-theme="stark"]) .pill.on{background:var(--accent);color:#fff;font-weight:600}
+  .mf-root[data-framer="on"]:not([data-theme="stark"]) .btn{border-radius:8px;font-family:Inter,sans-serif;letter-spacing:0;font-weight:600}
+  .mf-root[data-framer="on"]:not([data-theme="stark"]) .ni{border-radius:8px;margin:1px 8px;padding:7px 10px;font-family:Inter,sans-serif;letter-spacing:0;font-weight:500}
+  .mf-root[data-framer="on"]:not([data-theme="stark"]) .ni.on{background:var(--surface2);color:var(--text)}
+  .mf-root[data-framer="on"]:not([data-theme="stark"]) .title{font-family:Inter,sans-serif;letter-spacing:-.02em;font-weight:700}
+  .mf-root[data-framer="on"]:not([data-theme="stark"]) .zt{font-family:Inter,sans-serif;font-size:10.5px;letter-spacing:.6px;color:var(--text3)}
+  .mf-root[data-framer="on"]:not([data-theme="stark"]) .eyebrow{font-family:Inter,sans-serif;font-size:10px;letter-spacing:.8px;color:var(--text3)}
+  .mf-root[data-framer="on"]:not([data-theme="stark"]) .bk{display:none}
+  .mf-root[data-framer="on"]:not([data-theme="stark"]) .mf-side,.mf-root[data-framer="on"]:not([data-theme="stark"]) .mf-top{background:#111111}
+  /* Tweak · modo Gemini (só no tema escuro) */
+  .mf-root[data-gemini="on"]:not([data-theme="stark"]){
+    --bg:#131314;--surface:#1E1F20;--surface2:#282A2C;--border:#3C4043;--focus:#5F6368;
+    --text:#E3E3E3;--text2:#BDC1C6;--text3:#9AA0A6;--accent:#8AB4F8;
+    --red:#F28B82;--amber:#FDD663;--green:#81C995;--blue:#8AB4F8;--inv-bg:#8AB4F8;--inv-text:#131314;
+    font-family:'Plus Jakarta Sans',Inter,system-ui,sans-serif;
+  }
+  .mf-root[data-gemini="on"]:not([data-theme="stark"]) .card{border-radius:14px;background:var(--surface)}
+  .mf-root[data-gemini="on"]:not([data-theme="stark"]) .pill{border-radius:999px;border-color:transparent;background:var(--surface2);color:var(--text2);font-family:'Plus Jakarta Sans',Inter,sans-serif;letter-spacing:0}
+  .mf-root[data-gemini="on"]:not([data-theme="stark"]) .pill.on{color:var(--inv-text);background:var(--accent);font-weight:600}
+  .mf-root[data-gemini="on"]:not([data-theme="stark"]) .btn{border-radius:999px;font-family:'Plus Jakarta Sans',Inter,sans-serif;letter-spacing:0}
+  .mf-root[data-gemini="on"]:not([data-theme="stark"]) .ni{border-radius:0 999px 999px 0;font-family:'Plus Jakarta Sans',Inter,sans-serif;letter-spacing:0}
+  .mf-root[data-gemini="on"]:not([data-theme="stark"]) .title{font-family:'Plus Jakarta Sans',Inter,sans-serif;letter-spacing:0;font-weight:600}
+  .mf-root[data-gemini="on"]:not([data-theme="stark"]) .eyebrow{color:#9AA0A6;letter-spacing:1px;font-size:10px}
+  .mf-root[data-gemini="on"]:not([data-theme="stark"]) .bk{display:none}
+</style>
+</helmet>
+
+<div class="mf-root" data-theme="{{ theme }}" data-estilo="{{ twEstilo }}" data-fonte="{{ twFonte }}" data-acento="{{ twAcento }}" data-tags="{{ twTags }}" data-contraste="{{ twContraste }}" data-gemini="{{ twGemini }}" data-framer="{{ twFramer }}">
+  <!-- TOPBAR -->
+  <div class="mf-top">
+    <div style="width:19px;height:19px;border:1.5px solid var(--text);border-radius:2px;position:relative"><div style="position:absolute;inset:4px;border:1.5px solid var(--accent)"></div></div>
+    <span class="title" style="font-size:13px;letter-spacing:1px">META-FÁBRICA</span>
+    <span class="pill on">Projeto: Todos ▾</span>
+    <div style="flex:1"></div>
+    <span class="pill" onClick="{{ toggleTheme }}">◐ {{ themeLabel }}</span>
+    <span class="btn btn-primary btn-sm">+ Nova missão</span>
+    <span class="pill" style="padding:5px 8px">🔔 <span class="badge" style="background-color: #EDEFF6">3</span></span>
+  </div>
+
+  <div class="mf-body">
+    <!-- SIDEBAR -->
+    <div class="mf-side">
+      <div class="zt fixed"><span>Fixas</span></div>
+      <div class="ni">Home</div>
+      <div class="ni">Caixa do Fundador <span class="badge" style="margin-left:auto">3</span></div>
+      <div class="ni">Mapa geral</div>
+      <div class="zt"><span>Projeto: Todos</span><span>▾</span></div>
+      <div class="ni">Dashboard</div>
+      <div class="ni">Grafos ▾</div>
+      <div class="ni">Runs &amp; Histórico</div>
+      <div class="zt"><span>Biblioteca</span><span>▾</span></div>
+      <div class="ni">Agentes</div>
+      <div class="ni">Skills</div>
+      <div class="ni on">Curador</div>
+      <div class="ni">Logs</div>
+      <div class="ni">Custos</div>
+    </div>
+
+    <!-- CONTENT + CURADOR RAIL -->
+    <div style="flex:1;display:flex;min-width:0">
+      <div style="flex:1;min-width:0;overflow:auto;padding:22px 24px 50px;display:flex;flex-direction:column;gap:22px;background:var(--bg)">
+
+        <!-- header + scope -->
+        <div style="display:flex;align-items:baseline;justify-content:space-between">
+          <div><div class="title" style="font-size:22px">Curador · Análise</div><div class="mono" style="font-size:11px;color:var(--text3);margin-top:3px">aptidão por papel × tier × modelo · {{ escopoLabel }}</div></div>
+          <div style="display:flex;gap:8px"><span class="{{ escAggCls }}" onClick="{{ escAgg }}">agregada</span><span class="{{ escRunCls }}" onClick="{{ escRun }}">por run</span></div>
+        </div>
+
+        <!-- filters -->
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span class="eyebrow" style="margin-right:2px">papel</span>
+          <sc-for list="{{ papelOpts }}" as="p" hint-placeholder-count="6"><span class="{{ p.cls }}" onClick="{{ p.onClick }}">{{ p.label }}</span></sc-for>
+        </div>
+
+        <!-- comparativa -->
+        <div>
+          <div class="num" style="margin-bottom:10px">01 — Comparativa · clique no cabeçalho para ordenar</div>
+          <div class="card" style="overflow: auto; border-width: 1px; border-radius: 4px; box-shadow: 0px 1px 2px 0px #3D507A0F">
+            <table class="cmp">
+              <thead>
+                <tr>
+                  <th class="l" onClick="{{ hs.modelo }}">modelo {{ ar.modelo }}</th>
+                  <th class="l" onClick="{{ hs.papel }}">papel {{ ar.papel }}</th>
+                  <th class="l" onClick="{{ hs.tier }}">tier {{ ar.tier }}</th>
+                  <th onClick="{{ hs.chamadas }}">cham. {{ ar.chamadas }}</th>
+                  <th class="key" onClick="{{ hs.primeira }}">1ª tent. {{ ar.primeira }}</th>
+                  <th onClick="{{ hs.reprov }}">reprov. {{ ar.reprov }}</th>
+                  <th onClick="{{ hs.escaladas }}">escal. {{ ar.escaladas }}</th>
+                  <th onClick="{{ hs.converg }}">converg. {{ ar.converg }}</th>
+                  <th onClick="{{ hs.p90 }}">lat p90 {{ ar.p90 }}</th>
+                  <th onClick="{{ hs.erro }}">erro {{ ar.erro }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <sc-for list="{{ rows }}" as="r" hint-placeholder-count="8">
+                  <tr>
+                    <td class="l mdl">{{ r.modelo }}</td>
+                    <td class="l">{{ r.papel }}</td>
+                    <td class="l" style="color:{{ r.tierColor }}">{{ r.tier }}</td>
+                    <td>{{ r.chamadas }}</td>
+                    <td class="key" style="color:{{ r.primColor }};font-weight:600">{{ r.primeira }}%</td>
+                    <td>{{ r.reprov }}</td>
+                    <td>{{ r.escaladas }}</td>
+                    <td>{{ r.converg }}%</td>
+                    <td>{{ r.p90 }}s</td>
+                    <td style="color:{{ r.erroColor }}">{{ r.erro }}%</td>
+                  </tr>
+                </sc-for>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- motivos + ruidos -->
+        <div style="display:grid;grid-template-columns:1.5fr 1fr;gap:20px">
+          <div style="min-width:0">
+            <div class="num" style="margin-bottom:10px">02 — Motivos de reprovação agregados</div>
+            <div style="display:flex;flex-direction:column;gap:10px">
+              <sc-for list="{{ motivos }}" as="m" hint-placeholder-count="3">
+                <div class="card" style="padding:13px 15px">
+                  <span class="eyebrow" style="color:var(--accent)">{{ m.papel }}</span>
+                  <div style="font-size:12.5px;color:var(--text);line-height:1.6;margin-top:6px">{{ m.text }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <div style="min-width:0">
+            <div class="num" style="margin-bottom:10px">03 — Ruídos de dado · sinalizados</div>
+            <div class="card" style="padding:4px 15px">
+              <sc-for list="{{ noise }}" as="n" hint-placeholder-count="2">
+                <div style="display:flex;gap:10px;padding:11px 0;border-bottom:1px solid var(--border)">
+                  <span class="sh amber" style="margin-top:3px"></span>
+                  <div style="font-size:11.5px;color:var(--text2);line-height:1.55">{{ n.text }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CURADOR RAIL -->
+      <div style="width:322px;flex:none;border-left:1px solid var(--border);background:var(--surface);display:flex;flex-direction:column">
+        <div style="padding:16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px">
+          <div style="width:38px;height:38px;border-radius:50%;background:var(--surface2);border:2px solid var(--blue);display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text2)">cur</div>
+          <div><div class="title" style="font-size:14px">Curador</div><div class="mono" style="font-size:10px;color:var(--text3)">analista · perfila aptidão</div></div>
+        </div>
+        <div style="flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:10px">
+          <div style="align-self:flex-start;background:var(--surface2);border:1px solid var(--border);border-radius:2px;padding:10px;font-size:12px;color:var(--text);line-height:1.55;max-width:92%">kimi-k2.6 cruzou o piso em código-médio (82% em 14 runs). Recomendo certificar.</div>
+          <div style="align-self:flex-end;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--text2);max-width:92%">e a latência? não vai estourar o p90?</div>
+          <div style="align-self:flex-start;background:var(--surface2);border:1px solid var(--border);border-radius:2px;padding:10px;font-size:12px;color:var(--text);line-height:1.55;max-width:92%">p90 8.1s, dentro do teto de media. Contra o llama (simples) é +4s, mas converge 89% vs 62%.</div>
+        </div>
+        <div style="padding:14px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:9px">
+          <div style="display:flex;align-items:center;gap:8px;padding:9px 11px;border:1px solid var(--border);border-radius:2px;background:var(--bg)"><span class="mono" style="font-size:11.5px;color:var(--text3);flex:1">Pergunte ao Curador…</span><span style="color:var(--text3)">↑</span></div>
+          <div class="btn btn-amber" style="width: 100%; border-radius: 18px; color: #000000">Gerar proposta → Caixa do Fundador</div>
+          <span class="mono" style="font-size:9.5px;color:var(--text3);text-align:center">propostas do Curador viram pendências (§8.2)</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;100%&quot;,&quot;height&quot;:&quot;100%&quot;},&quot;estilo&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;técnico&quot;,&quot;confortável&quot;],&quot;default&quot;:&quot;confortável&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Conforto visual&quot;},&quot;fonte&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Inter&quot;,&quot;Plus Jakarta Sans&quot;],&quot;default&quot;:&quot;Inter&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Conforto visual&quot;},&quot;acento&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;âmbar&quot;,&quot;ciano&quot;,&quot;azul-royal&quot;,&quot;azul-aço&quot;],&quot;default&quot;:&quot;azul-royal&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Conforto visual&quot;},&quot;tagsSuaves&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Conforto visual&quot;},&quot;contrasteSuave&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Conforto visual&quot;},&quot;skinEscura&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;padrão&quot;,&quot;gemini&quot;,&quot;framer&quot;],&quot;default&quot;:&quot;padrão&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Conforto visual&quot;}}">
+class Component extends DCLogic {
+  state = { theme: 'paperclip', escopo: 'agregada', papel: 'todos', sortKey: 'primeira', sortDir: 'desc' };
+
+  data() {
+    return [
+      { modelo: 'kimi-k2.6', papel: 'planner', tier: 'media', chamadas: 42, primeira: 88, reprov: 3, escaladas: 2, converg: 100, p90: 6.4, erro: 3 },
+      { modelo: 'kimi-k2.6', papel: 'executor', tier: 'media', chamadas: 96, primeira: 82, reprov: 12, escaladas: 9, converg: 89, p90: 8.1, erro: 4 },
+      { modelo: 'llama-3.3-70b', papel: 'executor', tier: 'simples', chamadas: 140, primeira: 51, reprov: 41, escaladas: 30, converg: 62, p90: 4.2, erro: 11 },
+      { modelo: 'codex/gpt-5.4', papel: 'verifier', tier: 'complexa', chamadas: 88, primeira: 94, reprov: 4, escaladas: 1, converg: 100, p90: 12.0, erro: 1 },
+      { modelo: 'codex/gpt-5.4', papel: 'evaluator', tier: 'complexa', chamadas: 46, primeira: 91, reprov: 5, escaladas: 2, converg: 95, p90: 11.2, erro: 2 },
+      { modelo: 'deepseek-v4', papel: 'redator', tier: 'media', chamadas: 33, primeira: 67, reprov: 8, escaladas: 5, converg: 80, p90: 5.5, erro: 6 },
+      { modelo: 'kimi-k2.6', papel: 'synthesizer', tier: 'complexa', chamadas: 28, primeira: 86, reprov: 3, escaladas: 1, converg: 100, p90: 7.8, erro: 3 },
+      { modelo: 'llama-3.3-70b', papel: 'executor', tier: 'sem-tier', chamadas: 12, primeira: 40, reprov: 6, escaladas: 2, converg: 50, p90: 4.9, erro: 140 },
+    ];
+  }
+
+  sort(k) {
+    if (this.state.sortKey === k) this.setState({ sortDir: this.state.sortDir === 'desc' ? 'asc' : 'desc' });
+    else this.setState({ sortKey: k, sortDir: 'desc' });
+  }
+
+  renderVals() {
+    const s = this.state;
+    let rows = this.data().filter(r => s.papel === 'todos' || r.papel === s.papel);
+    const k = s.sortKey, dir = s.sortDir === 'desc' ? -1 : 1;
+    rows = [...rows].sort((a, b) => {
+      const av = a[k], bv = b[k];
+      if (typeof av === 'number') return (av - bv) * dir;
+      return String(av).localeCompare(String(bv)) * dir;
+    });
+    const primColor = (v) => v >= 80 ? 'var(--green)' : (v >= 60 ? 'var(--amber)' : 'var(--red)');
+    rows = rows.map(r => ({
+      ...r,
+      primColor: primColor(r.primeira),
+      erroColor: r.erro > 100 ? 'var(--red)' : 'var(--text2)',
+      tierColor: r.tier === 'sem-tier' ? 'var(--text3)' : 'var(--text2)',
+    }));
+
+    const ar = {};
+    ['modelo', 'papel', 'tier', 'chamadas', 'primeira', 'reprov', 'escaladas', 'converg', 'p90', 'erro'].forEach(key => {
+      ar[key] = s.sortKey === key ? (s.sortDir === 'desc' ? '↓' : '↑') : '';
+    });
+    const hs = {};
+    ['modelo', 'papel', 'tier', 'chamadas', 'primeira', 'reprov', 'escaladas', 'converg', 'p90', 'erro'].forEach(key => { hs[key] = () => this.sort(key); });
+
+    const papelOpts = ['todos', 'planner', 'executor', 'verifier', 'evaluator', 'redator', 'synthesizer'].map(p => ({
+      label: p, cls: 'pill' + (s.papel === p ? ' on' : ''), onClick: () => this.setState({ papel: p }),
+    }));
+
+    const slug = { 'técnico': 'tecnico', 'confortável': 'confortavel', 'âmbar': 'ambar', 'ciano': 'ciano', 'azul-royal': 'azul', 'azul-aço': 'aco', 'Inter': 'inter', 'Plus Jakarta Sans': 'jakarta' };
+    return {
+      twEstilo: slug[this.props.estilo ?? 'confortável'] || 'confortavel',
+      twFonte: slug[this.props.fonte ?? 'Inter'] || 'inter',
+      twAcento: slug[this.props.acento ?? 'azul-royal'] || 'azul',
+      twTags: (this.props.tagsSuaves ?? true) ? 'suave' : 'borda',
+      twContraste: (this.props.contrasteSuave ?? true) ? 'suave' : 'padrao',
+      twGemini: (this.props.skinEscura ?? 'padrão') === 'gemini' ? 'on' : 'off',
+      twFramer: (this.props.skinEscura ?? 'padrão') === 'framer' ? 'on' : 'off',
+      theme: s.theme, themeLabel: s.theme === 'paperclip' ? 'ESCURO' : 'CLARO',
+      rows, ar, hs, papelOpts,
+      escopoLabel: s.escopo === 'agregada' ? '8 fontes · 14 runs' : 'run RUN-2026-07-02-018',
+      escAggCls: 'pill' + (s.escopo === 'agregada' ? ' on' : ''), escRunCls: 'pill' + (s.escopo === 'run' ? ' on' : ''),
+      escAgg: () => this.setState({ escopo: 'agregada' }), escRun: () => this.setState({ escopo: 'run' }),
+      motivos: [
+        { papel: 'executor · simples', text: 'llama-3.3 reprova por falta de rigor em validação: aceita CSV malformado sem sinalizar e omite casos de borda em código. É o teto claro do tier simples — o gatilho legítimo de escalada para media.' },
+        { papel: 'redator · media', text: 'deepseek-v4 diverge do escopo em textos longos: expande além da rubrica e perde a estrutura pedida. Reprova mais em coerência estrutural do que em conteúdo.' },
+        { papel: 'verifier · complexa', text: 'codex raramente reprova por engano; as reprovações são majoritariamente corretas (cross-model contra executores free), o que valida o piso de verificação.' },
+      ],
+      noise: [
+        { text: 'taxa de erro >100% em executor/sem-tier: mistura tipos de erro no mesmo bucket (timeout + parse). Não confie no número absoluto — olhe a tendência.' },
+        { text: '12 chamadas sem-tier são telemetria legada (pré-roteamento). Ficam de fora dos agregados por tier.' },
+      ],
+      toggleTheme: () => this.setState({ theme: s.theme === 'paperclip' ? 'stark' : 'paperclip' }),
+    };
+  }
+}
+</script>
+</body>
+</html>

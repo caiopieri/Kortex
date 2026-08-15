@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<script src="mf-themes.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/reactflow@11/dist/style.css">
+<script>
+(function(){
+  function inject(){
+    if (window.__mfRfLoading) return; window.__mfRfLoading = true;
+    var s = document.createElement('script');
+    s.src = 'https://unpkg.com/reactflow@11/dist/umd/index.js';
+    s.crossOrigin = 'anonymous';
+    document.head.appendChild(s);
+  }
+  (function wait(){
+    if (window.React && window.ReactDOM) { inject(); return; }
+    setTimeout(wait, 40);
+  })();
+})();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  body{margin:0;background:#0B0C0E}
+  .mf-root{
+    --bg:#0B0C0E;--surface:#121417;--surface2:#17191D;--border:#26292E;--focus:#3E434A;
+    --text:#E8E6E1;--text2:#8A8F98;--text3:#5A5F66;--accent:#E8A33D;
+    --red:#E5484D;--amber:#E8A33D;--green:#30A46C;--blue:#3E63DD;--inv-bg:#E8E6E1;--inv-text:#0B0C0E;
+    min-height:100vh;background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif;font-size:14px;display:flex;flex-direction:column;
+  }
+  .mf-root[data-theme="stark"]{
+    --bg:#F4F3F0;--surface:#FFFFFF;--surface2:#EDEBE6;--border:#D8D6D0;--focus:#A9A69E;
+    --text:#111213;--text2:#5D6167;--text3:#8B8E93;--accent:#B87514;
+    --red:#C62A30;--amber:#B87514;--green:#1E7F50;--blue:#2F4FC4;--inv-bg:#111213;--inv-text:#F4F3F0;
+  }
+  .force-dark{--bg:#0A0B0D;--surface:#111417;--surface2:#17191D;--border:#2a2e33;--focus:#3E434A;--text:#E8E6E1;--text2:#8A8F98;--text3:#5A5F66;--accent:#E8A33D;--red:#E5484D;--amber:#E8A33D;--green:#30A46C;--blue:#3E63DD}
+  .mf-top{display:flex;align-items:center;gap:12px;height:52px;padding:0 18px;border-bottom:1px solid var(--border);background:var(--surface);flex:none;z-index:5}
+  .mf-body{display:flex;flex:1;min-height:0}
+  .mf-side{width:238px;flex:none;border-right:1px solid var(--border);background:var(--surface);overflow:auto;padding:8px 0}
+  .eyebrow{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3)}
+  .num{font-family:'IBM Plex Mono',monospace;font-size:10.5px;font-weight:600;letter-spacing:1.4px;color:var(--text2);text-transform:uppercase}
+  .mono{font-family:'IBM Plex Mono',monospace}
+  .title{font-family:'Space Grotesk',system-ui;font-weight:600;letter-spacing:.2px}
+  .pill{display:inline-flex;align-items:center;gap:6px;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.9px;text-transform:uppercase;padding:5px 9px;border:1px solid var(--border);border-radius:2px;color:var(--text2);background:transparent;cursor:pointer}
+  .pill.on{color:var(--text);border-color:var(--focus);background:var(--surface2)}
+  .btn{display:inline-flex;align-items:center;gap:7px;font-family:Inter;font-weight:600;font-size:12px;padding:8px 13px;border-radius:2px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer}
+  .btn:hover{border-color:var(--focus)}
+  .btn-primary{background:var(--inv-bg);color:var(--inv-text);border-color:var(--inv-bg)}
+  .btn-sm{padding:5px 10px;font-size:11px}
+  .zt{display:flex;justify-content:space-between;align-items:center;padding:15px 18px 6px;font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:600;letter-spacing:1.6px;text-transform:uppercase;color:var(--text3)}
+  .zt.fixed{color:var(--accent)}
+  .ni{display:flex;align-items:center;gap:9px;padding:7px 18px;font-size:13px;color:var(--text2);cursor:pointer;border-left:2px solid transparent}
+  .ni:hover{color:var(--text);background:var(--surface2)}
+  .ni.on{color:var(--text);background:var(--surface2);border-left-color:var(--accent);font-weight:600}
+  .ni.sub{padding-left:36px;font-size:12.5px}
+  .ni.sub.on{border-left-color:var(--accent)}
+  .badge{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;background:var(--accent);color:#0B0C0E;border-radius:2px;padding:1px 6px}
+  .sh{flex:none;position:relative;display:inline-block}
+  .sh.blue{width:9px;height:9px;border-radius:50%;background:var(--blue)}
+  .sh.green{width:9px;height:9px;border-radius:50%;background:var(--green)}
+  .sh.idle{width:9px;height:9px;border-radius:50%;background:var(--text3)}
+  .sh.amber{width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:11px solid var(--amber)}
+  .sh.red{width:11px;height:11px;background:var(--red);clip-path:polygon(30% 0,70% 0,100% 30%,100% 70%,70% 100%,30% 100%,0 70%,0 30%)}
+  .sh.blue.pulse::after{content:"";position:absolute;left:50%;top:50%;width:9px;height:9px;margin:-4.5px 0 0 -4.5px;border-radius:50%;background:var(--blue);animation:mfpulse 2.1s ease-out infinite}
+  @keyframes mfpulse{0%{opacity:.65;transform:scale(1)}100%{opacity:0;transform:scale(3)}}
+  .canvasarea{flex:1;position:relative;overflow:auto;background:#0A0B0D;background-image:radial-gradient(circle,#1a1d21 1px,transparent 1px);background-size:26px 26px}
+  .react-flow__node{background:transparent;border:none;padding:0;width:auto;font-size:inherit;box-shadow:none;color:var(--text)}
+  .react-flow__node.selected{box-shadow:none}
+  .react-flow__handle{opacity:0}
+  .react-flow__controls{box-shadow:none;border:1px solid var(--border);border-radius:2px;overflow:hidden}
+  .react-flow__controls-button{background:var(--surface);border-bottom:1px solid var(--border);color:var(--text);width:26px;height:26px}
+  .react-flow__controls-button:hover{background:var(--surface2)}
+  .react-flow__controls-button svg{fill:var(--text2)}
+  .react-flow__edge-path{transition:stroke .2s}
+  .react-flow__attribution{display:none}
+  .world{position:relative;width:1230px;height:640px}
+  .flow{stroke:var(--blue);stroke-width:1.6;fill:none;stroke-dasharray:3 6;animation:mfflow 1.4s linear infinite}
+  @keyframes mfflow{to{stroke-dashoffset:-18}}
+  .mf-root[data-anim="off"] .flow,.mf-root[data-anim="off"] .sh.pulse::after{animation:none}
+  .nodecard{position:absolute;width:206px;background:var(--surface);border:1px solid var(--border);border-radius:2px;padding:10px;display:flex;flex-direction:column;gap:7px;cursor:pointer;color:var(--text)}
+  .nodecard:hover{border-color:var(--focus)}
+  .nodecard.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+  .nodecard.paused{border-color:var(--amber);box-shadow:0 0 0 1px var(--amber),0 0 26px rgba(232,163,61,.22)}
+  .ndhead{display:flex;align-items:center;gap:6px}
+  .ndword{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.4px;text-transform:uppercase}
+  .ndbadge{font-family:'IBM Plex Mono',monospace;font-size:8.5px;padding:1px 5px;border:1px solid var(--border);border-radius:2px;color:var(--accent)}
+  .ndtier{margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--text3)}
+  .ndname{font-family:'Space Grotesk',system-ui;font-weight:600;font-size:13px}
+  .ndmeta{font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:var(--text2)}
+  .ndprev{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--text2);background:var(--bg);border:1px solid var(--border);border-radius:2px;padding:6px;line-height:1.4;height:32px;overflow:hidden}
+  .ndfile{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .gnode{position:absolute;width:174px;background:var(--surface);border:1px solid var(--border);border-radius:2px;padding:9px;cursor:pointer;color:var(--text);display:flex;flex-direction:column;gap:5px}
+  .gnode:hover{border-color:var(--focus)}
+  .gnode.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+  .drawer{width:346px;flex:none;border-left:1px solid var(--border);background:var(--surface);display:flex;flex-direction:column;overflow:auto}
+  .term{background:#08090b;border:1px solid #23262b;border-radius:2px;padding:11px;font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:1.6;color:#c9d1cf;white-space:pre-wrap}
+  .lnk{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.6px;text-transform:uppercase;color:var(--text2);cursor:pointer}
+  .lnk:hover{color:var(--text)}
+  .tl{border-top:1px solid var(--border);background:var(--surface);flex:none}
+  .evrow{display:flex;align-items:center;gap:10px;padding:7px 16px;border-bottom:1px solid var(--border);cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:11px}
+  .evrow:hover{background:var(--surface2)}
+  /* validador determinístico — quadrado = verdade objetiva (vs círculo = juízo LLM) */
+  .vnode{position:absolute;width:178px;background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--green);border-radius:2px;padding:9px;cursor:pointer;color:var(--text);display:flex;flex-direction:column;gap:5px}
+  .vnode:hover{border-color:var(--focus)}
+  .vnode.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+  .vsh{width:10px;height:10px;background:var(--green);flex:none}
+  .vtag{margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:8px;letter-spacing:.6px;text-transform:uppercase;color:var(--green);border:1px solid var(--green);border-radius:2px;padding:0 4px}
+  .vstamp{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--green);border:1px solid var(--border);border-radius:2px;padding:3px 6px;letter-spacing:.6px;align-self:flex-start;text-transform:uppercase}
+  /* dataset (fonte RAG) — ponte datahouse→nó */
+  .dsnode{position:absolute;width:170px;background:var(--surface);border:1px dashed var(--focus);border-radius:2px;padding:9px;color:var(--text);display:flex;flex-direction:column;gap:4px}
+  .dsi{color:var(--text2);font-size:13px}
+  .ragbadge{display:inline-flex;align-items:center;gap:5px;font-family:'IBM Plex Mono',monospace;font-size:8.5px;letter-spacing:.4px;color:var(--text2);border:1px solid var(--focus);border-radius:2px;padding:2px 5px;background:var(--bg);align-self:flex-start}
+  .leg{display:inline-flex;align-items:center;gap:6px;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.5px;text-transform:uppercase;color:var(--text2)}
+  .leg .c{width:9px;height:9px;border-radius:50%;border:1.4px solid var(--text2);flex:none}
+  .leg .s{width:9px;height:9px;background:var(--text2);flex:none}
+</style>
+</helmet>
+
+<div class="mf-root" data-theme="{{ theme }}" data-anim="{{ anim }}">
+
+  <!-- TOPBAR -->
+  <div class="mf-top">
+    <div style="width:19px;height:19px;border:1.5px solid var(--text);border-radius:2px;position:relative"><div style="position:absolute;inset:4px;border:1.5px solid var(--accent)"></div></div>
+    <span class="title" style="font-size:13px;letter-spacing:1px">META-FÁBRICA</span>
+    <span class="pill on">Projeto: pesquisa-receita ▾</span>
+    <span class="mono" style="font-size:11px;color:var(--text3)">MACRO → <span style="color:var(--text)">MESO</span> → MICRO</span>
+    <div style="flex:1"></div>
+    <span class="pill" onClick="{{ toggleTheme }}">◐ {{ themeLabel }}</span>
+    <span class="btn btn-primary btn-sm">+ Nova missão</span>
+    <span class="pill" style="padding:5px 8px">🔔 <span class="badge">3</span></span>
+  </div>
+
+  <div class="mf-body">
+    <!-- SIDEBAR -->
+    <div class="mf-side">
+      <div class="zt fixed"><span>Fixas</span></div>
+      <div class="ni">Home</div>
+      <div class="ni">Caixa do Fundador <span class="badge" style="margin-left:auto">3</span></div>
+      <div class="ni">Mapa geral</div>
+      <div class="zt"><span>Projeto: pesquisa-receita</span><span>▾</span></div>
+      <div class="ni">Dashboard</div>
+      <div class="ni">Grafos ▾</div>
+      <div class="ni sub on">Workflows</div>
+      <div class="ni sub">Datahouse</div>
+      <div class="ni">Runs &amp; Histórico</div>
+      <div class="zt"><span>Biblioteca</span><span>▾</span></div>
+      <div class="ni">Agentes</div>
+      <div class="ni">Skills</div>
+      <div class="ni">Curador</div>
+      <div class="ni">Logs</div>
+      <div class="ni">Custos</div>
+    </div>
+
+    <!-- CANVAS -->
+    <div style="flex:1;display:flex;flex-direction:column;min-width:0">
+      <!-- canvas toolbar -->
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--surface);flex:none">
+        <span class="num">Grafo 2D · WF-042</span>
+        <span class="pill">filtro: workflow ▾</span>
+        <div style="width:1px;height:16px;background:var(--border);margin:0 2px"></div>
+        <div class="leg"><span class="c"></span>verificador · juízo LLM</div>
+        <div class="leg"><span class="s"></span>validador · determinístico</div>
+        <div style="flex:1"></div>
+        <span class="{{ liveCls }}" onClick="{{ setLive }}">● Ao vivo</span>
+        <span class="{{ replayCls }}" onClick="{{ setReplay }}">⏮ Replay</span>
+        <a href="GrafoEdicao.dc.html" style="text-decoration:none"><span class="pill" style="color:var(--amber);border-color:var(--amber)">✎ Edição</span></a>
+        <span class="mono" style="font-size:10px;color:var(--text2);display:flex;align-items:center;gap:6px"><span class="{{ liveShape }}"></span>{{ liveLabel }}</span>
+      </div>
+
+      <div style="display:flex;flex:1;min-height:0">
+        <!-- world · React Flow -->
+        <div class="canvasarea force-dark" style="overflow:hidden;padding:0;background:#0A0B0D">
+          <x-import component="GrafoFlow" from="./GrafoFlow.jsx" on-select="{{ onSelect }}" hint-size="100%,100%"></x-import>
+        </div>
+
+        <!-- DRAWER -->
+        <div class="drawer">
+          <div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+            <span class="eyebrow">Drawer do nó · MICRO</span>
+            <span class="mono" style="font-size:10px;color:var(--text3)">{{ d.role }}</span>
+          </div>
+          <div style="padding:16px;display:flex;flex-direction:column;gap:14px">
+            <div>
+              <div style="display:flex;align-items:center;gap:8px"><span class="{{ d.shape }}"></span><span class="ndword" style="font-size:11px">{{ d.word }}</span><span class="ndtier" style="margin-left:auto">{{ d.tier }}</span></div>
+              <div class="title" style="font-size:16px;margin-top:8px">{{ d.title }}</div>
+              <div class="mono" style="font-size:11px;color:var(--text2);margin-top:3px">{{ d.model }}</div>
+            </div>
+
+            <sc-if value="{{ d.paused }}" hint-placeholder-val="{{ false }}">
+              <div class="btn" style="background:var(--amber);border-color:var(--amber);color:#0B0C0E;justify-content:center">→ Decidir na Caixa do Fundador</div>
+            </sc-if>
+
+            <div>
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px"><span class="eyebrow">Janela ao vivo · nó em foco</span><span class="mono" style="font-size:9px;color:var(--blue)">1 stream</span></div>
+              <div class="term force-dark">{{ d.live }}</div>
+            </div>
+
+            <div>
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px"><span class="eyebrow">Alterações · últimos arquivos</span><span class="lnk">expandir diffs →</span></div>
+              <div style="display:flex;flex-direction:column;gap:5px">
+                <sc-for list="{{ d.files }}" as="f" hint-placeholder-count="2">
+                  <div style="display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text2);padding:5px 8px;border:1px solid var(--border);border-radius:2px"><span>{{ f.n }}</span><span style="color:var(--green)">{{ f.d }}</span></div>
+                </sc-for>
+                <sc-if value="{{ d.noFiles }}" hint-placeholder-val="{{ false }}"><div class="mono" style="font-size:10px;color:var(--text3)">nenhum arquivo tocado ainda</div></sc-if>
+              </div>
+            </div>
+
+            <div>
+              <div class="eyebrow" style="margin-bottom:8px">Chat do nó · 3 modos</div>
+              <div style="display:flex;gap:6px;margin-bottom:8px">
+                <span class="pill on">Enfileirar</span><span class="pill">Direcionar</span><span class="pill">Perguntar</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;padding:9px 11px;border:1px solid var(--border);border-radius:2px;background:var(--bg)">
+                <span class="mono" style="font-size:11px;color:var(--text3);flex:1">Injeta um prompt ou anexo…</span><span style="color:var(--text3)">↑</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TIMELINE -->
+      <div class="tl">
+        <div style="display:flex;align-items:center;gap:10px;padding:9px 16px;border-bottom:1px solid var(--border)">
+          <span class="num">Timeline · RUN-2026-07-02-013</span>
+          <div style="width:1px;height:16px;background:var(--border);margin:0 2px"></div>
+          <span class="{{ fcls.todos }}" onClick="{{ fh.todos }}">todos</span>
+          <span class="{{ fcls.exec }}" onClick="{{ fh.exec }}">execução</span>
+          <span class="{{ fcls.gate }}" onClick="{{ fh.gate }}">portões</span>
+          <span class="{{ fcls.esc }}" onClick="{{ fh.esc }}">escalada</span>
+          <span class="{{ fcls.fund }}" onClick="{{ fh.fund }}">fundador</span>
+          <div style="flex:1"></div>
+          <span class="lnk" onClick="{{ toggleTl }}">{{ tlToggle }}</span>
+        </div>
+        <sc-if value="{{ tlOpen }}" hint-placeholder-val="{{ true }}">
+          <div style="max-height:172px;overflow:auto">
+            <sc-for list="{{ events }}" as="e" hint-placeholder-count="8">
+              <div>
+                <div class="evrow" onClick="{{ e.onClick }}">
+                  <span class="mono" style="color:var(--text3);width:42px;flex:none">{{ e.t }}s</span>
+                  <span class="{{ e.dot }}"></span>
+                  <span style="color:var(--text2)">{{ e.evt }}</span>
+                  <sc-if value="{{ e.hasMotivo }}" hint-placeholder-val="{{ false }}"><span class="lnk" style="margin-left:auto">{{ e.exp }}</span></sc-if>
+                </div>
+                <sc-if value="{{ e.showMotivo }}" hint-placeholder-val="{{ false }}">
+                  <div style="padding:10px 16px 12px 68px;border-bottom:1px solid var(--border);background:var(--surface2)">
+                    <span class="eyebrow" style="color:{{ e.motivoColor }}">{{ e.motivoLabel }}</span>
+                    <div class="mono" style="font-size:11.5px;color:var(--text);margin-top:5px;line-height:1.6">"{{ e.motivo }}"</div>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;100%&quot;,&quot;height&quot;:&quot;100%&quot;},&quot;animacoes&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Comportamento&quot;}}">
+class Component extends DCLogic {
+  state = { theme: 'paperclip', selected: 'gate', mode: 'live', filter: 'todos', tlOpen: true, tlExpand: null };
+
+  componentDidMount() {
+    setTimeout(() => {
+      const ca = document.querySelector('.canvasarea');
+      if (ca) ca.scrollLeft = Math.max(0, (1230 - ca.clientWidth) * 0.62);
+    }, 120);
+  }
+
+  nodes() {
+    return {
+      planner: { title: 'planner', role: 'planner', model: 'kimi-k2.6 · nvidia', tier: 'media', word: 'concluído', shape: 'sh green', live: '$ planner\nWorkflowSpec pronto — 2 subtarefas\nfan-out: pesquisa-alfa, pesquisa-beta', files: [{ n: 'plano.md', d: '+64 −0' }, { n: 'spec.json', d: '+12' }] },
+      alfa: { title: 'pesquisa-alfa', role: 'pesquisador', model: 'llama-3.3-70b · nvidia', tier: 'simples · t.1', word: 'aprovado', shape: 'sh green', live: 'executor.respondeu · tent.1\nverifier:pesquisa-alfa → aprovado (ciclo 1)', files: [{ n: 'alfa.md', d: '+38 −2' }] },
+      beta: { title: 'pesquisa-beta', role: 'pesquisador', model: 'llama-3.3 → kimi-k2.6', tier: 'media · t.2', word: 'pesquisando', shape: 'sh blue pulse', live: 'portao.reprovado ciclo 1: "faltou evidência quantitativa"\n↑ escalado simples → media (llama → kimi)\nexecutor.chamado · tent.2\n… coletando ticket médio por canal', files: [{ n: 'beta.md', d: '+41 −9' }, { n: 'fontes.json', d: '+6' }] },
+      vA: { title: 'verifier:pesquisa-alfa', role: 'verificador · crítico LLM', model: 'codex/gpt-5.4', tier: 'crítico LLM', word: 'aprovado', shape: 'sh green', live: 'portao.aprovado · verifier:pesquisa-alfa · ciclo 1\njuízo adversarial por rubrica (opinião de modelo)', files: [] },
+      vB: { title: 'verifier:pesquisa-beta', role: 'verificador · crítico LLM', model: 'codex/gpt-5.4', tier: 'crítico LLM · ciclo 2', word: 'verificando', shape: 'sh blue pulse', live: 'portao em avaliação · verifier:pesquisa-beta\njuízo adversarial por rubrica (opinião de modelo)\naguardando resposta da tent.2', files: [] },
+      valid: { title: 'validador · beta', role: 'validador determinístico', model: 'algoritmo · sem LLM', tier: 'gate duro', word: 'passou', shape: 'vsh', live: 'validador.rodou · alvo pesquisa-beta\nkind: schema_json + contem "ticket médio"\nresultado: APROVADO — checado por algoritmo, não por juízo\n\nÉ o diferencial: Enforced Outcomes.\nO motor IMPÕE o resultado, não só opina sobre ele.', files: [] },
+      gEval: { title: 'global_evaluator', role: 'evaluator', model: 'codex/gpt-5.4', tier: 'complexa', word: 'executando', shape: 'sh blue pulse', live: 'executor.chamado · global_evaluator\nmedindo cobertura agregada das 2 subtarefas', files: [{ n: 'cobertura.md', d: '+18' }] },
+      gate: { title: 'gate cobertura', role: 'portão humano', model: '—', tier: '—', word: 'aguardando você', shape: 'sh amber', paused: true, live: 'portao.reprovado · cobertura · ciclo 2\nlacunas: ["canal beta sem evidência\n  quantitativa de ticket médio"]\nescalado → fundador (2×)\n\n⏸ run PAUSADO — aguardando decisão humana', files: [] },
+      synth: { title: 'synthesizer', role: 'synthesizer', model: 'codex/gpt-5.4', tier: 'complexa', word: 'na fila', shape: 'sh idle', live: 'na fila — bloqueado pelo gate de cobertura', files: [] },
+      art: { title: 'artefato · digest', role: 'saída', model: '—', tier: '—', word: 'pendente', shape: 'sh idle', live: 'pendente — aguarda a síntese', files: [] },
+    };
+  }
+
+  eventsRaw() {
+    return [
+      { id: 'e1', t: '0.013', evt: 'spec.recebida · pesquisa-receita', type: 'exec', dot: 'sh idle' },
+      { id: 'e2', t: '0.014', evt: 'paralelo.iniciado · 2 subagentes', type: 'exec', dot: 'sh idle' },
+      { id: 'e3', t: '0.016', evt: 'executor.chamado · pesquisa-alfa · llama-3.3-70b', type: 'exec', dot: 'sh blue' },
+      { id: 'e3b', t: '0.016', evt: 'rag.consultado · pesquisa-alfa · receitas-benchmark · 6 chunks', type: 'exec', dot: 'sh idle' },
+      { id: 'e4', t: '0.016', evt: 'executor.chamado · pesquisa-beta · llama-3.3-70b', type: 'exec', dot: 'sh blue' },
+      { id: 'e5', t: '0.018', evt: 'portao.aprovado · verifier:pesquisa-alfa · ciclo 1', type: 'gate', dot: 'sh green' },
+      { id: 'e6', t: '0.018', evt: 'portao.reprovado · verifier:pesquisa-beta · ciclo 1', type: 'gate', dot: 'sh red', motivo: 'faltou evidência quantitativa de ticket médio por canal; a afirmação central segue sem número que a sustente. — crítico LLM (juízo por rubrica, pode ser subjetivo).' },
+      { id: 'e7', t: '0.020', evt: 'executor.escalado · pesquisa-beta · simples → media (llama → kimi)', type: 'esc', dot: 'sh blue' },
+      { id: 'e8', t: '0.020', evt: 'executor.chamado · pesquisa-beta · tent.2 · kimi-k2.6', type: 'exec', dot: 'sh blue' },
+      { id: 'e9', t: '0.021', evt: 'validador.rodou · alvo beta · schema_json · APROVADO', type: 'gate', dot: 'vsh', motivo: 'kind=schema_json + contem "ticket médio". Checagem por algoritmo — não por opinião de modelo: campos obrigatórios presentes e valor numérico encontrado. Passou. É o gate duro (Enforced Outcomes).' },
+      { id: 'e10', t: '0.021', evt: 'portao.aprovado · verifier:pesquisa-beta · ciclo 2', type: 'gate', dot: 'sh green' },
+      { id: 'e11', t: '0.022', evt: 'paralelo.concluido · commitados 2', type: 'exec', dot: 'sh green' },
+      { id: 'e12', t: '0.023', evt: 'executor.chamado · global_evaluator · gpt-5.4', type: 'exec', dot: 'sh blue' },
+      { id: 'e13', t: '0.024', evt: 'portao.reprovado · cobertura · ciclo 2', type: 'gate', dot: 'sh red', motivo: 'canal beta cobre ticket médio, mas não cobre a frequência de recompra pedida na missão; cobertura agregada insuficiente para fechar. Escalando decisão ao humano.' },
+      { id: 'e14', t: '0.024', evt: 'decisao.pendente · gate cobertura → fundador', type: 'fund', dot: 'sh amber' },
+    ];
+  }
+
+  renderVals() {
+    const anim = (this.props.animacoes ?? true) ? 'on' : 'off';
+    const sel = this.state.selected;
+    const ns = this.nodes();
+    const d = { ...ns[sel] };
+    d.noFiles = !d.files || d.files.length === 0;
+    d.paused = !!d.paused;
+
+    const selcls = {}; const selh = {};
+    Object.keys(ns).forEach(k => {
+      selcls[k] = sel === k ? 'sel' : '';
+      selh[k] = () => this.setState({ selected: k });
+    });
+
+    const f = this.state.filter;
+    const fcls = {}; const fh = {};
+    ['todos', 'exec', 'gate', 'esc', 'fund'].forEach(k => {
+      fcls[k] = 'pill' + (f === k ? ' on' : '');
+      fh[k] = () => this.setState({ filter: k });
+    });
+
+    const events = this.eventsRaw().filter(e => f === 'todos' || e.type === f).map(e => ({
+      ...e,
+      hasMotivo: !!e.motivo,
+      showMotivo: !!e.motivo && this.state.tlExpand === e.id,
+      motivoColor: e.dot === 'sh red' ? 'var(--red)' : 'var(--green)',
+      motivoLabel: e.dot === 'vsh' ? 'validador · resultado objetivo' : (e.dot === 'sh red' ? 'motivo · texto do verificador' : 'detalhe'),
+      exp: this.state.tlExpand === e.id ? '− fechar' : '⊕ motivo',
+      onClick: e.motivo ? () => this.setState({ tlExpand: this.state.tlExpand === e.id ? null : e.id }) : () => {},
+    }));
+
+    const live = this.state.mode === 'live';
+    return {
+      theme: this.state.theme, themeLabel: this.state.theme === 'paperclip' ? 'ESCURO' : 'CLARO', anim,
+      d, selcls, selh, fcls, fh, events,
+      tlOpen: this.state.tlOpen, tlToggle: this.state.tlOpen ? 'recolher −' : 'expandir +',
+      liveCls: 'pill' + (live ? ' on' : ''), replayCls: 'pill' + (!live ? ' on' : ''),
+      liveLabel: live ? 'AO VIVO' : 'REPLAY', liveShape: live ? 'sh blue pulse' : 'sh idle',
+      setLive: () => this.setState({ mode: 'live' }), setReplay: () => this.setState({ mode: 'replay' }),
+      toggleTl: () => this.setState({ tlOpen: !this.state.tlOpen }),
+      toggleTheme: () => this.setState({ theme: this.state.theme === 'paperclip' ? 'stark' : 'paperclip' }),
+      onSelect: (id) => this.setState({ selected: id }),
+    };
+  }
+}
+</script>
+</body>
+</html>

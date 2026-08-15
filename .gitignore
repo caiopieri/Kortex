@@ -13,6 +13,8 @@ __pycache__/
 pytest-cache-files-*
 .venv/
 venv/
+dist/
+build/
 
 # Runtime do motor (logs vivos, banco de checkpoint, workspaces de run)
 log.jsonl
@@ -20,13 +22,18 @@ log 2.jsonl
 motor.db
 motor.db-*
 runs/
+.log.jsonl.lock
+motor/logs/
 .langgraph_api/
 motor/motor_painel/_testdel
+
+# Generated documentation corpus
+motor/exemplos/rag-docs-metafabrica.jsonl
 
 # Node (futuros consumidores/superfícies)
 node_modules/
 
-# Segredos — NUNCA commitar chaves de API (LiteLLM, provedores, etc.)
+# Segredos — NUNCA commitar chaves de API (provedores, etc.)
 .env
 *.env
 !*.env.example
@@ -40,8 +47,6 @@ graphify-out/
 .browser-profile/
 .maestri/
 
-# Café do_KEEP_AWAKE do LiteLLM (estado de runtime, não pertence ao repo)
+# Estado de runtime do caffeinate (não pertence ao repo)
 caffeinate.log
 caffeinate.pid
-infra/litellm/caffeinate.log
-infra/litellm/caffeinate.pid

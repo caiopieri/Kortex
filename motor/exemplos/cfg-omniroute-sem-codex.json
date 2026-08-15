@@ -1,0 +1,75 @@
+{
+  "omniroute": {
+    "base_url": "http://localhost:20128/v1",
+    "api_key_env": "OMNIROUTE_API_KEY",
+    "papeis": {
+      "planner": [
+        {
+          "modelo": "agy/gemini-3.1-pro-high",
+          "provider_id": "google",
+          "max_input_tokens": 32000,
+          "max_completion_tokens": 16000
+        }
+      ],
+      "executor": [
+        {
+          "modelo": "agy/gemini-3.1-pro-high",
+          "provider_id": "google",
+          "max_input_tokens": 150000,
+          "max_completion_tokens": 32000
+        },
+        {
+          "modelo": "claude/claude-opus-4-6",
+          "provider_id": "anthropic",
+          "max_input_tokens": 150000,
+          "max_completion_tokens": 32000
+        }
+      ],
+      "verifier": [
+        {
+          "modelo": "claude/claude-opus-4-6",
+          "provider_id": "anthropic",
+          "max_input_tokens": 150000,
+          "max_completion_tokens": 8000
+        },
+        {
+          "modelo": "agy/gemini-3.1-pro-high",
+          "provider_id": "google",
+          "max_input_tokens": 150000,
+          "max_completion_tokens": 8000
+        }
+      ],
+      "evaluator": [
+        {
+          "modelo": "claude/claude-opus-4-7",
+          "provider_id": "anthropic",
+          "max_input_tokens": 150000,
+          "max_completion_tokens": 8000
+        },
+        {
+          "modelo": "agy/gemini-3.1-pro-low",
+          "provider_id": "google",
+          "max_input_tokens": 150000,
+          "max_completion_tokens": 8000
+        }
+      ],
+      "synthesizer": [
+        {
+          "modelo": "agy/gemini-3.1-pro-high",
+          "provider_id": "google",
+          "max_input_tokens": 180000,
+          "max_completion_tokens": 32000
+        }
+      ]
+    }
+  },
+  "fx": {
+    "versao": "awesomeapi-usdbrl-2026-08-14",
+    "capturado_em": 1786713448,
+    "cotacao_venda": "5.21128"
+  },
+  "fx_max_age_s": 86400,
+  "margem": "1.20",
+  "teto_bootstrap_brl": "900.0",
+  "timeout": 300
+}

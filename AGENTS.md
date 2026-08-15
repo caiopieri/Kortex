@@ -1,184 +1,58 @@
-# AGENTS.md — Configuração de sub-agentes e MCPs
+# AGENTS.md
 
-Instruções específicas do projeto para orquestrar sub-agentes, MCPs e skills no Cowork.
+Repository instructions for automated contributors.
 
-## 🛰️ Sub-agentes disponíveis
+## Scope
 
-### Claude (Orquestrador)
-- **Especialidades:** Arquitetura, design, revisão, julgamento
-- **Gate:** Verifica qualidade, aprova antes de ship
-- **Custo:** Premium (Opus/Sonnet)
+- Read `README.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md` and
+  `motor/docs/INVARIANTES.md` before changing behavior.
+- Keep changes small and scoped. Do not modify or delete tests to make a gate pass.
+- Treat external input, model output, event logs and command arguments as untrusted.
+- Preserve the boundary that promotion is an intent requiring a human gate, never an
+  automatic catalog mutation.
+- Command execution is denied unless an explicitly configured runner enforces the
+  documented sandbox contract. `CommandRunner` is the extension point; a new backend is
+  certified against `motor/specs/001-hardening-producao/sandbox-conformance.md`, never by
+  self-report.
+- Provider identity is evidence, not configuration. Do not treat distinct route identifiers
+  behind a single aggregator as independent executor and verifier, and do not introduce lossy
+  prompt compression on any path feeding the reproducer corpus or the curator.
+- Do not build clients for additional inference providers. The OpenAI-compatible plug already
+  exists; aggregation of inference is a configuration concern, execution of commands is not.
 
-### Codex (OpenAI — Fallback)
-- **Especialidades:** Scaffold, boilerplate, review
-- **Trigger:** `/codex:rescue`, `/codex:review --background`
-- **Custo:** Mais barato que Claude
-- **Nota:** Requer OpenAI API key + autenticação
+- Architecture is evidence identity, not a build flag. An image rebuilt for another
+  architecture has a different digest and does not inherit the previous one's conformance
+  evidence. Add a config; never repoint an existing one whose filename then lies.
+- Cost containment is currency-specific. A route without a declared price fails closed by
+  design; registering it at zero silences the only monetary containment the engine has.
+  Free routes are scarce in quota and availability, not money — they need their own
+  containment, not an entry in the price table.
+- A process gate proves what its own suite asserts. When the same run writes both the code
+  and its tests, green means self-consistency, not conformance to the mission. Contracts
+  must assert canonical calls and negatives derived from the brief, checked by a validator
+  the generated suite does not author.
 
-### Antigravity / Gemini (Executor)
-- **Especialidades:** Teste generation, migrations, scaffold repetitivo
-- **Trigger:** `/antigravity:delegate <task>`, `/antigravity:review`
-- **Custo:** ~27% mais barato que Claude solo (benchmark)
-- **Setup:** `agy` CLI + Vertex AI auth
+## Verification
 
-### Alibaba / Qwen (Especializado)
-- **Especialidades:** Imagem, vídeo, TTS, ASR, chat
-- **Trigger:** `/alibaba:image`, `/alibaba:video`, `/alibaba:transcribe`
-- **Custo:** Mais barato que Claude para geração
-- **Setup:** ✅ Já autenticado (`~/.claude/secrets/alibaba-model-studio.env`)
+Run the full suite **one at a time per checkout**. `motor/__main__.py` opens the
+repository-root `log.jsonl` under an exclusive `flock`, so two concurrent suites — or two
+agents on the same repository — contaminate each other and produce different failure sets.
+Concurrent measurement is not evidence. Coordinate before running.
 
----
+Run from `motor/`:
 
-## 📋 Routing de tarefas (Decision Tree)
-
-```
-Tarefa chega
-  ├─ É geração de imagem/vídeo?
-  │  └─ SIM → Alibaba (mcp__alibaba-model-studio__*)
-  │           └─ Claude verifica resultado
-  │
-  ├─ É teste generation massivo?
-  │  └─ SIM → Antigravity/Gemini (/antigravity:delegate)
-  │           └─ Claude verifica cobertura
-  │
-  ├─ É refactor/review complexo?
-  │  └─ SIM → Codex (/codex:rescue) OU Antigravity
-  │           └─ Claude decide, aprova, integra
-  │
-  ├─ É decisão arquitetural, code review crítico, ou spec?
-  │  └─ SIM → Claude (só Claude)
-  │
-  └─ É boilerplate claro + testável?
-     └─ SIM → Codex ou Antigravity (mais barato)
-              └─ Claude verifica
-```
-
----
-
-## 🔌 MCPs habilitados
-
-| MCP | Status | Autenticação | Use case |
-|-----|--------|--------------|----------|
-| **Alibaba Model Studio** | ✅ Ativo | ✅ Autenticado | Imagem, vídeo, TTS, ASR |
-| **Firecrawl** | ✅ Ativo | ✅ Via token | Web scraping, search |
-| **Codex Plugin** | ⏳ Pronto | 📝 Registrar | Code review, rescue |
-| **Antigravity Plugin** | ⏳ Pronto | 📝 Registrar | Teste gen, migrations |
-
----
-
-## 💼 Integração Cowork
-
-### Para Claude Code (seu laptop)
 ```bash
-# Registrar plugins em sessão interativa
-/plugin marketplace add openai/codex-plugin-cc
-/plugin install codex@openai-codex
-
-/plugin marketplace add yuting0624/antigravity-for-claude-code
-/plugin install antigravity@antigravity-for-claude-code
-
-# Usar
-/codex:review
-/antigravity:delegate "Gere 50 testes para payments.py"
-/alibaba:image "Hero section para landing"
+python -m pytest -q
+python -m ruff check motor tests
+python -m mypy motor
+python -m bandit -r motor -q --severity-level high --confidence-level high
+python -m compileall -q motor tests
 ```
 
-### Para Cowork (cloud agents)
-```markdown
-## Task: Gerar assets para landing page
+## Repository hygiene
 
-1. **Prompt para Alibaba** (via antigravity-delegate)
-   ```
-   Gere 3 variações de hero image (1600x900):
-   - Tema: Startup tech, cores azul/branco
-   - Estilo: Minimalista, sem pessoas
-   - Formato: PNG high-quality
-   ```
-
-2. **Verificação Claude** 
-   - ✅ Qualidade visual
-   - ✅ Brand alignment
-   - ✅ Performance (file size < 500KB)
-
-3. **Ship**
-   - Salvar em `assets/landing/`
-   - Commit com mensagem clara
-```
-
----
-
-## 🎯 Exemplos de workflow
-
-### Workflow 1: Code → Test → Ship (Integrado)
-```
-1. Claude: Escreve código (spec clara)
-2. Antigravity: Gera testes exhaustivos (/antigravity:delegate)
-3. Claude: Verifica cobertura, aprova (/antigravity:result)
-4. Ship: Commit com sign-off
-```
-
-### Workflow 2: Conteúdo visual (Alibaba-first)
-```
-1. Claude: Especifica requerimentos (dimensões, estilo, brand)
-2. Alibaba: Gera imagem (/alibaba:image) 
-3. Claude: Verifica qualidade, aprova
-4. Ship: Usa asset
-```
-
-### Workflow 3: Análise pesada (Antigravity-first)
-```
-1. Claude: Define questão (o que, por quê, critérios de sucesso)
-2. Antigravity: Digere logs massivos, RAG em KB interno (/antigravity:research)
-3. Claude: Verifica citations, conclui
-4. Comunica: Resultado > doc/análise.md
-```
-
----
-
-## 📊 Custo-benefício por sub-agente
-
-| Agente | Custo | Qualidade | Velocidade | Ideal para |
-|--------|-------|-----------|-----------|-----------|
-| Claude | 100% | 10/10 | Média | Decisão, design, crítica |
-| Antigravity | 30% | 8/10 | Rápido | Scaffold, testes, migrations |
-| Codex | 40% | 8/10 | Rápido | Review, boilerplate |
-| Alibaba | 20% | 9/10 (imagem) | Muito rápido | Geração visual, TTS, ASR |
-
----
-
-## 🔐 Segurança & Credenciais
-
-Todos os MCPs usam credenciais armazenadas em `~/.claude/secrets/`:
-- ✅ Nunca commitidas no repo
-- ✅ Rotação gerenciada externamente
-- ✅ Auditadas via logs do MCP
-
-Para adicionar nova credencial:
-```bash
-# Criar arquivo seguro
-echo "API_KEY=sk-..." > ~/.claude/secrets/novo-mcp.env
-
-# Nunca fazer
-git add .env  # ❌
-echo "API_KEY=sk-..." >> .env  # ❌
-```
-
----
-
-## 📚 Leitura obrigatória
-
-- [`~/.claude/CLAUDE.md`](~/.claude/CLAUDE.md) — Princípios globais
-- [`.agents/skills/alibaba-cowork.md`](.agents/skills/alibaba-cowork.md) — Usar Alibaba
-- [Ponytail Skill](https://github.com/DietrichGebert/ponytail) — Minimizar código
-- [Karpathy Guidelines](https://github.com/multica-ai/andrej-karpathy-skills) — Evitar erros comuns
-
----
-
-## ✅ Checklist: Novo feature com sub-agentes
-
-- [ ] **Claude:** Spec clara, success criteria, arquitectura
-- [ ] **Sub-agente:** Executa tarefa (Alibaba/Antigravity/Codex)
-- [ ] **Claude:** Verifica resultado, gate passa
-- [ ] **Tests:** Passam (próprio code + sub-agente output)
-- [ ] **Ship:** Commit + PR com traço de quem fez quê
-- [ ] **Custo:** Estimado vs real (rastrear em LOG-VERIFICACAO.md)
+- Commit product specifications, architecture decisions, public runbooks and reproducible
+  verification artifacts.
+- Do not commit chat transcripts, agent prompts, handoffs, session reports, local paths,
+  live logs, generated builds or credentials.
+- Use specific `git add` paths and one logical change per commit.

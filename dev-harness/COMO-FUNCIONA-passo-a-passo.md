@@ -17,7 +17,7 @@ cd loja
 ```
 Abre o Claude Code e estabelece a lei do projeto:
 ```
-/speckit.constitution   ← cola o conteúdo de spec-kit-adocao.md (teoria + tiers + security-DoD)
+/speckit.constitution   ← derive a constituição de project-template/AGENTS.md e docs/security-DoD.md
 ```
 → cria `.specify/memory/constitution.md`. **`/clear`.**
 

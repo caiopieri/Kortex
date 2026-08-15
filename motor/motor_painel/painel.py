@@ -4,6 +4,9 @@
 Uso: python3 motor_painel/painel.py  →  http://localhost:8378
 """
 import json
+import os
+import shutil
+import subprocess
 import sys
 import http.server
 import socketserver
@@ -12,7 +15,10 @@ from pathlib import Path
 import re
 import time
 import sqlite3
-from typing import Any, Optional, cast
+from typing import Any, NoReturn, Optional, cast
+from uuid import uuid4
+
+from motor.eventos_schema import valido
 
 PORTA = 8378
 BASE = Path(__file__).parent.resolve()
@@ -21,50 +27,13 @@ LOG_PATH = BASE.parent / "log.jsonl"
 DB_PATH = BASE.parent / "motor.db"
 APP_DIST = BASE / "app" / "dist"
 
-# Preços padrão para cálculo de custos
-DEFAULT_PRECOS = {
-    "deepseek-reasoner": {"in_por_1k": 0.00055, "out_por_1k": 0.00219},
-    "deepseek-chat": {"in_por_1k": 0.00014, "out_por_1k": 0.00028},
-    "claude-3-5-sonnet": {"in_por_1k": 0.003, "out_por_1k": 0.015},
-    "gemini-1.5-flash": {"in_por_1k": 0.000075, "out_por_1k": 0.0003},
-    "gemini-1.5-pro": {"in_por_1k": 0.00125, "out_por_1k": 0.005},
-    "gpt-4o": {"in_por_1k": 0.0025, "out_por_1k": 0.010},
-    "gpt-4o-mini": {"in_por_1k": 0.00015, "out_por_1k": 0.0006},
-}
-
-PRECOS_PATH = BASE.parent / "precos.json"
-
-def carregar_precos() -> dict:
-    precos = dict(DEFAULT_PRECOS)
-    if PRECOS_PATH.exists():
-        try:
-            with open(PRECOS_PATH, encoding="utf-8") as f:
-                user_precos = json.load(f)
-                if isinstance(user_precos, dict):
-                    for k, v in user_precos.items():
-                        if isinstance(v, dict) and "in_por_1k" in v and "out_por_1k" in v:
-                            precos[k] = {
-                                "in_por_1k": float(v["in_por_1k"]),
-                                "out_por_1k": float(v["out_por_1k"])
-                            }
-        except Exception:
-            pass
-    return precos
-
 # ---------------------------------------------------------------------------
 # Lógica de parse — importável pelos testes
 # ---------------------------------------------------------------------------
 
-TIPOS_EVENTO = {
-    "spec.criada", "spec.recebida",
-    "paralelo.iniciado", "paralelo.concluido",
-    "executor.chamado", "executor.respondeu", "executor.erro",
-    "portao.aprovado", "portao.reprovado",
-    "modelo.falha",
-    "escalado",
-    "decisao.pendente", "decisao.retomada", "decisao.fundador", "decisao.timeout",
-    "tarefa.concluida", "tarefa.abortada",
-}
+
+def _constante_json_invalida(valor: str) -> NoReturn:
+    raise ValueError(f"constante fora do JSON estrito: {valor}")
 
 
 def parse_linha(linha: str) -> dict | None:
@@ -72,21 +41,38 @@ def parse_linha(linha: str) -> dict | None:
     linha = linha.strip()
     if not linha:
         return None
-    res = json.loads(linha)  # levanta JSONDecodeError se inválido
+    res = json.loads(linha, parse_constant=_constante_json_invalida)
     return cast(Optional[dict[Any, Any]], res) if isinstance(res, dict) else None
 
 
 def parse_eventos(log_path: str | Path | None = None) -> list[dict]:
-    """Lê e parseia todas as linhas válidas de log.jsonl."""
+    """Lê linhas completas e ignora somente o último fragmento sem newline."""
     path = Path(log_path) if log_path is not None else LOG_PATH
     if not path.exists():
         return []
-    eventos = []
-    with open(path, encoding="utf-8") as f:
-        for linha in f:
-            ev = parse_linha(linha)
-            if ev is not None:
-                eventos.append(ev)
+    eventos: list[dict] = []
+    ultimo_seq = 0
+    ultimo_t: int | float = 0
+    conteudo = path.read_bytes()
+    linhas = conteudo.split(b"\n")
+    linhas_completas = linhas[:-1]
+    for numero_linha, linha in enumerate(linhas_completas, start=1):
+        texto = linha.decode("utf-8")
+        ev = parse_linha(texto)
+        if ev is None:
+            if texto.strip():
+                raise ValueError(f"linha {numero_linha} nao contem evento")
+            continue
+        if "seq" in ev:
+            if not valido(ev):
+                raise ValueError(f"linha {numero_linha} fora do schema v2")
+            if ev["seq"] != ultimo_seq + 1:
+                raise ValueError(f"sequencia invalida na linha {numero_linha}")
+            if ev["t"] < ultimo_t:
+                raise ValueError(f"tempo regressivo na linha {numero_linha}")
+            ultimo_seq = ev["seq"]
+            ultimo_t = ev["t"]
+        eventos.append(ev)
     return eventos
 
 
@@ -213,21 +199,8 @@ def obter_runs(eventos: list[dict]) -> list[dict]:
                 estado = "abortada"
                 break
                 
-        # Custo
-        custo = 0.0
-        model_usages = [ev for ev in run_evs if ev.get("evento") == "modelo.uso"]
-        if model_usages:
-            precos = carregar_precos()
-            for mu in model_usages:
-                model = mu.get("modelo")
-                prompt = mu.get("prompt_tokens", 0)
-                completion = mu.get("completion_tokens", 0)
-                if model in precos:
-                    custo += (prompt / 1000.0) * precos[model]["in_por_1k"] + (completion / 1000.0) * precos[model]["out_por_1k"]
-        else:
-            acumulados = [float(ev["acumulado"]) for ev in run_evs if ev.get("acumulado") is not None]
-            if acumulados:
-                custo = max(acumulados)
+        # Telemetria de tokens nao possui autoridade monetaria.
+        custo = None
                 
         inicio = run_evs[0].get("t", 0.0) if run_evs else 0.0
         
@@ -244,7 +217,8 @@ def obter_runs(eventos: list[dict]) -> list[dict]:
 
 
 def obter_gates_pendentes(eventos: list[dict]) -> list[dict]:
-    runs_events = agrupar_eventos_por_run(eventos)
+    # Eventos v1 permanecem visiveis, mas nunca possuem autoridade operacional.
+    runs_events = agrupar_eventos_por_run([ev for ev in eventos if "seq" in ev])
     gates_pendentes: list[dict] = []
     
     for idx, run_evs in enumerate(runs_events, start=1):
@@ -306,6 +280,114 @@ def obter_gates_pendentes(eventos: list[dict]) -> list[dict]:
         gates_pendentes.extend(active_gates.values())
         
     return gates_pendentes
+
+
+def _pasta_registro() -> Path | None:
+    """Localiza a pasta do registry, ou None se não houver."""
+    for p in (BASE.parent / "Registry", BASE.parent / "registro",
+              BASE.parent / "registry", BASE.parent / "exemplos" / "registro"):
+        if p.exists() and p.is_dir():
+            return p
+    return None
+
+
+def _frontmatter_registro(caminho: Path) -> dict | None:
+    """Lê o frontmatter YAML-ish de uma entidade do registry."""
+    try:
+        linhas = caminho.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+    if not linhas or linhas[0].strip() != "---":
+        return None
+    fim = next((i for i, linha in enumerate(linhas[1:], start=1)
+                if linha.strip() == "---"), None)
+    if fim is None:
+        return None
+    dados: dict[str, str] = {}
+    for linha in linhas[1:fim]:
+        chave, sep, valor = linha.strip().partition(":")
+        if not sep:
+            continue
+        val = valor.strip()
+        if len(val) >= 2 and val[0] == val[-1] and val[0] in {"'", '"'}:
+            val = val[1:-1]
+        dados[chave.strip()] = val
+    return dados
+
+
+def _lista_frontmatter(valor: str | None) -> list[str]:
+    if not valor:
+        return []
+    bruto = valor.strip()
+    if bruto.startswith("[") and bruto.endswith("]"):
+        bruto = bruto[1:-1]
+    return [item.strip().strip("'\"") for item in bruto.split(",") if item.strip()]
+
+
+def obter_inventario() -> list[dict]:
+    """Entidades do registry — a fonte é o disco, não o log.
+
+    Retorna [] quando não há registry: estado vazio honesto, sem inventar.
+    """
+    pasta = _pasta_registro()
+    if pasta is None:
+        return []
+    inventario = []
+    for caminho in sorted(pasta.glob("*.md"), key=lambda x: x.name):
+        dados = _frontmatter_registro(caminho)
+        if not dados:
+            continue
+        inventario.append({
+            "id": dados.get("nome", caminho.stem),
+            "tipo": dados.get("tipo", "desconhecido"),
+            "papel": _lista_frontmatter(dados.get("papeis")),
+            "origem": str(caminho.relative_to(BASE.parent)),
+        })
+    return inventario
+
+
+# Como cada transporte comprova credencial. CLI = a própria auth da ferramenta
+# (basta o executável existir); chave = variável de ambiente definida.
+_CREDENCIAL_POR_TRANSPORTE: dict[str, tuple[str, str]] = {
+    "claude-cli": ("cli", "claude"),
+    "codex": ("cli", "codex"),
+    "opencode": ("cli", "opencode"),
+    "openai-compat": ("env", "OPENAI_API_KEY"),
+}
+
+
+def obter_conexoes() -> list[dict]:
+    """Conexões da fábrica com provedores de modelo, do registry.
+
+    NUNCA expõe o segredo — só o fato `tem_credencial`. Para transporte por CLI
+    a prova é o executável estar no PATH; para chave, a variável estar definida.
+    Transporte desconhecido responde `None`: não sabemos, e mentir "sim" ou
+    "não" seria pior.
+    """
+    pasta = _pasta_registro()
+    if pasta is None:
+        return []
+    conexoes = []
+    for caminho in sorted(pasta.glob("*.md"), key=lambda x: x.name):
+        dados = _frontmatter_registro(caminho)
+        if not dados or dados.get("tipo") != "modelo-executor":
+            continue
+        transporte = dados.get("transporte", "")
+        regra = _CREDENCIAL_POR_TRANSPORTE.get(transporte)
+        if regra is None:
+            tem_credencial = None
+        elif regra[0] == "cli":
+            tem_credencial = shutil.which(regra[1]) is not None
+        else:
+            tem_credencial = bool(os.environ.get(regra[1]))
+        conexoes.append({
+            "id": caminho.stem,
+            "nome": dados.get("nome", caminho.stem),
+            "tipo": transporte or "desconhecido",
+            "tem_credencial": tem_credencial,
+            "origem": str(caminho.relative_to(BASE.parent)),
+        })
+    return conexoes
 
 
 def obter_catalogo() -> list[dict]:
@@ -375,6 +457,27 @@ def obter_catalogo() -> list[dict]:
     return catalogo
 
 
+def _pid_vivo(pid: int) -> bool:
+    """True se o processo com este pid existe (os.kill(pid, 0))."""
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # existe, mas é de outro usuário
+    return True
+
+
+def _ler_pid_lock(lock: Path) -> int | None:
+    """Lê o pid gravado no lock de despacho; None se ausente/ilegível."""
+    if not lock.exists():
+        return None
+    try:
+        return int(lock.read_text(encoding="utf-8").strip())
+    except (ValueError, OSError):
+        return None
+
+
 def atualizar_nota_caixa(gate_id: str, decisao: str) -> bool:
     caminhos_busca = [
         BASE.parent,
@@ -412,6 +515,7 @@ class ReaproveitavelTCPServer(socketserver.TCPServer):
 class Handler(http.server.BaseHTTPRequestHandler):
     log_path: Path = LOG_PATH  # substituível em testes
     db_path: Path = DB_PATH    # substituível em testes
+    despachos_dir: Path = BASE.parent / "runs" / "despachos"  # substituível em testes
 
     def log_message(self, *a):
         pass  # silencia o log padrão do BaseHTTPRequestHandler
@@ -423,6 +527,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def _origem_permitida(self) -> bool:
+        """Validação de Origem para prevenir CSRF (mesmo padrão nos POSTs)."""
+        origin = self.headers.get("Origin")
+        if not origin:
+            return True
+        host = self.headers.get("Host", "")
+        origin_clean = origin.replace("http://", "").replace("https://", "")
+        if origin_clean != host and not (host.startswith("127.0.0.1") and origin_clean.startswith("localhost")):
+            return False
+        return True
+
+    def _erro(self, status: int, msg: bytes):
+        self.send_response(status)
+        self.end_headers()
+        self.wfile.write(msg)
 
     def _html(self, body: bytes):
         self.send_response(200)
@@ -524,10 +644,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             
         if path == "/dados/custos":
             eventos = parse_eventos(self.log_path)
-            precos = carregar_precos()
             runs_events = agrupar_eventos_por_run(eventos)
-            
-            total_custo = 0.0
+
             total_tokens = 0
             n_chamadas = 0
             
@@ -544,7 +662,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if not rid:
                     rid = f"run_{idx}"
                     
-                r_custo = 0.0
                 r_tokens = 0
                 r_chamadas = 0
                 
@@ -559,25 +676,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         tokens = ev.get("total_tokens", prompt + completion)
                         model = ev.get("modelo")
                         
-                        cost = 0.0
-                        if model and model in precos:
-                            cost = (prompt / 1000.0) * precos[model]["in_por_1k"] + (completion / 1000.0) * precos[model]["out_por_1k"]
-                            
-                        total_custo += cost
                         total_tokens += tokens
-                        r_custo += cost
                         r_tokens += tokens
-                        
+
                         if model:
                             if model not in por_modelo:
-                                por_modelo[model] = {"modelo": model, "custo_total": 0.0, "tokens_total": 0, "n_chamadas": 0}
-                            por_modelo[model]["custo_total"] += cost
+                                por_modelo[model] = {"modelo": model, "custo_total": None, "tokens_total": 0, "n_chamadas": 0}
                             por_modelo[model]["tokens_total"] += tokens
                             por_modelo[model]["n_chamadas"] += 1
                             
                 por_run.append({
                     "id": rid,
-                    "custo_total": r_custo,
+                    "custo_total": None,
                     "tokens_total": r_tokens,
                     "n_chamadas": r_chamadas
                 })
@@ -586,7 +696,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 "por_run": por_run,
                 "por_modelo": list(por_modelo.values()),
                 "total": {
-                    "custo_total": total_custo,
+                    "custo_total": None,
                     "tokens_total": total_tokens,
                     "n_chamadas": n_chamadas
                 }
@@ -595,10 +705,29 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path == "/dados/catalogo":
             catalogo = obter_catalogo()
             return self._json(catalogo)
+
+        if path == "/dados/inventario":
+            return self._json(obter_inventario())
+
+        if path == "/dados/conexoes":
+            return self._json(obter_conexoes())
+
+        if path == "/dados/missoes/ativa":
+            pid = _ler_pid_lock(self.despachos_dir / ".lock")
+            ativa = pid is not None and _pid_vivo(pid)
+            return self._json({"ativa": ativa, "pid": pid if ativa else None})
             
         if path == "/healthz":
             return self._json({"ok": True})
-            
+
+        # Rota de dados desconhecida NÃO cai no fallback estático. Antes ela
+        # devolvia index.html com 200 text/html: a tela via `res.ok` passar e o
+        # `res.json()` estourava parseando HTML, com erro que não dizia nada
+        # sobre a causa real (normalmente um painel no ar mais velho que o
+        # código). 404 faz o sintoma apontar para o problema.
+        if path == "/dados" or path.startswith("/dados/"):
+            return self._erro(404, b"rota de dados desconhecida")
+
         # 2. Servir a interface (React app ou painel.html original de fallback)
         if path == "/grafo3d":
             return self._html(GRAFO3D_HTML_PATH.read_bytes())
@@ -654,19 +783,79 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _post_missao(self):
+        """POST /dados/missoes — despacha o motor de verdade (consome créditos).
+
+        Salvaguardas: Origin validado, body ≤64KB, spec dict não-vazia,
+        lock de despacho único (pid vivo → 409), spec gravada em arquivo
+        (nenhum campo do body vira argumento), Popen sem shell.
+        """
+        content_length = int(self.headers.get("Content-Length", 0))
+        if content_length > 64 * 1024:
+            self.rfile.read(content_length)  # drena p/ a resposta chegar ao cliente
+            return self._erro(400, b"corpo excede 64KB")
+        post_data = self.rfile.read(content_length)  # lê antes de responder — evita RST no cliente
+
+        if not self._origem_permitida():
+            return self._erro(403, b"Erro CSRF: Origem nao permitida")
+
+        try:
+            body = json.loads(post_data.decode("utf-8"))
+        except Exception:
+            return self._erro(400, b"JSON invalido")
+        if not isinstance(body, dict):
+            return self._erro(400, b"JSON invalido")
+
+        spec = body.get("spec")
+        if not isinstance(spec, dict) or not spec:
+            return self._erro(400, b"spec deve ser um objeto nao-vazio")
+        opcoes = body.get("opcoes")
+        if not isinstance(opcoes, dict):
+            opcoes = {}
+
+        despachos = self.despachos_dir
+        despachos.mkdir(parents=True, exist_ok=True)
+        lock = despachos / ".lock"
+        pid_lock = _ler_pid_lock(lock)
+        if pid_lock is not None and _pid_vivo(pid_lock):
+            return self._erro(409, b"ja existe despacho em curso")
+
+        ts = f"{time.strftime('%Y%m%d-%H%M%S')}-{uuid4().hex[:8]}"
+        spec_path = despachos / f"spec-{ts}.json"
+        spec_path.write_text(json.dumps(spec, ensure_ascii=False, indent=2), encoding="utf-8")
+        run_log = despachos / f"run-{ts}.log"
+
+        argv = [
+            sys.executable, "-m", "motor", "--spec", str(spec_path),
+            "--caixa", "runs/caixa", "--run-id", f"painel-{ts}",
+        ]
+        modelos = os.environ.get("MOTOR_MODELOS")
+        if modelos:
+            argv.extend(["--modelos", modelos])
+        if opcoes.get("auto") is True:
+            argv.append("--auto")
+        if opcoes.get("escalar") is True:
+            argv.append("--escalar")
+
+        with open(run_log, "wb") as log_f:
+            proc = subprocess.Popen(
+                argv,
+                cwd=str(BASE.parent),
+                stdout=log_f,
+                stderr=log_f,
+                start_new_session=True,
+            )
+        lock.write_text(str(proc.pid), encoding="utf-8")
+        return self._json({"ok": True, "pid": proc.pid, "spec": str(spec_path), "log": str(run_log)})
+
     def do_POST(self):
         path = urlparse(self.path).path
+        if path == "/dados/missoes":
+            return self._post_missao()
+
         if path.startswith("/dados/gates/"):
-            # Validação de Origem para prevenir CSRF
-            origin = self.headers.get("Origin")
-            if origin:
-                host = self.headers.get("Host", "")
-                origin_clean = origin.replace("http://", "").replace("https://", "")
-                if origin_clean != host and not (host.startswith("127.0.0.1") and origin_clean.startswith("localhost")):
-                    self.send_response(403)
-                    self.end_headers()
-                    self.wfile.write(b"Erro CSRF: Origem nao permitida")
-                    return
+            if not self._origem_permitida():
+                return self._erro(403, b"Erro CSRF: Origem nao permitida")
 
             gate_id = path.split("/")[-1]
             content_length = int(self.headers.get("Content-Length", 0))

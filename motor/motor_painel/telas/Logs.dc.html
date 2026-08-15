@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<script src="mf-themes.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  body{margin:0;background:#0B0C0E}
+  .mf-root{
+    --bg:#0B0C0E;--surface:#121417;--surface2:#17191D;--border:#26292E;--focus:#3E434A;
+    --text:#E8E6E1;--text2:#8A8F98;--text3:#5A5F66;--accent:#E8A33D;
+    --red:#E5484D;--amber:#E8A33D;--green:#30A46C;--blue:#3E63DD;--inv-bg:#E8E6E1;--inv-text:#0B0C0E;
+    min-height:100vh;background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif;font-size:14px;display:flex;flex-direction:column;
+  }
+  .mf-root[data-theme="stark"]{
+    --bg:#F4F3F0;--surface:#FFFFFF;--surface2:#EDEBE6;--border:#D8D6D0;--focus:#A9A69E;
+    --text:#111213;--text2:#5D6167;--text3:#8B8E93;--accent:#B87514;
+    --red:#C62A30;--amber:#B87514;--green:#1E7F50;--blue:#2F4FC4;--inv-bg:#111213;--inv-text:#F4F3F0;
+  }
+  .mf-top{display:flex;align-items:center;gap:12px;height:52px;padding:0 18px;border-bottom:1px solid var(--border);background:var(--surface);flex:none}
+  .mf-body{display:flex;flex:1;min-height:0}
+  .mf-side{width:238px;flex:none;border-right:1px solid var(--border);background:var(--surface);overflow:auto;padding:8px 0}
+  .eyebrow{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3)}
+  .mono{font-family:'IBM Plex Mono',monospace}
+  .title{font-family:'Space Grotesk',system-ui;font-weight:600;letter-spacing:.2px}
+  .pill{display:inline-flex;align-items:center;gap:6px;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.6px;padding:5px 9px;border:1px solid var(--border);border-radius:2px;color:var(--text2);background:transparent;cursor:pointer;user-select:none}
+  .pill:hover{border-color:var(--focus);color:var(--text)}
+  .pill.on{color:var(--text);border-color:var(--accent);background:var(--surface2)}
+  .btn{display:inline-flex;align-items:center;gap:7px;font-family:Inter;font-weight:600;font-size:12px;padding:8px 13px;border-radius:2px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer}
+  .btn-primary{background:var(--inv-bg);color:var(--inv-text);border-color:var(--inv-bg)}
+  .btn-sm{padding:5px 10px;font-size:11px}
+  .zt{display:flex;justify-content:space-between;align-items:center;padding:15px 18px 6px;font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:600;letter-spacing:1.6px;text-transform:uppercase;color:var(--text3)}
+  .zt.fixed{color:var(--accent)}
+  .ni{display:flex;align-items:center;gap:9px;padding:7px 18px;font-size:13px;color:var(--text2);cursor:pointer;border-left:2px solid transparent}
+  .ni:hover{color:var(--text);background:var(--surface2)}
+  .ni.on{color:var(--text);background:var(--surface2);border-left-color:var(--accent);font-weight:600}
+  .badge{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;background:var(--accent);color:#0B0C0E;border-radius:2px;padding:1px 6px}
+  .sh{flex:none;position:relative;display:inline-block;margin-top:3px}
+  .sh.blue{width:8px;height:8px;border-radius:50%;background:var(--blue)}
+  .sh.green{width:8px;height:8px;border-radius:50%;background:var(--green)}
+  .sh.idle{width:8px;height:8px;border-radius:50%;background:var(--text3)}
+  .sh.amber{width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:9px solid var(--amber)}
+  .sh.red{width:9px;height:9px;background:var(--red);clip-path:polygon(30% 0,70% 0,100% 30%,100% 70%,70% 100%,30% 100%,0 70%,0 30%)}
+  .srch{display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:2px;padding:7px 11px;background:var(--surface);min-width:220px}
+  .srch input{border:none;outline:none;background:transparent;color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:12px;width:100%}
+  .srch input::placeholder{color:var(--text3)}
+  .col{flex:1;min-width:0;display:flex;flex-direction:column;border-right:1px solid var(--border)}
+  .col:last-child{border-right:none}
+  .colhead{display:flex;align-items:center;gap:8px;padding:11px 14px;border-bottom:1px solid var(--border);background:var(--surface);position:relative}
+  .colhead::before{content:"";position:absolute;left:0;top:0;bottom:0;width:2px}
+  .colhead.normal::before{background:var(--blue)}
+  .colhead.erros::before{background:var(--red)}
+  .colhead.inter::before{background:var(--amber)}
+  .lrow{display:flex;gap:9px;padding:9px 14px;border-bottom:1px solid var(--border);align-items:flex-start}
+  .lrow.link{cursor:pointer}
+  .lrow.link:hover{background:var(--surface2)}
+  .lt{font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:var(--text3);flex:none;width:52px;margin-top:2px}
+  .lev{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text);word-break:break-word}
+  .ldet{font-size:10.5px;color:var(--text2);line-height:1.5;margin-top:2px}
+  .lproj{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--text3)}
+  .caixa{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--amber);margin-top:6px;display:inline-flex;align-items:center;gap:4px}
+</style>
+</helmet>
+
+<div class="mf-root" data-theme="{{ theme }}">
+  <div class="mf-top">
+    <div style="width:19px;height:19px;border:1.5px solid var(--text);border-radius:2px;position:relative"><div style="position:absolute;inset:4px;border:1.5px solid var(--accent)"></div></div>
+    <span class="title" style="font-size:13px;letter-spacing:1px">META-FÁBRICA</span>
+    <span class="pill on">Projeto: Todos ▾</span>
+    <div style="flex:1"></div>
+    <span class="pill" onClick="{{ toggleTheme }}">◐ {{ themeLabel }}</span>
+    <span class="btn btn-primary btn-sm">+ Nova missão</span>
+    <span class="pill" style="padding:5px 8px">🔔 <span class="badge">3</span></span>
+  </div>
+
+  <div class="mf-body">
+    <div class="mf-side">
+      <div class="zt fixed"><span>Fixas</span></div>
+      <div class="ni">Home</div>
+      <div class="ni">Caixa do Fundador <span class="badge" style="margin-left:auto">3</span></div>
+      <div class="ni">Mapa geral</div>
+      <div class="zt"><span>Projeto: Todos</span><span>▾</span></div>
+      <div class="ni">Dashboard</div>
+      <div class="ni">Grafos ▾</div>
+      <div class="ni">Runs &amp; Histórico</div>
+      <div class="zt"><span>Biblioteca</span><span>▾</span></div>
+      <div class="ni">Agentes</div>
+      <div class="ni">Skills</div>
+      <div class="ni">Curador</div>
+      <div class="ni on">Logs</div>
+      <div class="ni">Custos</div>
+    </div>
+
+    <div style="flex:1;display:flex;flex-direction:column;min-width:0">
+      <!-- header -->
+      <div style="padding:12px 20px;border-bottom:1px solid var(--border);background:var(--surface);flex:none">
+        <div class="eyebrow" style="margin-bottom:3px">Telemetria · stream de eventos JSONL</div>
+        <div class="title" style="font-size:19px">Logs</div>
+      </div>
+
+      <!-- filters -->
+      <div style="display:flex;align-items:center;gap:10px;padding:11px 20px;border-bottom:1px solid var(--border);background:var(--surface);flex-wrap:wrap;flex:none">
+        <label class="srch">
+          <span class="mono" style="color:var(--text3);font-size:12px">⌕</span>
+          <input type="text" placeholder="buscar evento, executor, id…" value="{{ query }}" onInput="{{ onSearch }}"/>
+        </label>
+        <div style="width:1px;height:18px;background:var(--border);margin:0 2px"></div>
+        <span class="eyebrow" style="margin-right:2px">projeto</span>
+        <sc-for list="{{ projOpts }}" as="p" hint-placeholder-count="4"><span class="{{ p.cls }}" onClick="{{ p.onClick }}">{{ p.label }}</span></sc-for>
+        <div style="width:1px;height:18px;background:var(--border);margin:0 2px"></div>
+        <span class="pill">tipo ▾</span>
+        <span class="pill">período: hoje ▾</span>
+        <div style="flex:1"></div>
+        <span class="mono" style="font-size:10px;color:var(--text2);display:flex;align-items:center;gap:6px"><span class="sh blue" style="margin-top:0"></span>AO VIVO · MOTOR v0.5</span>
+      </div>
+
+      <!-- 3 columns -->
+      <div style="flex:1;display:flex;min-height:0">
+        <!-- NORMAL -->
+        <div class="col">
+          <div class="colhead normal">
+            <span class="eyebrow" style="color:var(--text)">Normal</span>
+            <span class="mono" style="font-size:10px;color:var(--text3)">{{ normal.length }}</span>
+            <div style="flex:1"></div>
+            <span class="mono" style="font-size:9px;color:var(--text3)">execução · roteamento</span>
+          </div>
+          <div style="flex:1;overflow:auto">
+            <sc-for list="{{ normal }}" as="l" hint-placeholder-count="8">
+              <div class="lrow">
+                <span class="lt">{{ l.t }}</span>
+                <span class="{{ l.sh }}"></span>
+                <div style="min-width:0">
+                  <div class="lev">{{ l.evt }}</div>
+                  <div class="ldet">{{ l.det }}</div>
+                  <div class="lproj">{{ l.proj }}</div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <!-- ERROS -->
+        <div class="col">
+          <div class="colhead erros">
+            <span class="eyebrow" style="color:var(--text)">Erros</span>
+            <span class="mono" style="font-size:10px;color:var(--red)">{{ erros.length }}</span>
+            <div style="flex:1"></div>
+            <span class="mono" style="font-size:9px;color:var(--text3)">reprovado · esgotado · degradado</span>
+          </div>
+          <div style="flex:1;overflow:auto">
+            <sc-for list="{{ erros }}" as="l" hint-placeholder-count="6">
+              <div class="lrow">
+                <span class="lt">{{ l.t }}</span>
+                <span class="{{ l.sh }}"></span>
+                <div style="min-width:0">
+                  <div class="lev" style="color:var(--red)">{{ l.evt }}</div>
+                  <div class="ldet">{{ l.det }}</div>
+                  <div class="lproj">{{ l.proj }}</div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <!-- INTERAÇÃO -->
+        <div class="col">
+          <div class="colhead inter">
+            <span class="eyebrow" style="color:var(--text)">Interação</span>
+            <span class="mono" style="font-size:10px;color:var(--amber)">{{ inter.length }}</span>
+            <div style="flex:1"></div>
+            <span class="mono" style="font-size:9px;color:var(--text3)">→ decidir na Caixa</span>
+          </div>
+          <div style="flex:1;overflow:auto">
+            <sc-for list="{{ inter }}" as="l" hint-placeholder-count="5">
+              <div class="lrow link">
+                <span class="lt">{{ l.t }}</span>
+                <span class="{{ l.sh }}"></span>
+                <div style="min-width:0">
+                  <div class="lev" style="color:var(--amber)">{{ l.evt }}</div>
+                  <div class="ldet">{{ l.det }}</div>
+                  <div class="lproj">{{ l.proj }}</div>
+                  <span class="caixa">→ Caixa do Fundador</span>
+                </div>
+              </div>
+            </sc-for>
+            <div class="mono" style="font-size:9.5px;color:var(--text3);padding:12px 14px;line-height:1.5">Não se decide aqui — a porta de decisão é uma só (§8.14). Cada item é um atalho para a Caixa.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;100%&quot;,&quot;height&quot;:&quot;100%&quot;}}">
+class Component extends DCLogic {
+  state = { theme: 'paperclip', query: '', proj: 'todos' };
+
+  logData() {
+    return {
+      normal: [
+        { t: '14:32:41', sh: 'sh green', evt: 'portao.aprovado', det: 'verifier:pesquisa-alfa · ciclo 1', proj: 'pesquisa-receita' },
+        { t: '14:32:40', sh: 'sh blue', evt: 'executor.respondeu', det: 'pesquisa-alfa · tent.1 · 1.8s', proj: 'pesquisa-receita' },
+        { t: '14:32:38', sh: 'sh blue', evt: 'executor.chamado', det: 'global_evaluator · complexa · codex', proj: 'pesquisa-receita' },
+        { t: '14:32:35', sh: 'sh green', evt: 'paralelo.concluido', det: 'commitados 2', proj: 'pesquisa-receita' },
+        { t: '14:31:58', sh: 'sh idle', evt: 'modelo.roteado_tier', det: 'transformador → média · deepseek-v3', proj: 'csv→json' },
+        { t: '14:31:52', sh: 'sh green', evt: 'gate.auto', det: 'cobertura · decisao: aprovado', proj: 'csv→json' },
+        { t: '14:31:40', sh: 'sh blue', evt: 'executor.respondeu', det: 'transformador · 312 rows · 2.6s', proj: 'csv→json' },
+        { t: '14:30:11', sh: 'sh idle', evt: 'spec.recebida', det: 'Fatia 2 de rota logística · 3 subag.', proj: 'logisti-fatia2' },
+        { t: '14:29:47', sh: 'sh green', evt: 'tarefa.concluida', det: 'digest emitido · $0.18', proj: 'csv→json' },
+      ],
+      erros: [
+        { t: '14:32:33', sh: 'sh red', evt: 'portao.reprovado', det: 'cobertura · ciclo 2 · "canal beta sem evidência quantitativa de ticket médio"', proj: 'pesquisa-receita' },
+        { t: '14:32:18', sh: 'sh red', evt: 'portao.reprovado', det: 'verifier:pesquisa-beta · ciclo 1 · "faltou evidência quantitativa"', proj: 'pesquisa-receita' },
+        { t: '14:30:52', sh: 'sh red', evt: 'provedor.esgotado', det: 'Moonshot · 429 · cota estourada', proj: 'pesquisa-receita' },
+        { t: '14:30:52', sh: 'sh idle', evt: 'modelo.fallback', det: 'de: kimi-k2 → para: deepseek-v3', proj: 'pesquisa-receita' },
+        { t: '14:28:04', sh: 'sh red', evt: 'ferramenta.indisponivel', det: 'fatiador-3d ausente · run abortado', proj: 'impressao-3d' },
+        { t: '14:27:59', sh: 'sh red', evt: 'executor.erro', det: 'arquiteto · tent.1 · timeout do provedor', proj: 'impressao-3d' },
+      ],
+      inter: [
+        { t: '14:32:34', sh: 'sh amber', evt: 'escalado → fundador', det: 'gate cobertura reprovado 2× · run PAUSADO aguardando decisão', proj: 'pesquisa-receita' },
+        { t: '14:15:20', sh: 'sh amber', evt: 'proposta.curador', det: 'promover Kimi a certificado em código-médio (evidência: 96 runs)', proj: 'sistema' },
+        { t: '13:58:02', sh: 'sh amber', evt: 'proposta.orquestrador', det: 'dividir missão logística em 2 workflows paralelos', proj: 'logisti-fatia2' },
+        { t: '13:44:31', sh: 'sh amber', evt: 'no.pedido_interacao', det: 'synthesizer pede confirmação de escopo antes de sintetizar', proj: 'csv→json' },
+      ],
+    };
+  }
+
+  renderVals() {
+    const s = this.state;
+    const D = this.logData();
+    const projs = ['todos', 'pesquisa-receita', 'csv→json', 'logisti-fatia2', 'impressao-3d'];
+    const projOpts = projs.map(p => ({ label: p, cls: 'pill' + (s.proj === p ? ' on' : ''), onClick: () => this.setState({ proj: p }) }));
+
+    const q = s.query.trim().toLowerCase();
+    const filt = (arr) => arr.filter(l =>
+      (s.proj === 'todos' || l.proj === s.proj) &&
+      (!q || (l.evt + ' ' + l.det + ' ' + l.proj).toLowerCase().includes(q))
+    );
+
+    return {
+      theme: s.theme, themeLabel: s.theme === 'paperclip' ? 'ESCURO' : 'CLARO',
+      toggleTheme: () => this.setState({ theme: s.theme === 'paperclip' ? 'stark' : 'paperclip' }),
+      query: s.query, onSearch: (e) => this.setState({ query: e.target.value }),
+      projOpts,
+      normal: filt(D.normal), erros: filt(D.erros), inter: filt(D.inter),
+    };
+  }
+}
+</script>
+</body>
+</html>

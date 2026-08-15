@@ -1,0 +1,53 @@
+{
+  "_comentario": [
+    "Config de orcamento do arranjo multi-provedor -- o unico que passa em",
+    "validar_independencia_orcada e portanto o unico apto a producao.",
+    "",
+    "Papeis: Anthropic planeja e revisa; Gemini executa; OpenAI verifica e",
+    "sintetiza, e executa quando o roteamento pede alta complexidade. Quando a",
+    "OpenAI executa, o motor a evita no verifier e a Anthropic julga -- produtor",
+    "nunca julga a propria obra.",
+    "",
+    "PERECIVEL: 'fx.capturado_em' vale 'fx_max_age_s' segundos e a tabela de",
+    "precos do codigo vale 7 dias. Vencidos, o motor RECUSA arrancar. Isso e",
+    "desenho, nao defeito: preco velho e contencao monetaria velha.",
+    "",
+    "Uso: python -m motor --modelos exemplos/cfg-orcada-multi.json 'sua missao'"
+  ],
+  "gemini": {
+    "api_key_env": "GEMINI_API_KEY",
+    "capacidades": [
+      "redacao",
+      "codigo",
+      "analise"
+    ],
+    "max_completion_tokens": 16000
+  },
+  "openai": {
+    "api_key_env": "OPENAI_API_KEY",
+    "capacidades": [
+      "redacao",
+      "codigo",
+      "analise"
+    ],
+    "max_completion_tokens": 16000
+  },
+  "anthropic": {
+    "api_key_env": "ANTHROPIC_API_KEY",
+    "capacidades": [
+      "redacao",
+      "codigo",
+      "analise"
+    ],
+    "max_completion_tokens": 16000
+  },
+  "fx": {
+    "versao": "awesomeapi-usdbrl-2026-08-14",
+    "capturado_em": 1786713448,
+    "cotacao_venda": "5.21128"
+  },
+  "fx_max_age_s": 86400,
+  "margem": "1.20",
+  "teto_bootstrap_brl": "5.0",
+  "timeout": 120
+}

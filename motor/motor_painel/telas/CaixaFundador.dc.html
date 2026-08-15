@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics="">
+<script src="mf-themes.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+  body{margin:0;background:#0B0C0E}
+  .mf-root{
+    --bg:#0B0C0E;--surface:#121417;--surface2:#17191D;--border:#26292E;--focus:#3E434A;
+    --text:#E8E6E1;--text2:#8A8F98;--text3:#5A5F66;--accent:#E8A33D;
+    --red:#E5484D;--amber:#E8A33D;--green:#30A46C;--blue:#3E63DD;--inv-bg:#E8E6E1;--inv-text:#0B0C0E;
+    min-height:100vh;background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif;font-size:14px;display:flex;flex-direction:column;
+  }
+  .mf-root[data-theme="stark"]{
+    --bg:#F4F3F0;--surface:#FFFFFF;--surface2:#EDEBE6;--border:#D8D6D0;--focus:#A9A69E;
+    --text:#111213;--text2:#5D6167;--text3:#8B8E93;--accent:#B87514;
+    --red:#C62A30;--amber:#B87514;--green:#1E7F50;--blue:#2F4FC4;--inv-bg:#111213;--inv-text:#F4F3F0;
+  }
+  .mf-top{display:flex;align-items:center;gap:12px;height:52px;padding:0 18px;border-bottom:1px solid var(--border);background:var(--surface);flex:none}
+  .mf-body{display:flex;flex:1;min-height:0}
+  .mf-side{width:238px;flex:none;border-right:1px solid var(--border);background:var(--surface);overflow:auto;padding:8px 0}
+  .eyebrow{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3)}
+  .num{font-family:'IBM Plex Mono',monospace;font-size:10.5px;font-weight:600;letter-spacing:1.4px;color:var(--text2);text-transform:uppercase}
+  .mono{font-family:'IBM Plex Mono',monospace}
+  .title{font-family:'Space Grotesk',system-ui;font-weight:600;letter-spacing:.2px}
+  .pill{display:inline-flex;align-items:center;gap:6px;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.9px;text-transform:uppercase;padding:5px 9px;border:1px solid var(--border);border-radius:2px;color:var(--text2);background:transparent;cursor:pointer}
+  .pill.on{color:var(--text);border-color:var(--focus);background:var(--surface2)}
+  .btn{display:inline-flex;align-items:center;gap:7px;font-family:Inter;font-weight:600;font-size:12.5px;padding:9px 15px;border-radius:2px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer}
+  .btn:hover{border-color:var(--focus)}
+  .btn-primary{background:var(--inv-bg);color:var(--inv-text);border-color:var(--inv-bg)}
+  .btn-amber{background:var(--amber);color:#0B0C0E;border-color:var(--amber)}
+  .btn-sm{padding:5px 10px;font-size:11px}
+  .zt{display:flex;justify-content:space-between;align-items:center;padding:15px 18px 6px;font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:600;letter-spacing:1.6px;text-transform:uppercase;color:var(--text3)}
+  .zt.fixed{color:var(--accent)}
+  .ni{display:flex;align-items:center;gap:9px;padding:7px 18px;font-size:13px;color:var(--text2);cursor:pointer;border-left:2px solid transparent}
+  .ni:hover{color:var(--text);background:var(--surface2)}
+  .ni.on{color:var(--text);background:var(--surface2);border-left-color:var(--accent);font-weight:600}
+  .ni.sub{padding-left:36px;font-size:12.5px}
+  .badge{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;background:var(--accent);color:#0B0C0E;border-radius:2px;padding:1px 6px}
+  .sh{flex:none;position:relative;display:inline-block}
+  .sh.amber{width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:11px solid var(--amber)}
+  .sh.green{width:9px;height:9px;border-radius:50%;background:var(--green)}
+  .sh.blue{width:9px;height:9px;border-radius:50%;background:var(--blue)}
+  .sh.red{width:11px;height:11px;background:var(--red);clip-path:polygon(30% 0,70% 0,100% 30%,100% 70%,70% 100%,30% 100%,0 70%,0 30%)}
+  .qitem{padding:14px 16px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;flex-direction:column;gap:6px}
+  .qitem:hover{background:var(--surface2)}
+  .qitem.on{background:var(--surface2);box-shadow:inset 2px 0 0 var(--accent)}
+  .ico{width:26px;height:26px;flex:none;border:1px solid var(--border);border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--text2)}
+  .ctxpanel{flex:1 1 280px;background:var(--surface);border:1px solid var(--border);border-radius:2px;padding:14px;min-width:0}
+  .ctxpanel.wide{flex:1 1 100%}
+  .diffline{font-family:'IBM Plex Mono',monospace;font-size:11.5px;line-height:1.7;white-space:pre-wrap;padding:0 6px}
+  .lnk{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.6px;text-transform:uppercase;color:var(--text2);cursor:pointer}
+  .lnk:hover{color:var(--text)}
+  .cbox{width:15px;height:15px;border:1px solid var(--focus);border-radius:2px;flex:none;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--accent)}
+  .cbox.ck{background:var(--accent);border-color:var(--accent);color:#0B0C0E}
+  table.tel{width:100%;border-collapse:collapse;font-family:'IBM Plex Mono',monospace;font-size:11px}
+  table.tel th{text-align:left;color:var(--text3);font-weight:600;padding:5px 8px;border-bottom:1px solid var(--border);text-transform:uppercase;letter-spacing:.5px;font-size:9px}
+  table.tel td{padding:6px 8px;border-bottom:1px solid var(--border);color:var(--text2)}
+  .mf-root[data-density="compacto"] .qitem{padding:9px 16px;gap:4px}
+  .mf-root[data-density="compacto"] .ctxpanel{padding:10px}
+  .mf-root[data-density="compacto"] .ni{padding:5px 18px}
+  .mf-root[data-density="compacto"] .btn{padding:7px 12px}
+</style>
+</helmet>
+
+<div class="mf-root" data-theme="{{ theme }}" data-density="{{ densidade }}" style="{{ rootStyle }}">
+  <!-- TOPBAR -->
+  
+
+  <div class="mf-top" style="background-color: #121417">
+    <div style="width:19px;height:19px;border:1.5px solid var(--text);border-radius:2px;position:relative"><div style="position:absolute;inset:4px;border:1.5px solid var(--accent)"></div></div>
+    <span class="title" style="font-size:13px;letter-spacing:1px">META-FÁBRICA</span>
+    <span class="pill on">Projeto: Todos ▾</span>
+    <div style="flex:1"></div>
+    <span class="pill" onClick="{{ toggleTheme }}">◐</span>
+    <span class="btn btn-primary btn-sm">+ Nova missão</span>
+    <span class="pill" style="padding:5px 8px">🔔 <sc-if value="{{ hasItems }}" hint-placeholder-val="{{ true }}"><span class="badge">{{ pendCount }}</span></sc-if></span>
+  </div><div class="mf-body">
+    <!-- SIDEBAR -->
+    <div class="mf-side" style="overflow: auto; background: linear-gradient(90deg, #000000, #050505)">
+      <div class="zt fixed"><span>Fixas</span></div>
+      <div class="ni">Home</div>
+      <div class="ni on">Caixa do Fundador <sc-if value="{{ hasItems }}" hint-placeholder-val="{{ true }}"><span class="badge" style="margin-left:auto">{{ pendCount }}</span></sc-if></div>
+      <div class="ni">Mapa geral</div>
+      <div class="zt"><span>Projeto: Todos</span><span>▾</span></div>
+      <div class="ni">Dashboard</div>
+      <div class="ni">Grafos ▾</div>
+      <div class="ni">Runs &amp; Histórico</div>
+      <div class="zt"><span>Biblioteca</span><span>▾</span></div>
+      <div class="ni">Agentes</div>
+      <div class="ni">Skills</div>
+      <div class="ni">Curador</div>
+      <div class="ni">Logs</div>
+      <div class="ni">Custos</div>
+    </div>
+
+    <!-- ===== QUEUE + DETAIL ===== -->
+    <div style="flex:1;display:flex;min-width:0">
+
+      <!-- QUEUE -->
+      <div style="width:322px;flex:none;border-right:1px solid var(--border);background:var(--surface);display:flex;flex-direction:column;min-height:0">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--border)">
+          <span class="num" style="color:var(--accent)">Fila de decisão · {{ pendCount }}</span>
+          <span class="lnk" onClick="{{ toggleSelect }}">{{ selectLabel }}</span>
+        </div>
+
+        <sc-if value="{{ selectMode }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;align-items:center;gap:8px;padding:9px 16px;border-bottom:1px solid var(--border);background:var(--surface2)">
+            <span class="mono" style="font-size:10px;color:var(--text2);flex:1">{{ checkedCount }} selecionados</span>
+            <span class="btn btn-sm" onClick="{{ loteApprove }}">Aprovar selecionados</span>
+          </div>
+        </sc-if>
+
+        <div style="flex: 1; overflow: auto; background-color: #070707">
+          <sc-for list="{{ queue }}" as="q" hint-placeholder-count="4">
+            <div class="qitem {{ q.selcls }}" onClick="{{ q.onSel }}">
+              <div style="display:flex;align-items:center;gap:9px">
+                <sc-if value="{{ selectMode }}" hint-placeholder-val="{{ false }}"><span class="{{ q.ckcls }}" onClick="{{ q.onCheck }}">✓</span></sc-if>
+                <span class="ico">{{ q.icon }}</span>
+                <div style="flex:1;min-width:0">
+                  <div style="display:flex;align-items:center;gap:6px"><span class="sh amber"></span><span class="eyebrow" style="color:var(--accent)">{{ q.origin }}</span></div>
+                  <div class="mono" style="font-size:10px;color:var(--text3);margin-top:2px">{{ q.project }}</div>
+                </div>
+                <span class="mono" style="font-size:9px;color:var(--text3);flex:none">{{ q.when }}</span>
+              </div>
+              <div class="mono" style="font-size:11.5px;color:var(--text2);line-height:1.45">{{ q.short }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        
+      </div>
+
+      <!-- DETAIL -->
+      <div style="flex: 1; overflow: auto; min-width: 0; background-color: #020202">
+
+        <sc-if value="{{ hasItems }}" hint-placeholder-val="{{ true }}">
+          <div style="padding:22px 24px 40px;display:flex;flex-direction:column;gap:18px">
+            <!-- header -->
+            <div style="display:flex;flex-direction:column;gap:10px;border-left:3px solid var(--amber);padding-left:16px">
+              <div style="display:flex;align-items:center;gap:10px">
+                <span class="sh amber"></span>
+                <span class="eyebrow" style="color:var(--amber)">Aguardando você · {{ sel.origin }}</span>
+                <span class="mono" style="font-size:10px;color:var(--text3)">{{ sel.project }} · {{ sel.node }}</span>
+                <div style="flex:1"></div>
+                <span class="mono" style="font-size:10px;color:var(--text3)">{{ sel.run }}</span>
+              </div>
+              <div class="title" style="font-size:20px;line-height:1.3;max-width:760px">{{ sel.question }}</div>
+            </div>
+
+            <!-- context side by side -->
+            <div>
+              <div class="num" style="margin-bottom:10px">Contexto que embasa a decisão</div>
+              <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:stretch">
+                <sc-for list="{{ sel.context }}" as="c" hint-placeholder-count="3">
+                  <div class="ctxpanel {{ c.wcls }}">
+                    <div class="eyebrow" style="margin-bottom:9px">{{ c.title }}</div>
+
+                    <sc-if value="{{ c.isMotivo }}" hint-placeholder-val="{{ false }}">
+                      <div class="mono" style="font-size:12px;color:var(--text);line-height:1.65">{{ c.text }}</div>
+                    </sc-if>
+
+                    <sc-if value="{{ c.isDiff }}" hint-placeholder-val="{{ false }}">
+                      <div style="background:var(--bg);border:1px solid var(--border);border-radius:2px;padding:8px 4px">
+                        <sc-for list="{{ c.lines }}" as="l" hint-placeholder-count="4">
+                          <div class="diffline" style="color:{{ l.color }}">{{ l.txt }}</div>
+                        </sc-for>
+                      </div>
+                    </sc-if>
+
+                    <sc-if value="{{ c.isArtefato }}" hint-placeholder-val="{{ false }}">
+                      <div class="mono" style="font-size:11.5px;color:var(--text2);background:var(--bg);border:1px solid var(--border);border-radius:2px;padding:10px;line-height:1.6;white-space:pre-wrap">{{ c.text }}</div>
+                    </sc-if>
+
+                    <sc-if value="{{ c.isResumo }}" hint-placeholder-val="{{ false }}">
+                      <div style="display:flex;flex-direction:column;gap:0">
+                        <sc-for list="{{ c.rows }}" as="r" hint-placeholder-count="4">
+                          <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border)"><span class="mono" style="font-size:11px;color:var(--text3)">{{ r.k }}</span><span class="mono" style="font-size:11px;color:var(--text)">{{ r.v }}</span></div>
+                        </sc-for>
+                      </div>
+                    </sc-if>
+
+                    <sc-if value="{{ c.isTabela }}" hint-placeholder-val="{{ false }}">
+                      <table class="tel">
+                        <thead><tr><th>Modelo</th><th>1ª tent.</th><th>Lat. p90</th><th>Erro</th></tr></thead>
+                        <tbody>
+                          <sc-for list="{{ c.rows }}" as="r" hint-placeholder-count="3">
+                            <tr><td style="color:var(--text)">{{ r.modelo }}</td><td>{{ r.prim }}</td><td>{{ r.lat }}</td><td>{{ r.err }}</td></tr>
+                          </sc-for>
+                        </tbody>
+                      </table>
+                    </sc-if>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+
+            <!-- options -->
+            <div style="background:var(--surface);border:1px solid var(--border);border-radius:2px;padding:16px">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+                <span class="num">Decisão · individual desta pendência</span>
+                <span class="mono" style="font-size:10px;color:var(--text3)">registra <b style="color:var(--text2)">decisao.fundador</b> · destrava o run na hora</span>
+              </div>
+              <div style="display:flex;gap:9px;flex-wrap:wrap">
+                <sc-for list="{{ sel.options }}" as="o" hint-placeholder-count="4">
+                  <span class="{{ o.cls }}" onClick="{{ o.onClick }}">{{ o.label }}</span>
+                </sc-for>
+              </div>
+            </div>
+
+            <!-- history -->
+            <div>
+              <div class="num" style="margin-bottom:10px">Histórico de decisões · auditável</div>
+              <div style="border:1px solid var(--border);border-radius:2px;overflow:hidden">
+                <sc-for list="{{ log }}" as="h" hint-placeholder-count="2">
+                  <div style="display:flex;align-items:center;gap:12px;padding:9px 14px;border-bottom:1px solid var(--border);font-family:'IBM Plex Mono',monospace;font-size:11px">
+                    <span style="color:var(--text3);width:52px;flex:none">{{ h.t }}</span>
+                    <span class="sh green"></span>
+                    <span style="color:var(--text2);flex:1">{{ h.txt }}</span>
+                    <span style="color:var(--text);text-transform:uppercase;font-size:9px;letter-spacing:.6px">{{ h.dec }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- empty (good state) -->
+        <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}">
+          <div style="height:100%;min-height:520px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:40px">
+            <div style="width:40px;height:40px;border:1.5px solid var(--green);border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--green);font-size:18px">✓</div>
+            <div class="title" style="font-size:19px">Nada precisa de você agora</div>
+            <div class="mono" style="font-size:12px;color:var(--text2);max-width:420px;text-align:center;line-height:1.6">A fila está vazia. Quando um gate humano, o Curador ou o Orquestrador precisarem de uma decisão, a pendência aparece aqui e o sino acende. Você pode seguir observando os runs.</div>
+            <div style="display:flex;gap:9px"><span class="btn btn-sm">Ir para a Home</span><span class="btn btn-sm">Abrir Mapa geral</span></div>
+          </div>
+        </sc-if>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;100%&quot;,&quot;height&quot;:&quot;100%&quot;},&quot;acento&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#E8A33D&quot;,&quot;options&quot;:[&quot;#E8A33D&quot;,&quot;#D9734A&quot;,&quot;#4C7DF0&quot;,&quot;#6FA644&quot;],&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Tema&quot;},&quot;temperatura&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;quente&quot;,&quot;neutro&quot;,&quot;frio&quot;],&quot;default&quot;:&quot;quente&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Tema&quot;},&quot;densidade&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;confortavel&quot;,&quot;compacto&quot;],&quot;default&quot;:&quot;confortavel&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Tema&quot;}}">
+class Component extends DCLogic {
+  state = {
+    theme: 'paperclip', selected: 'g1', selectMode: false, checked: [], resolved: [],
+    log: [
+      { t: '09:41', txt: 'cobertura · logisti-fatia2', dec: 'prosseguir' },
+      { t: '09:12', txt: 'promover deepseek-v4 · redator', dec: 'reprovar' },
+    ],
+  };
+
+  items() {
+    return [
+      {
+        id: 'g1', icon: '⛒', origin: 'Gate humano', originShort: 'gate cobertura', project: 'pesquisa-receita', node: 'global_evaluator',
+        run: 'RUN-2026-07-02-013 · WF-042', when: 'há 2s',
+        short: 'Gate de cobertura reprovou (ciclo 2). Prosseguir?',
+        question: 'O gate de cobertura reprovou no ciclo 2. Prosseguir mesmo assim, revisar a lacuna ou abortar o run?',
+        options: [{ label: 'Prosseguir', primary: true }, { label: 'Revisar' }, { label: 'Abortar' }, { label: 'Inserir valor…' }],
+        context: [
+          { title: 'Motivo · texto do avaliador', wide: true, isMotivo: true, text: 'canal beta sem evidência quantitativa de ticket médio. O avaliador global mediu a cobertura agregada em 2 ciclos: a subtarefa alfa passou; a beta trouxe fontes qualitativas mas não quantificou o ticket médio por canal, deixando a rubrica de cobertura abaixo do piso. A escalada simples→media (llama→kimi) já foi tentada e re-sintetizada.' },
+          { title: 'Artefato em revisão · digest parcial', isArtefato: true, text: '## Síntese (parcial)\n- canal alfa: CAC R$ 42, ticket R$ 180\n- canal beta: mix de fontes\n  ⚠ ticket médio: não quantificado' },
+          { title: 'Mudança proposta pela reconciliação', isDiff: true, lines: [
+            { txt: '  ## canal beta', color: 'var(--text2)' },
+            { txt: '- fontes qualitativas (3)', color: 'var(--red)' },
+            { txt: '+ + ticket médio por canal (n=214)', color: 'var(--green)' },
+            { txt: '+ + intervalo de confiança 95%', color: 'var(--green)' },
+          ] },
+        ],
+      },
+      {
+        id: 'c1', icon: '◑', origin: 'Curador', originShort: 'promoção de modelo', project: 'catálogo de modelos', node: 'papel código-médio',
+        run: 'evidência · 14 runs', when: 'há 6min',
+        short: 'Promover kimi-k2.6 a certificado em código-médio?',
+        question: 'Promover kimi-k2.6 de "em sombra" a certificado no papel código-médio? Evidência acumulada em 14 runs.',
+        options: [{ label: 'Promover', primary: true }, { label: 'Reprovar' }, { label: 'Manter em sombra' }],
+        context: [
+          { title: 'Evidência · aptidão por modelo', wide: true, isTabela: true, rows: [
+            { modelo: 'kimi-k2.6', prim: '82%', lat: '3.4s', err: '4%' },
+            { modelo: 'llama-3.3-70b', prim: '51%', lat: '1.9s', err: '11%' },
+            { modelo: 'codex/gpt-5.4', prim: '94%', lat: '6.1s', err: '1%' },
+          ] },
+          { title: 'Leitura do Curador', isMotivo: true, text: 'kimi-k2.6 cruza o piso de 1ª tentativa (80%) em código-médio e converge após escalada em 9/10 casos. Custo entre o llama (free) e o Codex (topo). Recomendação: certificar para virar o degrau media padrão, reservando o Codex para código-complexo.' },
+        ],
+      },
+      {
+        id: 'o1', icon: '◆', origin: 'Orquestrador', originShort: 'troca de preset', project: 'logisti-fatia2', node: 'run em curso',
+        run: 'proposta · agora', when: 'há 1min',
+        short: 'Trocar preset para free-escalada neste run?',
+        question: 'Trocar o preset deste run para free-escalada? 2 subtarefas difíceis estão reprovando no tier simples.',
+        options: [{ label: 'Aprovar', primary: true }, { label: 'Discutir no chat' }, { label: 'Rejeitar' }],
+        context: [
+          { title: 'O que vai acontecer', isResumo: true, rows: [
+            { k: 'rota', v: 'forja (software)' },
+            { k: 'preset', v: 'free → free-escalada' },
+            { k: 'escalada', v: 'simples → media → complexa' },
+            { k: 'teto de rodadas', v: '3' },
+          ] },
+          { title: 'Justificativa', isMotivo: true, text: 'As subtarefas validacao e transformacao reprovaram 2× no tier simples (llama). free-escalada mantém o custo baixo mas libera o degrau media (kimi) sob demanda, disparando escalada só onde o simples falha. Impacto de custo estimado: +US$ 0.30 no run.' },
+        ],
+      },
+      {
+        id: 'n1', icon: '◇', origin: 'Nó · interação', originShort: 'pedido do nó', project: 'csv→json', node: 'qa-engineer-02',
+        run: 'RUN-2026-07-02-018', when: 'há 3min',
+        short: 'qa-engineer-02 pede confirmação p/ suíte destrutiva.',
+        question: 'O executor qa-engineer-02 pede confirmação: rodar a suíte de testes destrutiva contra o dataset de staging?',
+        options: [{ label: 'Responder', primary: true }, { label: 'Enfileirar' }, { label: 'Perguntar' }],
+        context: [
+          { title: 'Plano do nó · artefato', wide: true, isArtefato: true, text: '# suite: destrutiva\nalvo: staging/clientes.csv (cópia)\npassos: truncate → reimport → validate\nrollback: snapshot pré-execução' },
+          { title: 'Contexto', isMotivo: true, text: 'O nó está no modo Perguntar (canal paralelo). Responder aqui injeta a decisão no próximo turno sem interromper os demais nós do fan-out.' },
+        ],
+      },
+    ];
+  }
+
+  resolveItem(id, label) {
+    const it = this.items().find(i => i.id === id);
+    const log = [{ t: 'agora', txt: (it ? it.project + ' · ' + it.originShort : id), dec: (label || 'decidido').replace('…', '').toLowerCase() }, ...this.state.log];
+    const resolved = [...this.state.resolved, id];
+    const remaining = this.items().filter(i => !resolved.includes(i.id));
+    this.setState({ resolved, log, selected: remaining.length ? remaining[0].id : null, checked: this.state.checked.filter(c => c !== id) });
+  }
+
+  renderVals() {
+    const acc = this.props.acento ?? '#E8A33D';
+    const temp = this.props.temperatura ?? 'quente';
+    const densidade = this.props.densidade ?? 'confortavel';
+    const temps = {
+      paperclip: {
+        quente: { '--bg': '#0B0C0E', '--surface': '#121417', '--surface2': '#17191D', '--border': '#26292E', '--focus': '#3E434A' },
+        neutro: { '--bg': '#0C0D0F', '--surface': '#131518', '--surface2': '#191B1F', '--border': '#282B30', '--focus': '#40454C' },
+        frio: { '--bg': '#0A0C0F', '--surface': '#111519', '--surface2': '#161B20', '--border': '#253035', '--focus': '#3B4650' },
+      },
+      stark: {
+        quente: { '--bg': '#F4F3F0', '--surface': '#FFFFFF', '--surface2': '#EDEBE6', '--border': '#D8D6D0', '--focus': '#A9A69E' },
+        neutro: { '--bg': '#F4F4F3', '--surface': '#FFFFFF', '--surface2': '#ECECEA', '--border': '#D9D9D6', '--focus': '#ABABA6' },
+        frio: { '--bg': '#F1F4F6', '--surface': '#FFFFFF', '--surface2': '#E9EDEF', '--border': '#D4DADE', '--focus': '#A6ADB2' },
+      },
+    };
+    const rootStyle = { ...((temps[this.state.theme] || temps.paperclip)[temp] || {}), '--accent': acc, '--amber': acc };
+    const resolved = this.state.resolved;
+    const all = this.items();
+    const queueRaw = all.filter(i => !resolved.includes(i.id));
+    let selId = this.state.selected;
+    if (!queueRaw.find(q => q.id === selId)) selId = queueRaw.length ? queueRaw[0].id : null;
+
+    const queue = queueRaw.map(q => ({
+      id: q.id, icon: q.icon, origin: q.origin, project: q.project, when: q.when, short: q.short,
+      selcls: q.id === selId ? 'on' : '',
+      ckcls: this.state.checked.includes(q.id) ? 'cbox ck' : 'cbox',
+      onSel: () => this.setState({ selected: q.id }),
+      onCheck: () => this.setState({ checked: this.state.checked.includes(q.id) ? this.state.checked.filter(c => c !== q.id) : [...this.state.checked, q.id] }),
+    }));
+
+    const selRaw = all.find(i => i.id === selId);
+    let sel = {};
+    if (selRaw) {
+      sel = {
+        origin: selRaw.origin, project: selRaw.project, node: selRaw.node, run: selRaw.run, question: selRaw.question,
+        context: (selRaw.context || []).map(c => ({
+          ...c, wcls: c.wide ? 'wide' : '',
+          isMotivo: !!c.isMotivo, isDiff: !!c.isDiff, isArtefato: !!c.isArtefato, isResumo: !!c.isResumo, isTabela: !!c.isTabela,
+        })),
+        options: (selRaw.options || []).map(o => ({
+          label: o.label, cls: o.primary ? 'btn btn-amber' : 'btn',
+          onClick: () => this.resolveItem(selRaw.id, o.label),
+        })),
+      };
+    }
+
+    return {
+      theme: this.state.theme, themeLabel: this.state.theme === 'paperclip' ? 'ESCURO' : 'CLARO',
+      queue, pendCount: queue.length, hasItems: queue.length > 0, isEmpty: queue.length === 0,
+      sel, log: this.state.log, rootStyle, densidade,
+      selectMode: this.state.selectMode, selectLabel: this.state.selectMode ? 'cancelar' : 'selecionar',
+      checkedCount: this.state.checked.length,
+      toggleSelect: () => this.setState({ selectMode: !this.state.selectMode, checked: [] }),
+      loteApprove: () => { this.state.checked.forEach(id => this.resolveItem(id, 'aprovar')); this.setState({ selectMode: false, checked: [] }); },
+      toggleTheme: () => this.setState({ theme: this.state.theme === 'paperclip' ? 'stark' : 'paperclip' }),
+    };
+  }
+}
+</script>
+</body>
+</html>

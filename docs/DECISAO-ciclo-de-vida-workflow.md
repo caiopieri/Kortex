@@ -3,12 +3,12 @@
 > **Canônico.** Fonte única de como um workflow nasce, é personalizado, versionado, executado
 > (inclusive parcialmente) e melhorado ao longo do tempo. Companheiro de
 > `motor/docs/EVOLUCAO.md` (vetores do motor) e `../motor/motor/spec.py` (a WorkflowSpec real).
-> Se algum doc conflitar com este no tema "workflow", **este vence**. De: Caio + arquitetura,
+> Se algum doc conflitar com este no tema "workflow", **este vence**. Decisão registrada em
 > 2026-07-03.
 
 ## Por que este doc existe
-Decidimos, em conversa, como o usuário cria e evolui workflows. Sem registrar, os outros
-agentes (Codex, Claude de outra sessão, Design) seguem no escuro. Aqui fica travado.
+Este documento registra o contrato de criação e evolução de workflows para que implementação,
+interface e documentação permaneçam compatíveis.
 
 ## 1. O que é um workflow (o objeto)
 Um **workflow é uma WorkflowSpec** — dado tipado, inspecionável, versionado (`motor/motor/spec.py`).
@@ -28,7 +28,7 @@ não é inventado por missão, é o template que as missões instanciam. Novos d
 o seu próprio template, semeado por pesquisa (ver §3).
 
 ## 3. Autoria como uma run do motor (dogfooding)
-Criar um workflow novo **é uma missão do motor**. O fluxo que o Caio descreveu:
+Criar um workflow novo **é uma missão do motor**. O fluxo previsto é:
 1. Usuário: "sinto falta de um workflow de design, vamos fazer?"
 2. **Orquestrador** conduz: propõe uma **pesquisa profunda de mercado** (padrão de indústria),
    **arquiteta** a pesquisa pra ela valer de todos os lados, roda → **sintetiza** → **rascunha a
@@ -83,7 +83,7 @@ A missão **não é obrigada a rodar o template inteiro**:
   evidência de versão.
 
 ## 8. Composição entre casas (voz → software house → volta)
-Compor pedaços de workflows/casas diferentes é o **princípio fractal** (LEIA-PRIMEIRO §2):
+Compor pedaços de workflows/casas diferentes segue a arquitetura em camadas:
 - O artefato de um run (a "voz") sai como **artefato tipado com proveniência** e entra como
   **entrada** de outro run (na software house). O `Subagente` já tem `entradas` e
   `produz_artefatos`.
@@ -115,5 +115,5 @@ Compor pedaços de workflows/casas diferentes é o **princípio fractal** (LEIA-
 ## Referências
 - WorkflowSpec real: `../motor/motor/spec.py` (padrões, `Subagente`, `GateFundador`, validação).
 - Vetores do motor: `../motor/docs/EVOLUCAO.md` (V1 validadores, V3 curador, V4 fractal, V5 spec).
-- Visão/camadas/princípios: `LEIA-PRIMEIRO.md`. Mapa operacional: `ROADMAP.md`.
-- Realização na interface: `design/BRIEF-DESIGN-interface-meta-fabrica.md` (§8.3a board, §8.5 editor).
+- Visão/camadas/princípios: `ARCHITECTURE.md`. Mapa operacional: `ROADMAP.md`.
+- Contrato da interface: `../motor/specs/002-painel-operacional/spec.md`.

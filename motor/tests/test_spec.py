@@ -107,13 +107,32 @@ def test_validador_comando_valido_sem_papel_ou_rubrica():
     assert validador.tipo == "validador"
     assert validador.papel is None
     assert validador.rubrica == []
-    assert validador.validador["kind"] == "comando"
+    assert validador.validador is not None
+    assert validador.validador.kind == "comando"
+
+
+def test_validador_comando_declara_modulos_python_sem_ambiguidades():
+    bruto = _spec_com_validador_comando()
+    config = bruto["subagentes"][1]["validador"]["config"]
+    config["modulos_python"] = ["pytest", "requests.adapters"]
+
+    spec = WorkflowSpec.model_validate(bruto)
+
+    assert spec.subagentes[1].validador.config.modulos_python == ["pytest", "requests.adapters"]
+
+    config["modulos_python"] = ["pytest", "pytest"]
+    with pytest.raises(ValidationError, match="não pode repetir"):
+        WorkflowSpec.model_validate(bruto)
+
+    config["modulos_python"] = ["pytest;import_os"]
+    with pytest.raises(ValidationError, match="modulos_python"):
+        WorkflowSpec.model_validate(bruto)
 
 
 def test_validador_comando_exige_config_comando():
     sem_config = _spec_com_validador_comando()
     sem_config["subagentes"][1]["validador"].pop("config")
-    with pytest.raises(ValidationError, match="exige config"):
+    with pytest.raises(ValidationError, match="validador.comando.config"):
         WorkflowSpec.model_validate(sem_config)
 
     sem_comando = _spec_com_validador_comando()

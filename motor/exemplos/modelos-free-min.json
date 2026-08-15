@@ -1,5 +1,5 @@
 {
-  "_comentario": "SHAKEDOWN free DIRETO (sem opencode). UM modelo só (NVIDIA llama-3.3-70b via HTTP openai-compat) pra isolar a variável depois que o opencode travou (database is locked + timeout em fan-out paralelo). Transporte openai-compat = request HTTP, sem cold-start nem banco local, concorrência não trava. Exige NVIDIA_API_KEY no ambiente + certificados do Python do Mac (Install Certificates.command). 'padrao':'nenhum' = sem claude/codex (inerte até o HANDOFF-CODEX-SEM-CAROS entrar; até lá, em FALHA ainda cai no claude — rode olhando o log por modelo.fallback). Quando este completar, eu monto a escada direta completa (llama + qwen-next juiz + openrouter).",
+  "_comentario": "Perfil mínimo com um único modelo NVIDIA via API compatível com OpenAI. Exige NVIDIA_API_KEY.",
 
   "padrao": "nenhum",
 

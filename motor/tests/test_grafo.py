@@ -2,6 +2,7 @@
 o gate do fundador (interrupt/resume) e a missão dirigida por spec serializada."""
 import json
 import sys
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -14,13 +15,23 @@ except ImportError:
 
 from motor.eventos import LogEventos
 from motor import __main__ as cli
-from motor.grafo import PROMPT_SUBAGENTE, _proximo_tier, construir_grafo
+from motor.grafo import PROMPT_SUBAGENTE, _proximo_tier
+from tests.helpers_grafo import composicao_stub, construir_grafo_teste as construir_grafo
 from motor.modelos import ClienteRoteador, ClienteStub
+from motor.orcamento import (
+    CotacaoTentativa,
+    RequisitosTentativaCusteada,
+    RepositorioOrcamento,
+    ResultadoTentativa,
+    RotaTentativaCusteada,
+)
 from motor.politica import PoliticaGates
 
 SPEC = json.loads(
     (Path(__file__).parent.parent / "exemplos" / "missao-pesquisa.json").read_text(encoding="utf-8")
 )
+for _sub in SPEC["subagentes"]:
+    _sub.setdefault("capacidades_requeridas", ["pesquisa"])
 
 
 def spec_dependencias():
@@ -81,10 +92,69 @@ def faz_roteador(reprovar_beta_uma_vez=False, evaluator_aprova=True):
 
 def roda(tmp_path, roteador, entrada):
     log = LogEventos(tmp_path / "log.jsonl")
-    grafo = construir_grafo(ClienteStub(roteador), log, checkpointer=InMemorySaver(),
-                            politica=PoliticaGates(overrides={"plano": "prosseguir"}))
+    class Tentativa:
+        def __init__(self, papel_recebido, prompt_recebido):
+            self.papel, self.prompt = papel_recebido, prompt_recebido
+
+        def cotar_tentativa(self):
+            return CotacaoTentativa(Decimal("0.01"), "BRL", "teste-v1")
+
+        def tentar_uma_vez(self):
+            return ResultadoTentativa(
+                roteador(self.papel, self.prompt), Decimal("0"), "BRL", "teste-uso"
+            )
+
+    def fabrica(_papel, prompt_recebido, _tentativa, _requisitos):
+        nonlocal prompt
+        prompt = prompt_recebido
+        return [RotaTentativaCusteada(
+            f"stub:{_papel}", f"stub-provider:{_papel}", Tentativa(_papel, prompt_recebido),
+        )]
+
+    prompt = ""
+    grafo = construir_grafo(
+        ClienteStub(roteador), log, checkpointer=InMemorySaver(),
+        politica=PoliticaGates(overrides={"plano": "prosseguir"}),
+        repositorio_orcamento=RepositorioOrcamento(tmp_path / "orcamento"),
+        fabrica_tentativas_orcadas=fabrica,
+    )
+    entrada = {"run_id": "run-teste", "thread_id": "t1", **entrada}
     config = {"configurable": {"thread_id": "t1"}}
     return grafo, config, log, grafo.invoke(entrada, config)
+
+
+def _orcamento_cliente(tmp_path, cliente):
+    class Tentativa:
+        def __init__(self, papel, prompt, requisitos):
+            self.papel, self.prompt, self.requisitos = papel, prompt, requisitos
+
+        def cotar_tentativa(self):
+            return CotacaoTentativa(Decimal("0.01"), "BRL", "teste-v1")
+
+        def tentar_uma_vez(self):
+            texto = cliente.chamar(
+                self.papel, self.prompt,
+                ferramentas=self.requisitos.ferramentas,
+                tier=self.requisitos.tier,
+                evitar=self.requisitos.evitar_provedor,
+                capacidades=(
+                    list(self.requisitos.capacidades)
+                    if self.requisitos.capacidades is not None else None
+                ),
+            )
+            return ResultadoTentativa(texto, Decimal("0"), "BRL", "teste-uso")
+
+    def fabrica(papel, prompt, _tentativa, requisitos):
+        assert isinstance(requisitos, RequisitosTentativaCusteada)
+        return [RotaTentativaCusteada(
+            f"teste:{papel}", f"teste-provider:{papel}",
+            Tentativa(papel, prompt, requisitos),
+        )]
+
+    return {
+        "repositorio_orcamento": RepositorioOrcamento(tmp_path / "orcamento"),
+        "fabrica_tentativas_orcadas": fabrica,
+    }
 
 
 def eventos_de(tmp_path):
@@ -159,7 +229,7 @@ def test_rag_injeta_contexto_recuperado_e_emite_evento(tmp_path):
 
     resultado = grafo.invoke({"spec": spec_rag(dataset)}, {"configurable": {"thread_id": "rag"}})
 
-    assert resultado["resposta_final"] == "FINAL"
+    assert resultado["resposta_final"].endswith("FINAL")
     prompt = next(p for papel, p in cliente.chamadas if papel == "executor")
     assert "CONTEXTO RECUPERADO" in prompt
     assert "erro-move" in prompt
@@ -219,7 +289,7 @@ def test_fonte_rag_inexistente_nao_quebra_e_nao_injeta_bloco(tmp_path):
         {"configurable": {"thread_id": "rag-ausente"}},
     )
 
-    assert resultado["resposta_final"] == "FINAL"
+    assert resultado["resposta_final"].endswith("FINAL")
     prompt = next(p for papel, p in cliente.chamadas if papel == "executor")
     assert "CONTEXTO RECUPERADO" not in prompt
     evento = next(e for e in eventos_de(tmp_path) if e["evento"] == "rag.consultado")
@@ -231,7 +301,7 @@ def test_missao_dirigida_por_spec_serializada(tmp_path):
     """Critério de falsificação nº1: a missão roda inteira dirigida por uma spec
     serializada, sem código novo por missão."""
     _, _, _, resultado = roda(tmp_path, faz_roteador(), {"spec": SPEC})
-    assert resultado["resposta_final"] == "SÍNTESE FINAL DA MISSÃO"
+    assert resultado["resposta_final"].endswith("SÍNTESE FINAL DA MISSÃO")
     assert {r["id"] for r in resultado["resultados"]} == {"pesquisa-alfa", "pesquisa-beta"}
     assert all(r["aprovado"] for r in resultado["resultados"])
     tipos = [e["evento"] for e in eventos_de(tmp_path)]
@@ -240,7 +310,7 @@ def test_missao_dirigida_por_spec_serializada(tmp_path):
 
 def test_planner_cria_spec_a_partir_de_missao_texto(tmp_path):
     _, _, _, resultado = roda(tmp_path, faz_roteador(), {"missao_texto": "pesquise oportunidades de receita"})
-    assert resultado["resposta_final"] == "SÍNTESE FINAL DA MISSÃO"
+    assert resultado["resposta_final"].endswith("SÍNTESE FINAL DA MISSÃO")
     assert "spec.criada" in [e["evento"] for e in eventos_de(tmp_path)]
 
 
@@ -292,6 +362,13 @@ def test_cli_rascunho_propaga_perfil_para_grafo(tmp_path, monkeypatch):
     monkeypatch.setattr(sys, "argv", ["motor", "--spec", str(spec_path), "--rascunho"])
     monkeypatch.setattr(cli, "LogEventos", LogFake)
     monkeypatch.setattr(cli, "construir_cliente", lambda *args, **kwargs: ClienteStub(faz_roteador()))
+    monkeypatch.setattr(
+        cli, "compor_orcamento_openai",
+        lambda *_args, **_kwargs: composicao_stub(
+            ClienteStub(faz_roteador()), tmp_path / "orcamento-cli-rascunho",
+        ),
+    )
+    monkeypatch.setattr(cli, "_drenar_orcamento_cli", lambda *_args: True)
     monkeypatch.setattr(cli, "construir_grafo", construir_fake)
 
     assert cli.main() == 0
@@ -314,7 +391,9 @@ def test_gate_fundador_prosseguir(tmp_path):
     assert "__interrupt__" in resultado  # pausado no gate, sem resposta final
     assert resultado["__interrupt__"][0].value["portao"] == "cobertura"
     retomado = grafo.invoke(Command(resume="prosseguir"), config)
-    assert retomado["resposta_final"] == "SÍNTESE FINAL DA MISSÃO"
+    # Carimbado: cobertura liberada com lacunas nunca sai como entregável limpo.
+    assert retomado["resposta_final"].startswith("⚠️ RUN REPROVADO")
+    assert retomado["resposta_final"].endswith("SÍNTESE FINAL DA MISSÃO")
     assert retomado["avaliacao"]["prosseguir_parcial"] is True
     tipos = [e["evento"] for e in eventos_de(tmp_path)]
     assert "escalado" in tipos and "decisao.fundador" in tipos
@@ -329,16 +408,42 @@ def test_gate_fundador_abortar(tmp_path):
     assert "tarefa.abortada" in [e["evento"] for e in eventos_de(tmp_path)]
 
 
-def test_gate_auto_mode_nao_interrompe(tmp_path):
-    """Auto-mode (Corte C): cobertura reprova mas NÃO pausa — resolve 'prosseguir' e
-    completa a missão sozinho. Sem 'escalado', com 'gate.auto'."""
+def test_gate_auto_sem_juiz_independente_chama_o_fundador(tmp_path):
+    """MUDANÇA DE CONTRATO (2026-07-29). Antes, auto-mode resolvia 'prosseguir' e
+    nunca pausava — e foi assim que uma missão com cobertura REPROVADA saiu
+    apresentada como entregue. Portão que reprova e deixa passar não é portão.
+
+    Agora o default de cobertura é 'escalar'. Aqui não há juiz independente (o
+    Stub não tem cadeia de rotas), então a escalada é impossível — e a ausência
+    de segunda opinião NÃO vira aprovação: o motor degrada para humano.
+    """
     log = LogEventos(tmp_path / "log.jsonl")
     grafo = construir_grafo(ClienteStub(faz_roteador(evaluator_aprova=False)), log,
                             checkpointer=InMemorySaver(), politica=PoliticaGates(auto_mode=True))
     res = grafo.invoke({"spec": SPEC}, {"configurable": {"thread_id": "auto"}})
+    assert "__interrupt__" in res
+    assert res["__interrupt__"][0].value["portao"] == "cobertura"
+    tipos = [e["evento"] for e in eventos_de(tmp_path)]
+    assert "escalada.indisponivel" in tipos and "escalado" in tipos
+
+
+def test_prosseguir_cego_continua_possivel_mas_so_como_override_explicito(tmp_path):
+    """A porta insegura não é fechada — é obrigada a ter nome.
+
+    Quem quiser um automático que nunca pare escreve `cobertura=prosseguir` e
+    assume; o que não pode é isso ser o default e o operador descobrir depois,
+    lendo um relatório otimista de um run vermelho. E mesmo aqui o carimbo
+    entrega o estado real.
+    """
+    log = LogEventos(tmp_path / "log.jsonl")
+    grafo = construir_grafo(
+        ClienteStub(faz_roteador(evaluator_aprova=False)), log,
+        checkpointer=InMemorySaver(),
+        politica=PoliticaGates(auto_mode=True, overrides={"cobertura": "prosseguir"}))
+    res = grafo.invoke({"spec": SPEC}, {"configurable": {"thread_id": "auto"}})
     assert "__interrupt__" not in res
-    assert res["resposta_final"] == "SÍNTESE FINAL DA MISSÃO"
     assert res["avaliacao"]["prosseguir_parcial"] is True
+    assert res["resposta_final"].startswith("⚠️ RUN REPROVADO")
     tipos = [e["evento"] for e in eventos_de(tmp_path)]
     assert "gate.auto" in tipos and "escalado" not in tipos
 
@@ -397,7 +502,7 @@ def test_gate_cobertura_preencher_reexecuta_reprovado_uma_vez(tmp_path):
     resultado = grafo.invoke({"spec": SPEC}, {"configurable": {"thread_id": "preencher"}})
 
     assert "__interrupt__" not in resultado
-    assert resultado["resposta_final"] == "SÍNTESE FINAL DA MISSÃO"
+    assert resultado["resposta_final"].endswith("SÍNTESE FINAL DA MISSÃO")
     eventos = eventos_de(tmp_path)
     assert sum(1 for e in eventos if e["evento"] == "lacuna.preenchida") == 1
     assert any(e["evento"] == "lacuna.preenchida" and e["subagente"] == "pesquisa-alfa"
@@ -534,7 +639,7 @@ def test_gate_cobertura_preencher_teto_dois_prossegue_parcial(tmp_path):
 
     assert resultado["avaliacao"]["aprovado"] is False
     assert resultado["avaliacao"]["prosseguir_parcial"] is True
-    assert resultado["resposta_final"] == "FINAL"
+    assert resultado["resposta_final"].endswith("FINAL")
     assert estado["evaluator"] == 3
     assert estado["execucoes"] == {"A": 1, "B": 3, "C": 3}
     eventos = eventos_de(tmp_path)
@@ -600,7 +705,7 @@ def test_gate_cobertura_preencher_sem_no_nomeado_eh_inerte(tmp_path):
 
     resultado = grafo.invoke({"spec": SPEC}, {"configurable": {"thread_id": "inerte"}})
 
-    assert resultado["resposta_final"] == "FINAL"
+    assert resultado["resposta_final"].endswith("FINAL")
     assert estado == {"executor": len(SPEC["subagentes"]), "evaluator": 1}
     eventos = eventos_de(tmp_path)
     assert not any(e["evento"].startswith("reconciliacao.") for e in eventos)
@@ -610,14 +715,23 @@ def test_gate_cobertura_preencher_sem_no_nomeado_eh_inerte(tmp_path):
 def _cliente_roteador(roteador):
     stub = ClienteStub(roteador)
     stub.provedor = "stub"
-    return ClienteRoteador(padrao=stub)
+    return ClienteRoteador(
+        padrao=stub,
+        catalogo=[(stub, frozenset({"pesquisa", "redacao", "codigo"}), 1)],
+    )
 
 
 def test_revisao_plano_auto_mode_nao_interrompe(tmp_path):
     log = LogEventos(tmp_path / "log.jsonl")
-    grafo = construir_grafo(_cliente_roteador(faz_roteador()), log,
-                            checkpointer=InMemorySaver(), politica=PoliticaGates(auto_mode=True))
-    res = grafo.invoke({"spec": SPEC}, {"configurable": {"thread_id": "plano-auto"}})
+    cliente = _cliente_roteador(faz_roteador())
+    grafo = construir_grafo(
+        cliente, log, checkpointer=InMemorySaver(), politica=PoliticaGates(auto_mode=True),
+        **_orcamento_cliente(tmp_path, cliente),
+    )
+    res = grafo.invoke(
+        {"spec": SPEC, "run_id": "plano-auto", "thread_id": "plano-auto"},
+        {"configurable": {"thread_id": "plano-auto"}},
+    )
 
     assert "__interrupt__" not in res
     assert res["resposta_final"] == "SÍNTESE FINAL DA MISSÃO"
@@ -657,10 +771,13 @@ def test_revisao_plano_resume_abortar_nao_roda_fanout(tmp_path):
 
 def test_revisao_plano_resume_dict_edita_tier_antes_do_fanout(tmp_path):
     log = LogEventos(tmp_path / "log.jsonl")
-    grafo = construir_grafo(_cliente_roteador(faz_roteador()), log,
-                            checkpointer=InMemorySaver())
+    cliente = _cliente_roteador(faz_roteador())
+    grafo = construir_grafo(
+        cliente, log, checkpointer=InMemorySaver(),
+        **_orcamento_cliente(tmp_path, cliente),
+    )
     config = {"configurable": {"thread_id": "plano-editar"}}
-    res = grafo.invoke({"spec": SPEC}, config)
+    res = grafo.invoke({"spec": SPEC, "run_id": "plano-editar", "thread_id": "plano-editar"}, config)
     assert res["__interrupt__"][0].value["portao"] == "plano"
 
     retomado = grafo.invoke(Command(resume={"pesquisa-alfa": "complexa"}), config)
@@ -671,6 +788,17 @@ def test_revisao_plano_resume_dict_edita_tier_antes_do_fanout(tmp_path):
     assert alfa and alfa[0]["tier"] == "complexa"
     assert any(e["evento"] == "decisao.plano" and e.get("edicoes") == {"pesquisa-alfa": "complexa"}
                for e in eventos)
+
+
+def test_revisao_plano_rejeita_edicao_de_id_desconhecido(tmp_path):
+    log = LogEventos(tmp_path / "log.jsonl")
+    grafo = construir_grafo(_cliente_roteador(faz_roteador()), log,
+                            checkpointer=InMemorySaver())
+    config = {"configurable": {"thread_id": "plano-id-desconhecido"}}
+    grafo.invoke({"spec": SPEC}, config)
+
+    with pytest.raises(ValueError, match="subagente desconhecido"):
+        grafo.invoke(Command(resume={"nao-existe": "complexa"}), config)
 
 
 def test_subagente_usa_catalogo_por_capacidade(tmp_path):
@@ -690,10 +818,16 @@ def test_subagente_usa_catalogo_por_capacidade(tmp_path):
     capaz.provedor = "capaz"
     log = LogEventos(tmp_path / "log.jsonl")
     cliente = ClienteRoteador(padrao=padrao, catalogo=[(capaz, frozenset({"x"}), 1)], log=log)
-    grafo = construir_grafo(cliente, log, checkpointer=InMemorySaver(),
-                            politica=PoliticaGates(overrides={"plano": "prosseguir"}))
+    grafo = construir_grafo(
+        cliente, log, checkpointer=InMemorySaver(),
+        politica=PoliticaGates(overrides={"plano": "prosseguir"}),
+        **_orcamento_cliente(tmp_path, cliente),
+    )
 
-    resultado = grafo.invoke({"spec": spec}, {"configurable": {"thread_id": "capacidade"}})
+    resultado = grafo.invoke(
+        {"spec": spec, "run_id": "capacidade", "thread_id": "capacidade"},
+        {"configurable": {"thread_id": "capacidade"}},
+    )
 
     assert resultado["resultados"][0]["saida"] == "RESULTADO capacidade"
     assert len(capaz.chamadas) == 1
@@ -715,6 +849,8 @@ def test_proximo_tier(tier, esperado):
 
 
 class ClienteTierFake:
+    roteamento_capacidades_runtime = True
+
     def __init__(self, aprovar_na_tentativa: int = 3):
         self.aprovar_na_tentativa = aprovar_na_tentativa
         self.chamadas: list[tuple[str, str | None]] = []
@@ -772,12 +908,17 @@ def test_executor_chamado_loga_modelo_resolvido_com_roteador(tmp_path):
         padrao=padrao,
         tiers={"simples": executor},
         pins={"synthesizer": synthesizer},
+        catalogo=[(executor, frozenset({"pesquisa"}), 1)],
     )
     log = LogEventos(tmp_path / "log.jsonl")
-    grafo = construir_grafo(cliente, log, checkpointer=InMemorySaver(),
-                            politica=PoliticaGates(overrides={"plano": "prosseguir"}))
+    grafo = construir_grafo(
+        cliente, log, checkpointer=InMemorySaver(),
+        politica=PoliticaGates(overrides={"plano": "prosseguir"}),
+        **_orcamento_cliente(tmp_path, cliente),
+    )
 
-    grafo.invoke({"missao_texto": "produza algo"}, {"configurable": {"thread_id": "modelo-log"}})
+    grafo.invoke({"missao_texto": "produza algo", "run_id": "modelo-log",
+                  "thread_id": "modelo-log"}, {"configurable": {"thread_id": "modelo-log"}})
 
     chamados = [e for e in eventos_de(tmp_path) if e["evento"] == "executor.chamado"]
     assert next(e for e in chamados if e["executor"] == "planner")["modelo"] == "juiz/sonnet"
@@ -813,10 +954,16 @@ def test_executor_chamado_modelo_none_com_cliente_single_sem_identidade(tmp_path
 def test_retry_sem_flag_mantem_tier_declarado_em_todas_as_tentativas(tmp_path):
     cliente = ClienteTierFake(aprovar_na_tentativa=3)
     log = LogEventos(tmp_path / "log.jsonl")
-    grafo = construir_grafo(cliente, log, checkpointer=InMemorySaver(),
-                            politica=PoliticaGates(overrides={"plano": "prosseguir"}))
+    grafo = construir_grafo(
+        cliente, log, checkpointer=InMemorySaver(),
+        politica=PoliticaGates(overrides={"plano": "prosseguir"}),
+        **_orcamento_cliente(tmp_path, cliente),
+    )
 
-    resultado = grafo.invoke({"spec": _spec_um_subagente()}, {"configurable": {"thread_id": "tier-inerte"}})
+    resultado = grafo.invoke(
+        {"spec": _spec_um_subagente(), "run_id": "tier-inerte", "thread_id": "tier-inerte"},
+        {"configurable": {"thread_id": "tier-inerte"}},
+    )
 
     assert resultado["resultados"][0]["aprovado"] is True
     assert [tier for papel, tier in cliente.chamadas if papel == "pesquisador"] == ["simples", "simples", "simples"]
@@ -826,11 +973,16 @@ def test_retry_sem_flag_mantem_tier_declarado_em_todas_as_tentativas(tmp_path):
 def test_retry_com_flag_escala_tier_ate_complexa(tmp_path):
     cliente = ClienteTierFake(aprovar_na_tentativa=3)
     log = LogEventos(tmp_path / "log.jsonl")
-    grafo = construir_grafo(cliente, log, checkpointer=InMemorySaver(),
-                            politica=PoliticaGates(overrides={"plano": "prosseguir"}),
-                            escalar_em_retry=True)
+    grafo = construir_grafo(
+        cliente, log, checkpointer=InMemorySaver(),
+        politica=PoliticaGates(overrides={"plano": "prosseguir"}), escalar_em_retry=True,
+        **_orcamento_cliente(tmp_path, cliente),
+    )
 
-    resultado = grafo.invoke({"spec": _spec_um_subagente()}, {"configurable": {"thread_id": "tier-escalado"}})
+    resultado = grafo.invoke(
+        {"spec": _spec_um_subagente(), "run_id": "tier-escalado", "thread_id": "tier-escalado"},
+        {"configurable": {"thread_id": "tier-escalado"}},
+    )
 
     assert resultado["resultados"][0]["aprovado"] is True
     assert [tier for papel, tier in cliente.chamadas if papel == "pesquisador"] == ["simples", "media", "complexa"]
@@ -841,18 +993,23 @@ def test_retry_com_flag_escala_tier_ate_complexa(tmp_path):
 def test_retry_com_flag_nao_escala_quando_aprova_na_primeira(tmp_path):
     cliente = ClienteTierFake(aprovar_na_tentativa=1)
     log = LogEventos(tmp_path / "log.jsonl")
-    grafo = construir_grafo(cliente, log, checkpointer=InMemorySaver(),
-                            politica=PoliticaGates(overrides={"plano": "prosseguir"}),
-                            escalar_em_retry=True)
+    grafo = construir_grafo(
+        cliente, log, checkpointer=InMemorySaver(),
+        politica=PoliticaGates(overrides={"plano": "prosseguir"}), escalar_em_retry=True,
+        **_orcamento_cliente(tmp_path, cliente),
+    )
 
-    resultado = grafo.invoke({"spec": _spec_um_subagente()}, {"configurable": {"thread_id": "tier-aprovado"}})
+    resultado = grafo.invoke(
+        {"spec": _spec_um_subagente(), "run_id": "tier-aprovado", "thread_id": "tier-aprovado"},
+        {"configurable": {"thread_id": "tier-aprovado"}},
+    )
 
     assert resultado["resultados"][0]["tentativas"] == 1
     assert [tier for papel, tier in cliente.chamadas if papel == "pesquisador"] == ["simples"]
     assert not any(e["evento"] == "executor.escalado" for e in eventos_de(tmp_path))
 
 
-def test_cli_escalar_liga_flag_e_default_mantem_inerte(monkeypatch, capsys):
+def test_cli_escalar_liga_flag_e_default_mantem_inerte(tmp_path, monkeypatch, capsys):
     flags: list[bool] = []
 
     class GrafoFake:
@@ -860,6 +1017,13 @@ def test_cli_escalar_liga_flag_e_default_mantem_inerte(monkeypatch, capsys):
             return {"resposta_final": "ok"}
 
     monkeypatch.setattr(cli, "construir_cliente", lambda cfg_modelos, dir_registro, log=None: ClienteStub(faz_roteador()))
+    monkeypatch.setattr(
+        cli, "compor_orcamento_openai",
+        lambda *_args, **_kwargs: composicao_stub(
+            ClienteStub(faz_roteador()), tmp_path / "orcamento-cli-escalar",
+        ),
+    )
+    monkeypatch.setattr(cli, "_drenar_orcamento_cli", lambda *_args: True)
 
     def construir_fake(*args, **kwargs):
         flags.append(kwargs["escalar_em_retry"])

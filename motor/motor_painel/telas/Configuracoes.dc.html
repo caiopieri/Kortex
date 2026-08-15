@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="mf-themes.js"></script>
+<style>
+  body{margin:0;background:#0B0C0E}
+  .mf-root{
+    --bg:#0B0C0E;--surface:#121417;--surface2:#17191D;--border:#26292E;--focus:#3E434A;
+    --text:#E8E6E1;--text2:#8A8F98;--text3:#5A5F66;--accent:#E8A33D;
+    --red:#E5484D;--amber:#E8A33D;--green:#30A46C;--blue:#3E63DD;--inv-bg:#E8E6E1;--inv-text:#0B0C0E;
+    min-height:100vh;background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif;font-size:14px;display:flex;flex-direction:column;
+  }
+  .mf-root[data-theme="stark"]{
+    --bg:#E4E9F2;--surface:#FAFBFD;--surface2:#EDF0F6;--border:#D2DAE7;--focus:#9AA8BF;
+    --text:#26324B;--text2:#4D5B76;--text3:#7E8AA1;--accent:#9A6A1A;
+    --red:#B0413E;--amber:#9A6A1A;--green:#3B7D5D;--blue:#3F62A8;--inv-bg:#26324B;--inv-text:#FAFBFD;
+    --card-shadow:0 1px 2px rgba(38,50,75,.06),0 4px 14px rgba(38,50,75,.07);
+  }
+  .mf-top{display:flex;align-items:center;gap:12px;height:52px;padding:0 18px;border-bottom:1px solid var(--border);background:var(--surface);flex:none}
+  .mf-body{display:flex;flex:1;min-height:0}
+  .mf-side{width:238px;flex:none;border-right:1px solid var(--border);background:var(--surface);overflow:auto;padding:8px 0}
+  .eyebrow{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3)}
+  .num{font-family:'IBM Plex Mono',monospace;font-size:10.5px;font-weight:600;letter-spacing:1.4px;color:var(--text2);text-transform:uppercase}
+  .mono{font-family:'IBM Plex Mono',monospace}
+  .title{font-family:'Space Grotesk',system-ui;font-weight:600;letter-spacing:.2px}
+  .pill{display:inline-flex;align-items:center;gap:6px;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.6px;padding:5px 9px;border:1px solid var(--border);border-radius:2px;color:var(--text2);background:transparent;cursor:pointer}
+  .pill:hover{border-color:var(--focus);color:var(--text)}
+  .pill.on{color:var(--text);border-color:var(--accent);background:var(--surface2)}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;font-family:Inter;font-weight:600;font-size:12px;padding:8px 13px;border-radius:2px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer}
+  .btn:hover{border-color:var(--focus)}
+  .btn-primary{background:var(--inv-bg);color:var(--inv-text);border-color:var(--inv-bg)}
+  .btn-sm{padding:6px 11px;font-size:11px}
+  .zt{display:flex;justify-content:space-between;align-items:center;padding:15px 18px 6px;font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:600;letter-spacing:1.6px;text-transform:uppercase;color:var(--text3)}
+  .zt.fixed{color:var(--accent)}
+  .ni{display:flex;align-items:center;gap:9px;padding:7px 18px;font-size:13px;color:var(--text2);cursor:pointer;border-left:2px solid transparent}
+  .ni:hover{color:var(--text);background:var(--surface2)}
+  .ni.on{color:var(--text);background:var(--surface2);border-left-color:var(--accent);font-weight:600}
+  .badge{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;background:var(--accent);color:#0B0C0E;border-radius:2px;padding:1px 6px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:2px;box-shadow:var(--card-shadow,none)}
+  .sw{width:22px;height:22px;border-radius:3px;border:1px solid rgba(127,127,127,.35);flex:none}
+  .cin{width:34px;height:26px;padding:0;border:1px solid var(--border);border-radius:3px;background:transparent;cursor:pointer}
+  .lbl{font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.6px;text-transform:uppercase;color:var(--text3);width:74px;flex:none}
+</style>
+</helmet>
+
+<div class="mf-root" data-theme="{{ theme }}">
+  <div class="mf-top">
+    <div style="width:19px;height:19px;border:1.5px solid var(--text);border-radius:2px;position:relative"><div style="position:absolute;inset:4px;border:1.5px solid var(--accent)"></div></div>
+    <span class="title" style="font-size:13px;letter-spacing:1px">META-FÁBRICA</span>
+    <span class="pill on">Projeto: Todos ▾</span>
+    <div style="flex:1"></div>
+    <span class="pill" onClick="{{ toggleTheme }}">◐ {{ themeLabel }}</span>
+    <span class="btn btn-primary btn-sm">+ Nova missão</span>
+    <span class="pill" style="padding:5px 8px">🔔 <span class="badge">3</span></span>
+  </div>
+
+  <div class="mf-body">
+    <div class="mf-side">
+      <div class="zt fixed"><span>Fixas</span></div>
+      <div class="ni">Home</div>
+      <div class="ni">Caixa do Fundador <span class="badge" style="margin-left:auto">3</span></div>
+      <div class="ni">Mapa geral</div>
+      <div class="zt"><span>Projeto: Todos</span><span>▾</span></div>
+      <div class="ni">Dashboard</div>
+      <div class="ni">Grafos ▾</div>
+      <div class="ni">Runs &amp; Histórico</div>
+      <div class="zt"><span>Biblioteca</span><span>▾</span></div>
+      <div class="ni">Agentes</div>
+      <div class="ni">Skills</div>
+      <div class="ni">Curador</div>
+      <div class="ni">Logs</div>
+      <div class="ni">Custos</div>
+      <div class="zt"><span>Sistema</span></div>
+      <div class="ni on">Configurações</div>
+    </div>
+
+    <div style="flex:1;min-width:0;overflow:auto;padding:22px 24px 60px;display:flex;flex-direction:column;gap:20px;background:var(--bg)">
+      <div style="display:flex;align-items:baseline;justify-content:space-between">
+        <div>
+          <div class="title" style="font-size:22px">Configurações · Temas</div>
+          <div class="mono" style="font-size:11px;color:var(--text3);margin-top:3px">o tema ativo vale para todas as telas · tema custom pode ser editado e evoluído com o tempo</div>
+        </div>
+        <span class="btn btn-sm" onClick="{{ novoTema }}">+ Novo tema (duplicar ativo)</span>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px">
+        <sc-for list="{{ temas }}" as="t" hint-placeholder-count="3">
+          <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0;border-color:{{ t.borderCor }}">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="title" style="font-size:15px">{{ t.nome }}</span>
+              <span class="mono" style="font-size:9.5px;color:var(--text3);text-transform:uppercase;letter-spacing:1px">{{ t.tipo }}</span>
+              <div style="flex:1"></div>
+              <sc-if value="{{ t.ativo }}" hint-placeholder-val="{{ false }}"><span class="badge">ATIVO</span></sc-if>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <div style="display:flex;align-items:center;gap:5px"><span class="lbl">escuro</span>
+                <sc-for list="{{ t.swE }}" as="s" hint-placeholder-count="7"><span class="sw" style="background:{{ s }}"></span></sc-for>
+              </div>
+              <div style="display:flex;align-items:center;gap:5px"><span class="lbl">claro</span>
+                <sc-for list="{{ t.swC }}" as="s" hint-placeholder-count="7"><span class="sw" style="background:{{ s }}"></span></sc-for>
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <sc-if value="{{ t.ativo }}" hint-placeholder-val="{{ false }}"><span class="pill on">em uso</span></sc-if>
+              <sc-if value="{{ t.naoAtivo }}" hint-placeholder-val="{{ true }}"><span class="btn btn-primary btn-sm" onClick="{{ t.aplicar }}">Aplicar</span></sc-if>
+              <span class="btn btn-sm" onClick="{{ t.duplicar }}">Duplicar</span>
+              <sc-if value="{{ t.custom }}" hint-placeholder-val="{{ false }}">
+                <span class="btn btn-sm" onClick="{{ t.editar }}">{{ t.editarLabel }}</span>
+                <span class="btn btn-sm" style="color:var(--red)" onClick="{{ t.excluir }}">Excluir</span>
+              </sc-if>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+
+      <sc-if value="{{ editando }}" hint-placeholder-val="{{ false }}">
+        <div class="card" style="padding:18px;display:flex;flex-direction:column;gap:14px">
+          <div style="display:flex;align-items:center;gap:12px">
+            <span class="eyebrow">Editor · tema custom</span>
+            <input class="mono" style="background:var(--surface2);border:1px solid var(--border);border-radius:2px;color:var(--text);font-size:12px;padding:6px 9px" value="{{ editNome }}" onChange="{{ renomear }}">
+            <div style="flex:1"></div>
+            <span class="mono" style="font-size:10px;color:var(--text3)">as mudanças aplicam ao vivo se o tema estiver ativo</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+            <div style="display:flex;flex-direction:column;gap:7px">
+              <span class="num">modo escuro</span>
+              <sc-for list="{{ editE }}" as="c" hint-placeholder-count="8">
+                <div style="display:flex;align-items:center;gap:9px"><span class="lbl">{{ c.k }}</span><input type="color" class="cin" value="{{ c.v }}" onChange="{{ c.set }}"><span class="mono" style="font-size:10.5px;color:var(--text2)">{{ c.v }}</span></div>
+              </sc-for>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:7px">
+              <span class="num">modo claro</span>
+              <sc-for list="{{ editC }}" as="c" hint-placeholder-count="8">
+                <div style="display:flex;align-items:center;gap:9px"><span class="lbl">{{ c.k }}</span><input type="color" class="cin" value="{{ c.v }}" onChange="{{ c.set }}"><span class="mono" style="font-size:10.5px;color:var(--text2)">{{ c.v }}</span></div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { theme: 'paperclip', editId: null, rev: 0 };
+
+  componentDidMount() {
+    this._onApplied = () => this.forceUpdate();
+    document.addEventListener('mf-theme-applied', this._onApplied);
+  }
+  componentWillUnmount() {
+    document.removeEventListener('mf-theme-applied', this._onApplied);
+  }
+
+  _mf() { return window.MFThemes; }
+  _bump() { this.setState(s => ({ rev: s.rev + 1 })); }
+
+  renderVals() {
+    const s = this.state;
+    const MF = this._mf();
+    const SW = ['bg', 'surface', 'surface2', 'text', 'accent', 'red', 'green', 'blue'];
+    const EDITK = ['bg', 'surface', 'surface2', 'border', 'text', 'text2', 'text3', 'accent', 'red', 'amber', 'green', 'blue', 'inv-bg', 'inv-text'];
+    const lista = MF ? MF.all() : [];
+    const ativo = MF ? MF.activeId() : '';
+    const customs = MF ? MF.customs() : [];
+
+    const temas = lista.map(t => {
+      const isCustom = !t.builtin;
+      return {
+        nome: t.nome,
+        tipo: t.builtin ? 'embutido' : 'custom',
+        ativo: t.id === ativo,
+        naoAtivo: t.id !== ativo,
+        custom: isCustom,
+        borderCor: t.id === ativo ? 'var(--accent)' : 'var(--border)',
+        swE: SW.map(k => t.escuro[k]),
+        swC: SW.map(k => t.claro[k]),
+        editarLabel: s.editId === t.id ? 'Fechar editor' : 'Editar',
+        aplicar: () => { MF.setActive(t.id); this._bump(); },
+        duplicar: () => {
+          const cp = JSON.parse(JSON.stringify(t));
+          cp.id = 'custom-' + Date.now();
+          cp.nome = t.nome + ' (cópia)';
+          cp.builtin = false;
+          MF.saveCustoms(customs.concat([cp]));
+          this.setState({ editId: cp.id });
+        },
+        editar: () => this.setState({ editId: s.editId === t.id ? null : t.id }),
+        excluir: () => {
+          MF.saveCustoms(customs.filter(c => c.id !== t.id));
+          if (ativo === t.id) MF.setActive('metafabrica');
+          if (s.editId === t.id) this.setState({ editId: null }); else this._bump();
+        }
+      };
+    });
+
+    const ed = customs.find(c => c.id === s.editId) || null;
+    const mkRows = (modo) => !ed ? [] : EDITK.map(k => ({
+      k, v: ed[modo][k] || '#000000',
+      set: (e) => {
+        const val = e.target.value;
+        const list = this._mf().customs().map(c => {
+          if (c.id !== ed.id) return c;
+          const n = JSON.parse(JSON.stringify(c)); n[modo][k] = val; return n;
+        });
+        this._mf().saveCustoms(list); this._bump();
+      }
+    }));
+
+    return {
+      theme: s.theme,
+      themeLabel: s.theme === 'stark' ? 'claro' : 'escuro',
+      toggleTheme: () => this.setState({ theme: s.theme === 'stark' ? 'paperclip' : 'stark' }),
+      novoTema: () => {
+        const base = lista.find(x => x.id === ativo) || lista[0];
+        const cp = JSON.parse(JSON.stringify(base));
+        cp.id = 'custom-' + Date.now();
+        cp.nome = 'Meu tema';
+        cp.builtin = false;
+        MF.saveCustoms(customs.concat([cp]));
+        this.setState({ editId: cp.id });
+      },
+      temas,
+      editando: !!ed,
+      editNome: ed ? ed.nome : '',
+      renomear: (e) => {
+        const val = e.target.value;
+        MF.saveCustoms(this._mf().customs().map(c => c.id === (ed && ed.id) ? Object.assign({}, c, { nome: val }) : c));
+        this._bump();
+      },
+      editE: mkRows('escuro'),
+      editC: mkRows('claro')
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,5 +1,5 @@
 {
-  "_comentario": "PERFIL SEM CAROS — só free/barato, NUNCA claude nem codex. Tudo via opencode (sem chave em arquivo; auth = `opencode auth login`). Cada modelo tem RÓTULO DE PROVEDOR PRÓPRIO (ollama/nv-llama/nv-coder/nv-next/orfree) pra o failover ser modelo-a-modelo: se um rate-limita, o auto_esgotar pula pro próximo da cadeia ORDENADA POR CUSTO, não derruba os outros. O parser divide no 1º '/': 'nv-llama/nvidia/meta/llama-3.3-70b-instruct' => provedor 'nv-llama', modelo opencode 'nvidia/meta/llama-3.3-70b-instruct'. CONFIRME os ids reais com `opencode models` e troque onde estiver PLACEHOLDER. 'padrao':'nenhum' = último recurso NÃO é o claude — exige o HANDOFF-CODEX-SEM-CAROS (até ele entrar, este campo é ignorado e o claude ainda é o fallback de falha; rode olhando o log por modelo.fallback).",
+  "_comentario": "Perfil econômico via OpenCode. Cada modelo usa um rótulo de provedor próprio para isolar failover e a cadeia é ordenada por custo. Confirme os IDs com `opencode models`.",
 
   "padrao": "nenhum",
   "auto_esgotar": true,

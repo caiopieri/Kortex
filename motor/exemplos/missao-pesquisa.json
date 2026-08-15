@@ -10,15 +10,28 @@
       "canal de receita recorrente coberto com evidência"
     ]
   },
-  "restricoes": { "teto_custo": 2.0, "max_subagentes": 10, "max_tentativas": 3 },
+  "restricoes": {
+    "teto_custo": 60.0,
+    "max_subagentes": 10,
+    "max_tentativas": 3
+  },
   "subagentes": [
     {
       "id": "pesquisa-alfa",
       "papel": "pesquisador",
       "objetivo": "Investigar oportunidades no canal alfa: anúncios em marketplaces",
-      "entradas": { "canais": ["Mercado Livre", "Shopee"] },
+      "entradas": {
+        "canais": [
+          "Mercado Livre",
+          "Shopee"
+        ]
+      },
       "resultado_esperado": "3+ oportunidades específicas, cada uma com evidência",
-      "rubrica": ["cita evidência ou fonte", "específico e acionável", "3 ou mais oportunidades"]
+      "rubrica": [
+        "cita evidência ou fonte",
+        "específico e acionável",
+        "3 ou mais oportunidades"
+      ]
     },
     {
       "id": "pesquisa-beta",
@@ -26,7 +39,11 @@
       "objetivo": "Investigar oportunidades no canal beta: receita recorrente (assinaturas, B2B)",
       "entradas": {},
       "resultado_esperado": "3+ oportunidades específicas, cada uma com evidência",
-      "rubrica": ["cita evidência ou fonte", "específico e acionável", "3 ou mais oportunidades"]
+      "rubrica": [
+        "cita evidência ou fonte",
+        "específico e acionável",
+        "3 ou mais oportunidades"
+      ]
     }
   ],
   "gates": [],

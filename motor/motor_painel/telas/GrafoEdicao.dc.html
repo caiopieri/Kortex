@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<script src="mf-themes.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/reactflow@11/dist/style.css">
+<script>
+(function(){
+  function inject(){
+    if (window.__mfRfLoading) return; window.__mfRfLoading = true;
+    var s = document.createElement('script');
+    s.src = 'https://unpkg.com/reactflow@11/dist/umd/index.js';
+    s.crossOrigin = 'anonymous';
+    document.head.appendChild(s);
+  }
+  (function wait(){
+    if (window.React && window.ReactDOM) { inject(); return; }
+    setTimeout(wait, 40);
+  })();
+})();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  body{margin:0;background:#0B0C0E}
+  .mf-root{
+    --bg:#0B0C0E;--surface:#121417;--surface2:#17191D;--border:#26292E;--focus:#3E434A;
+    --text:#E8E6E1;--text2:#8A8F98;--text3:#5A5F66;--accent:#E8A33D;
+    --red:#E5484D;--amber:#E8A33D;--green:#30A46C;--blue:#3E63DD;--inv-bg:#E8E6E1;--inv-text:#0B0C0E;
+    min-height:100vh;background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif;font-size:14px;display:flex;flex-direction:column;
+  }
+  .mf-root[data-theme="stark"]{
+    --bg:#F4F3F0;--surface:#FFFFFF;--surface2:#EDEBE6;--border:#D8D6D0;--focus:#A9A69E;
+    --text:#111213;--text2:#5D6167;--text3:#8B8E93;--accent:#B87514;
+    --red:#C62A30;--amber:#B87514;--green:#1E7F50;--blue:#2F4FC4;--inv-bg:#111213;--inv-text:#F4F3F0;
+  }
+  .mf-root,.mf-top,.mf-side,.stcard,.pill,.btn{transition:background-color .32s ease,border-color .32s ease,color .32s ease}
+  .eyebrow{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3)}
+  .num{font-family:'IBM Plex Mono',monospace;font-size:10.5px;font-weight:600;letter-spacing:1.4px;color:var(--text2);text-transform:uppercase}
+  .mono{font-family:'IBM Plex Mono',monospace}
+  .title{font-family:'Space Grotesk',system-ui;font-weight:600;letter-spacing:.2px}
+  .mf-top{display:flex;align-items:center;gap:12px;height:52px;padding:0 18px;border-bottom:1px solid var(--border);background:var(--surface);flex:none;z-index:5}
+  .mf-body{display:flex;flex:1;min-height:0}
+  .mf-side{width:238px;flex:none;border-right:1px solid var(--border);background:var(--surface);overflow:auto;padding:8px 0}
+  .pill{display:inline-flex;align-items:center;gap:6px;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.9px;text-transform:uppercase;padding:5px 9px;border:1px solid var(--border);border-radius:2px;color:var(--text2);background:transparent;cursor:pointer}
+  .pill.on{color:var(--text);border-color:var(--focus);background:var(--surface2)}
+  .btn{display:inline-flex;align-items:center;gap:7px;font-family:Inter;font-weight:600;font-size:12px;padding:8px 13px;border-radius:2px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer}
+  .btn:hover{border-color:var(--focus)}
+  .btn-primary{background:var(--inv-bg);color:var(--inv-text);border-color:var(--inv-bg)}
+  .btn-sm{padding:4px 9px;font-size:11px}
+  .zt{display:flex;justify-content:space-between;align-items:center;padding:15px 18px 6px;font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:600;letter-spacing:1.6px;text-transform:uppercase;color:var(--text3)}
+  .zt.fixed{color:var(--accent)}
+  .ni{display:flex;align-items:center;gap:9px;padding:7px 18px;font-size:13px;color:var(--text2);cursor:pointer;border-left:2px solid transparent}
+  .ni:hover{color:var(--text);background:var(--surface2)}
+  .ni.on{color:var(--text);background:var(--surface2);border-left-color:var(--accent);font-weight:600}
+  .ni.sub{padding-left:36px;font-size:12.5px}
+  .badge{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;background:var(--accent);color:#0B0C0E;border-radius:2px;padding:1px 6px}
+  .badge.mla{margin-left:auto}
+  /* pattern picker — os DOIS moldes certificados */
+  .pat{flex:1;border:1px solid var(--border);border-radius:2px;background:var(--surface);padding:12px;cursor:pointer;display:flex;flex-direction:column;gap:7px}
+  .pat.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+  .pat svg{width:100%;height:52px}
+  /* subtask cards */
+  .stcard{background:var(--surface);border:1px solid var(--border);border-radius:2px;padding:11px 12px;display:flex;flex-direction:column;gap:8px}
+  .strow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .fld{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:2px;padding:5px 8px;outline:none;min-width:0}
+  .fld:focus{border-color:var(--focus)}
+  .sel{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:var(--text2);background:var(--bg);border:1px solid var(--border);border-radius:2px;padding:4px 7px;cursor:pointer}
+  .sel.on{color:var(--text);border-color:var(--focus);background:var(--surface2)}
+  .vchip{display:inline-flex;align-items:center;gap:5px;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.4px;color:var(--green);border:1px solid var(--green);border-radius:2px;padding:2px 6px}
+  .vchip .sq{width:7px;height:7px;background:var(--green)}
+  .vchip.add{color:var(--text3);border-color:var(--border);border-style:dashed;cursor:pointer}
+  .rchip{display:inline-flex;align-items:center;gap:5px;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.4px;color:var(--text2);border:1px solid var(--border);border-radius:2px;padding:2px 6px}
+  .rchip .ci{width:7px;height:7px;border-radius:50%;border:1.3px solid var(--text2)}
+  .del{margin-left:auto;color:var(--text3);cursor:pointer;font-size:13px}
+  .del:hover{color:var(--red)}
+  /* preview graph */
+  .pv{flex:1;min-width:0;border-left:1px solid var(--border);background:var(--bg);position:relative;overflow:hidden;display:flex;flex-direction:column}
+  .pvn{position:absolute;width:120px;background:var(--surface);border:1px solid var(--border);border-radius:2px;padding:7px 9px;display:flex;flex-direction:column;gap:3px}
+  .pvg{position:absolute;width:94px;background:var(--surface2);border:1px solid var(--border);border-radius:2px;padding:6px 8px}
+  .pvv{position:absolute;width:94px;background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--green);border-radius:2px;padding:6px 8px}
+  .pvl{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.4px;color:var(--text2);text-transform:uppercase}
+  .pvt{font-family:'Space Grotesk',system-ui;font-weight:600;font-size:11px;color:var(--text)}
+  .bk{position:absolute;width:14px;height:14px;border-color:var(--focus);border-style:solid;border-width:0}
+  .react-flow__node{background:transparent;border:none;padding:0;width:auto;font-size:inherit;box-shadow:none;color:var(--text)}
+  .react-flow__node.selected{box-shadow:none}
+  .react-flow__handle{opacity:0}
+  .react-flow__controls{box-shadow:none;border:1px solid var(--border);border-radius:2px;overflow:hidden}
+  .react-flow__controls-button{background:var(--surface);border-bottom:1px solid var(--border);color:var(--text);width:24px;height:24px}
+  .react-flow__controls-button:hover{background:var(--surface2)}
+  .react-flow__controls-button svg{fill:var(--text2)}
+  .react-flow__attribution{display:none}
+</style>
+</helmet>
+
+<div class="mf-root" data-theme="{{ theme }}">
+
+  <!-- TOPBAR -->
+  <div class="mf-top">
+    <div style="width:19px;height:19px;border:1.5px solid var(--text);border-radius:2px;position:relative"><div style="position:absolute;inset:4px;border:1.5px solid var(--accent)"></div></div>
+    <span class="title" style="font-size:13px;letter-spacing:1px">META-FÁBRICA</span>
+    <span class="pill on" style="margin-left:4px">Projeto: Logisti-Kit ▾</span>
+    <div style="flex:1"></div>
+    <span class="pill" onClick="{{ toggleTheme }}">◐ {{ themeLabel }}</span>
+    <span class="btn btn-primary btn-sm" style="margin-left:2px">+ Nova missão</span>
+    <span class="pill" style="padding:5px 8px">🔔 <span class="badge">3</span></span>
+  </div>
+
+  <div class="mf-body">
+    <!-- SIDEBAR -->
+    <div class="mf-side">
+      <div class="zt fixed"><span>Fixas</span></div>
+      <div class="ni">Home</div>
+      <div class="ni">Board de missões</div>
+      <div class="ni">Caixa do Fundador <span class="badge mla">3</span></div>
+      <div class="ni">Mapa geral</div>
+      <div class="zt"><span>Projeto: Logisti-Kit</span><span>▾</span></div>
+      <div class="ni">Dashboard</div>
+      <div class="ni on">Grafos ▾</div>
+      <div class="ni sub on">Workflows · edição</div>
+      <div class="ni sub">Datahouse</div>
+      <div class="ni">Runs &amp; Histórico</div>
+      <div class="zt"><span>Biblioteca</span><span>▾</span></div>
+      <div class="ni">Workflows (catálogo)</div>
+      <div class="ni">Agentes</div>
+      <div class="ni">Skills</div>
+      <div class="ni">Curador</div>
+      <div class="ni">Logs</div>
+      <div class="ni">Custos</div>
+      <div class="zt"><span>Sistema</span><span>▾</span></div>
+      <div class="ni">Conexões</div>
+      <div class="ni">Runners</div>
+      <div class="ni">Configurações</div>
+    </div>
+
+    <!-- MAIN -->
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+
+      <!-- mode bar -->
+      <div style="display:flex;align-items:center;gap:12px;padding:12px 20px;border-bottom:1px solid var(--border);background:var(--surface);flex:none">
+        <span class="title" style="font-size:17px">csv → json · <span class="mono" style="font-size:12px;color:var(--text2)">WorkflowSpec</span></span>
+        <span class="pill" style="color:var(--amber);border-color:var(--amber)">✎ MODO EDIÇÃO · rascunho v3</span>
+        <span class="eyebrow">nada roda enquanto você edita</span>
+        <div style="flex:1"></div>
+        <a href="Grafo2D.dc.html" style="text-decoration:none"><span class="pill">← voltar ao ao-vivo</span></a>
+        <span class="btn btn-sm">salvar rascunho</span>
+        <span class="btn btn-primary btn-sm">publicar no catálogo · v3</span>
+      </div>
+
+      <div style="display:flex;flex:1;min-height:0">
+        <!-- LEFT: the spec form -->
+        <div style="width:520px;flex:none;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:14px">
+
+          <!-- pattern picker -->
+          <div>
+            <div class="eyebrow" style="margin-bottom:8px">molde certificado — o grafo nasce do padrão, não de fios soltos</div>
+            <div style="display:flex;gap:10px">
+              <div class="{{ patFanCls }}" onClick="{{ pickFan }}">
+                <span class="num" style="color:{{ patFanColor }}">01 · fan-out síntese</span>
+                <svg viewBox="0 0 200 52"><g stroke="currentColor" fill="none" opacity=".7"><circle cx="18" cy="26" r="6"/><circle cx="80" cy="10" r="6"/><circle cx="80" cy="26" r="6"/><circle cx="80" cy="42" r="6"/><circle cx="150" cy="26" r="6"/><path d="M24,26 74,10 M24,26 74,26 M24,26 74,42 M86,10 144,26 M86,26 144,26 M86,42 144,26"/></g></svg>
+                <span class="mono" style="font-size:9.5px;color:var(--text2)">N subtarefas paralelas → avaliador global → síntese</span>
+              </div>
+              <div class="{{ patDepCls }}" onClick="{{ pickDep }}">
+                <span class="num" style="color:{{ patDepColor }}">02 · grafo de dependências</span>
+                <svg viewBox="0 0 200 52"><g stroke="currentColor" fill="none" opacity=".7"><circle cx="18" cy="14" r="6"/><circle cx="18" cy="40" r="6"/><circle cx="90" cy="26" r="6"/><circle cx="160" cy="26" r="6"/><path d="M24,14 84,24 M24,40 84,28 M96,26 154,26"/></g></svg>
+                <span class="mono" style="font-size:9.5px;color:var(--text2)">ondas por depends_on · roda o que destravou</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- subtasks -->
+          <div style="display:flex;align-items:center;gap:10px">
+            <div class="eyebrow">subtarefas · {{ stCount }}</div>
+            <div style="flex:1;height:1px;background:var(--border)"></div>
+            <span class="pill" onClick="{{ addSt }}">+ subtarefa</span>
+          </div>
+
+          <sc-for list="{{ subtasks }}" as="s" hint-placeholder-count="2">
+            <div class="stcard">
+              <div class="strow">
+                <span class="num" style="color:var(--text3)">{{ s.idx }}</span>
+                <input class="fld" style="flex:1;font-weight:600" value="{{ s.nome }}" onChange="{{ s.setNome }}"/>
+                <span class="del" onClick="{{ s.remove }}">✕</span>
+              </div>
+              <div class="strow">
+                <span class="pvl">papel</span>
+                <sc-for list="{{ s.papeis }}" as="p"><span class="{{ p.cls }}" onClick="{{ p.pick }}">{{ p.label }}</span></sc-for>
+              </div>
+              <div class="strow">
+                <span class="pvl">tier</span>
+                <sc-for list="{{ s.tiers }}" as="p"><span class="{{ p.cls }}" onClick="{{ p.pick }}">{{ p.label }}</span></sc-for>
+                <span class="mono" style="font-size:9px;color:var(--text3)">→ {{ s.modelo }}</span>
+              </div>
+              <sc-if value="{{ s.showDeps }}" hint-placeholder-val="{{ false }}">
+                <div class="strow">
+                  <span class="pvl">depende de</span>
+                  <sc-for list="{{ s.deps }}" as="p"><span class="{{ p.cls }}" onClick="{{ p.pick }}">{{ p.label }}</span></sc-for>
+                </div>
+              </sc-if>
+              <div class="strow">
+                <span class="pvl">gates</span>
+                <span class="rchip"><span class="ci"></span>verificador · rubricas: {{ s.rubricas }}</span>
+                <sc-for list="{{ s.valids }}" as="v"><span class="vchip"><span class="sq"></span>{{ v }}</span></sc-for>
+                <span class="vchip add" onClick="{{ s.addValid }}">+ validador</span>
+              </div>
+            </div>
+          </sc-for>
+
+          <div class="mono" style="font-size:10px;color:var(--text3);line-height:1.6;border-top:1px solid var(--border);padding-top:10px">
+            verificador (círculo) = juízo LLM por rubrica · validador (quadrado) = checagem determinística — o gate duro.
+            Todo nó nasce com os dois pontos de gate; você escolhe o quê exigir.
+          </div>
+        </div>
+
+        <!-- RIGHT: compiled preview -->
+        <div class="pv">
+          <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border);flex:none">
+            <span class="eyebrow" style="color:var(--text2)">prévia · compilada da spec</span>
+            <div style="flex:1"></div>
+            <span class="mono" style="font-size:9.5px;color:var(--text3)">{{ patLabel }}</span>
+          </div>
+          <div style="position:relative;flex:1;overflow:hidden">
+            <div class="canvasedit" style="position:absolute;inset:0;background:#0A0B0D">
+              <x-import component="GrafoEditFlow" from="./GrafoEditFlow.jsx" nodes="{{ flowNodes }}" edges="{{ flowEdges }}" sig="{{ sig }}" hint-size="100%,100%"></x-import>
+            </div>
+            <div class="bk" style="left:10px;top:10px;border-left-width:1px;border-top-width:1px;z-index:2"></div>
+            <div class="bk" style="right:10px;top:10px;border-right-width:1px;border-top-width:1px;z-index:2"></div>
+            <div class="bk" style="left:10px;bottom:10px;border-left-width:1px;border-bottom-width:1px;z-index:2"></div>
+            <div class="bk" style="right:10px;bottom:10px;border-right-width:1px;border-bottom-width:1px;z-index:2"></div>
+          </div>
+          <div style="padding:10px 16px;border-top:1px solid var(--border);flex:none">
+            <span class="mono" style="font-size:9.5px;color:var(--text3)">a prévia é gerada da spec — não há fio que a spec não saiba expressar</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;100%&quot;,&quot;height&quot;:&quot;100%&quot;}}">
+class Component extends DCLogic {
+  state = {
+    theme: 'paperclip',
+    pattern: 'fan',
+    subtasks: [
+      { id: 1, nome: 'extrair-cabecalho', papel: 'pesquisador', tier: 'simples', deps: [], rubricas: 'precisão, completude', valids: ['schema_json'] },
+      { id: 2, nome: 'converter-linhas', papel: 'codificador', tier: 'media', deps: [1], rubricas: 'corretude', valids: ['schema_json', 'contem "rows"'] },
+      { id: 3, nome: 'validar-saida', papel: 'evaluator', tier: 'media', deps: [2], rubricas: 'cobertura', valids: [] },
+    ],
+    nextId: 4,
+  };
+
+  up(id, patch) { this.setState({ subtasks: this.state.subtasks.map(s => s.id === id ? { ...s, ...patch } : s) }); }
+
+  renderVals() {
+    const PAPEIS = ['pesquisador', 'codificador', 'redator', 'evaluator'];
+    const TIERS = ['simples', 'media', 'complexa'];
+    const MODELO = { simples: 'llama-3.3-70b', media: 'kimi-k2.6', complexa: 'gpt-5.4' };
+    const st = this.state.subtasks;
+    const isFan = this.state.pattern === 'fan';
+    const isDep = !isFan;
+
+    const subtasks = st.map((s, i) => ({
+      idx: String(i + 1).padStart(2, '0'),
+      nome: s.nome,
+      setNome: (e) => this.up(s.id, { nome: e.target.value }),
+      remove: () => this.setState({ subtasks: st.filter(x => x.id !== s.id) }),
+      papeis: PAPEIS.map(p => ({ label: p, cls: p === s.papel ? 'sel on' : 'sel', pick: () => this.up(s.id, { papel: p }) })),
+      tiers: TIERS.map(t => ({ label: t, cls: t === s.tier ? 'sel on' : 'sel', pick: () => this.up(s.id, { tier: t }) })),
+      modelo: MODELO[s.tier],
+      showDeps: isDep,
+      deps: st.filter(x => x.id !== s.id).map(x => ({
+        label: x.nome,
+        cls: s.deps.includes(x.id) ? 'sel on' : 'sel',
+        pick: () => this.up(s.id, { deps: s.deps.includes(x.id) ? s.deps.filter(d => d !== x.id) : [...s.deps, x.id] }),
+      })),
+      rubricas: s.rubricas,
+      valids: s.valids,
+      addValid: () => this.up(s.id, { valids: [...s.valids, 'arquivo_existe'] }),
+    }));
+
+    // compiled preview → flow nodes/edges (React Flow), ids estáveis
+    let flowNodes = [];
+    let flowEdges = [];
+    const planner = { id: 'planner', x: 20, y: 250, label: 'planner', name: 'planner', noIn: true, showGates: false, hasValid: false };
+    flowNodes.push(planner);
+
+    if (isFan) {
+      const gap = 130;
+      const y0 = 250 - ((st.length - 1) * gap) / 2;
+      st.forEach((s, i) => {
+        flowNodes.push({ id: 'st' + s.id, x: 250, y: y0 + i * gap, label: s.papel + ' · ' + s.tier, name: s.nome, showGates: true, hasValid: s.valids.length > 0, validN: s.valids.length });
+        flowEdges.push({ id: 'p-' + s.id, source: 'planner', target: 'st' + s.id, color: 'var(--focus)' });
+        flowEdges.push({ id: s.id + '-eval', source: 'st' + s.id, target: 'eval', color: 'var(--focus)' });
+      });
+      flowNodes.push({ id: 'eval', x: 480, y: 250, label: 'evaluator', name: 'global_evaluator', showGates: false, hasValid: false });
+      flowNodes.push({ id: 'synth', x: 700, y: 250, label: 'síntese', name: 'synthesizer', showGates: false, hasValid: false, noOut: true });
+      flowEdges.push({ id: 'eval-synth', source: 'eval', target: 'synth', color: 'var(--focus)' });
+    } else {
+      // ondas por depends_on (níveis topológicos)
+      const level = {};
+      const lv = (s, seen) => {
+        if (level[s.id] !== undefined) return level[s.id];
+        if (seen.has(s.id)) return 0;
+        seen.add(s.id);
+        const ds = s.deps.map(d => st.find(x => x.id === d)).filter(Boolean);
+        level[s.id] = ds.length ? Math.max(...ds.map(d => lv(d, seen))) + 1 : 0;
+        return level[s.id];
+      };
+      st.forEach(s => lv(s, new Set()));
+      const byLevel = {};
+      st.forEach(s => { (byLevel[level[s.id]] = byLevel[level[s.id]] || []).push(s); });
+      const maxLevel = Math.max(0, ...st.map(s => level[s.id]));
+      const hasDependents = {};
+      st.forEach(s => s.deps.forEach(d => { hasDependents[d] = true; }));
+      Object.keys(byLevel).sort((a, b) => a - b).forEach(L => {
+        const arr = byLevel[L];
+        const gap = 130;
+        const y0 = 250 - ((arr.length - 1) * gap) / 2;
+        arr.forEach((s, i) => {
+          flowNodes.push({ id: 'st' + s.id, x: 250 + Number(L) * 200, y: y0 + i * gap, label: s.papel + ' · ' + s.tier, name: s.nome, showGates: true, hasValid: s.valids.length > 0, validN: s.valids.length });
+        });
+      });
+      const artX = 250 + (maxLevel + 1) * 200;
+      flowNodes.push({ id: 'art', x: artX, y: 250, label: 'digest', name: 'artefato', showGates: false, hasValid: false, noOut: true });
+      st.forEach(s => {
+        if (!s.deps.length) flowEdges.push({ id: 'p-' + s.id, source: 'planner', target: 'st' + s.id, color: 'var(--focus)' });
+        s.deps.forEach(d => flowEdges.push({ id: d + '-' + s.id, source: 'st' + d, target: 'st' + s.id, color: 'var(--focus)' }));
+        if (!hasDependents[s.id]) flowEdges.push({ id: s.id + '-art', source: 'st' + s.id, target: 'art', color: 'var(--focus)' });
+      });
+    }
+
+    const sig = this.state.pattern + '|' + st.map(s => s.id + ':' + s.papel + ':' + s.tier + ':' + s.deps.join('.') + ':' + s.valids.length).join(',');
+
+    return {
+      theme: this.state.theme, themeLabel: this.state.theme === 'paperclip' ? 'ESCURO' : 'CLARO',
+      toggleTheme: () => this.setState({ theme: this.state.theme === 'paperclip' ? 'stark' : 'paperclip' }),
+      patFanCls: isFan ? 'pat on' : 'pat', patDepCls: isDep ? 'pat on' : 'pat',
+      patFanColor: isFan ? 'var(--accent)' : 'var(--text3)', patDepColor: isDep ? 'var(--accent)' : 'var(--text3)',
+      pickFan: () => this.setState({ pattern: 'fan' }), pickDep: () => this.setState({ pattern: 'dep' }),
+      patLabel: isFan ? 'FAN-OUT SÍNTESE' : 'GRAFO DE DEPENDÊNCIAS · ONDAS',
+      isFan, isDep,
+      stCount: String(st.length).padStart(2, '0'),
+      addSt: () => this.setState({
+        subtasks: [...st, { id: this.state.nextId, nome: 'nova-subtarefa', papel: 'pesquisador', tier: 'simples', deps: [], rubricas: 'precisão', valids: [] }],
+        nextId: this.state.nextId + 1,
+      }),
+      subtasks, flowNodes, flowEdges, sig,
+    };
+  }
+}
+</script>
+</body>
+</html>

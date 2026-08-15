@@ -6,15 +6,88 @@ nunca se improvisa no grafo. Schema próprio, framework-agnóstico.
 """
 from __future__ import annotations
 
-from typing import Any, Literal, Optional
+from typing import Annotated, Any, Literal, Optional
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
 
 VERSAO_SUPORTADA = "0.1"
+NonBlank = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+InteiroPositivo = Annotated[int, Field(strict=True, ge=1)]
+TimeoutComando = Annotated[int, Field(strict=True, ge=1, le=300)]
+CustoFinito = Annotated[float, Field(strict=True, gt=0, allow_inf_nan=False)]
+ModuloPython = Annotated[
+    str,
+    StringConstraints(pattern=r"^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$"),
+]
+
+
+class ConfigSchemaJson(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True, serialize_by_alias=True)
+
+    definicao: dict[str, Any] = Field(alias="schema", serialization_alias="schema")
+
+
+class ConfigContem(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True, serialize_by_alias=True)
+
+    requer: list[NonBlank] = Field(min_length=1)
+    minimo: InteiroPositivo = Field(
+        default_factory=lambda data: len(data.get("requer", [])),
+        alias="min",
+        serialization_alias="min",
+    )
+
+    @model_validator(mode="after")
+    def _minimo_exequivel(self) -> "ConfigContem":
+        if self.minimo > len(self.requer):
+            raise ValueError("config.min excede o total de termos requeridos")
+        return self
+
+
+class ConfigComando(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    comando: NonBlank
+    timeout: TimeoutComando = 30
+    modulos_python: list[ModuloPython] = Field(default_factory=list, max_length=32)
+
+    @field_validator("modulos_python")
+    @classmethod
+    def _modulos_sem_duplicatas(cls, modulos: list[str]) -> list[str]:
+        if len(modulos) != len(set(modulos)):
+            raise ValueError("modulos_python não pode repetir módulo")
+        return modulos
+
+
+class ValidadorSchemaJson(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["schema_json"]
+    config: ConfigSchemaJson
+
+
+class ValidadorContem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["contem"]
+    config: ConfigContem
+
+
+class ValidadorComando(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["comando"]
+    config: ConfigComando
+
+
+ValidadorSpec = Annotated[
+    ValidadorSchemaJson | ValidadorContem | ValidadorComando,
+    Field(discriminator="kind"),
+]
 
 
 class Restricoes(BaseModel):
-    teto_custo: float = Field(default=2.0, gt=0, description="R$ máximos da missão (hook; medição na fabricação)")
+    teto_custo: CustoFinito = Field(default=2.0, description="R$ máximos da missão (hook; medição na fabricação)")
     max_subagentes: int = Field(default=10, ge=1, le=100)
     max_tentativas: int = Field(default=3, ge=1, le=5, description="tentativas por subagente (attempt→verifier)")
 
@@ -25,22 +98,22 @@ class Subagente(BaseModel):
     papel: Optional[str] = Field(default=None, description="papel de modelo (mapeado no cliente: pesquisador, redator...)")
     ferramenta: Optional[str] = Field(default=None, description="nome lógico da ferramenta determinística")
     valida: Optional[str] = Field(default=None, description="id do subagente cuja saída este nó valida")
-    validador: Optional[dict[str, Any]] = Field(
+    validador: Optional[ValidadorSpec] = Field(
         default=None,
         description="{'kind': 'schema_json'|'contem'|'comando', 'config': {...}}",
     )
     objetivo: str = Field(min_length=1)
     entradas: dict[str, Any] = Field(default_factory=dict)
     resultado_esperado: str = Field(min_length=1)
-    rubrica: list[str] = Field(default_factory=list, description="critérios objetivos que o verifier checa")
+    rubrica: list[NonBlank] = Field(default_factory=list, description="critérios objetivos que o verifier checa")
     ferramentas: Optional[str] = Field(default=None, description="ex.: 'WebSearch' para claude -p")
     fonte_rag: Optional[str] = Field(
         default=None,
         description="caminho de um dataset JSONL de registros a consultar como contexto RAG; ausente → sem RAG",
     )
     rag_k: int = Field(default=5, ge=1, description="nº máximo de registros recuperados e injetados")
-    tier: Optional[str] = Field(default=None, description="classe de complexidade p/ roteamento por custo (ex.: simples/media/complexa); o planner classifica, a tabela tiers do cliente mapeia tier→modelo. Ausente → roteia por papel.")
-    capacidades_requeridas: list[str] = Field(
+    tier: Optional[Literal["simples", "media", "complexa"]] = Field(default=None, description="classe de complexidade p/ roteamento por custo (ex.: simples/media/complexa); o planner classifica, a tabela tiers do cliente mapeia tier→modelo. Ausente → roteia por papel.")
+    capacidades_requeridas: list[NonBlank] = Field(
         default_factory=list,
         description="capacidades que a tarefa exige (ex.: codigo, redacao, calculo). "
                     "Vazio → roteia por tier/papel como antes. O cliente escolhe o "
@@ -61,7 +134,7 @@ class Missao(BaseModel):
     id: str = Field(min_length=1)
     objetivo: str = Field(min_length=1)
     contexto: str = ""
-    criterios_cobertura: list[str] = Field(min_length=1, description="o que precisa estar coberto antes da síntese")
+    criterios_cobertura: list[NonBlank] = Field(min_length=1, description="o que precisa estar coberto antes da síntese")
     template: Optional[str] = Field(default=None, description="nome do template de workflow que originou a missão")
     versao_template: Optional[str] = Field(default=None, description="versão do template de workflow usado")
 
@@ -107,20 +180,12 @@ class WorkflowSpec(BaseModel):
                     raise ValueError(f"subagente '{s.id}' não pode validar a si mesmo")
                 if s.valida not in s.depende_de:
                     raise ValueError(f"subagente '{s.id}' do tipo validador exige valida em depende_de")
-                if not isinstance(s.validador, dict):
+                if s.validador is None:
                     raise ValueError(f"subagente '{s.id}' do tipo validador exige validador")
-                kind = s.validador.get("kind")
-                if kind not in {"schema_json", "contem", "comando"}:
-                    raise ValueError(f"subagente '{s.id}' usa validador kind inválido: {kind}")
-                if kind == "comando":
-                    config = s.validador.get("config")
-                    if not isinstance(config, dict):
-                        raise ValueError(f"subagente '{s.id}' validador comando exige config")
-                    comando = config.get("comando")
-                    if not isinstance(comando, str):
-                        raise ValueError(f"subagente '{s.id}' validador comando exige config.comando string")
-                    if "timeout" in config and not isinstance(config["timeout"], int):
-                        raise ValueError(f"subagente '{s.id}' validador comando exige timeout inteiro")
+            elif s.valida is not None or s.validador is not None:
+                raise ValueError(
+                    f"subagente '{s.id}' do tipo {s.tipo} não pode declarar valida ou validador"
+                )
             if len(s.produz_artefatos) > 1:
                 raise ValueError(f"subagente '{s.id}' declara mais de um artefato")
             for artefato in [*s.produz_artefatos, *s.produz]:

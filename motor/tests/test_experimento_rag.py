@@ -1,8 +1,11 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from motor.modelos import ClienteStub
 from motor.spec import WorkflowSpec
+import scripts.experimento_rag as experimento_rag
 from scripts.docs_para_rag import gerar_registros
 from scripts.experimento_rag import (
     ClienteDumpPrompts,
@@ -11,6 +14,12 @@ from scripts.experimento_rag import (
     rodar_condicao_unica,
     rodar_experimento,
 )
+from tests.helpers_grafo import construir_grafo_teste
+
+
+@pytest.fixture(autouse=True)
+def _grafo_experimental_offline(monkeypatch):
+    monkeypatch.setattr(experimento_rag, "construir_grafo", construir_grafo_teste)
 
 
 def _spec_experimento() -> dict:
@@ -320,8 +329,9 @@ def test_spec_lift_docs_metafabrica_valida():
 
     assert validada.missao.id == "lift-docs-metafabrica"
     validador = next(sub for sub in validada.subagentes if sub.tipo == "validador")
-    assert validador.validador["kind"] == "contem"
-    assert validador.validador["config"]["min"] == 5
+    assert validador.validador is not None
+    assert validador.validador.kind == "contem"
+    assert validador.validador.model_dump()["config"]["min"] == 5
 
 
 def test_specs_item3_validam():
@@ -342,6 +352,9 @@ def test_specs_item3_validam():
         "lift-derivado",
         "lift-v3-fatos",
     ]
-    assert validadas[0].subagentes[1].validador["kind"] == "contem"
-    assert validadas[1].subagentes[1].validador["kind"] == "schema_json"
-    assert validadas[2].subagentes[1].validador["config"]["min"] == 4
+    validadores = [spec.subagentes[1].validador for spec in validadas]
+    assert all(validador is not None for validador in validadores)
+    dumps = [validador.model_dump() for validador in validadores if validador is not None]
+    assert dumps[0]["kind"] == "contem"
+    assert dumps[1]["kind"] == "schema_json"
+    assert dumps[2]["config"]["min"] == 4

@@ -1,24 +1,18 @@
 """CLI mínima do motor v0.5.
 
-  python -m motor "sua missão aqui"            # planner cria a WorkflowSpec
-  python -m motor --spec exemplos/missao.json  # missão dirigida por spec pronta
+  python -m motor --modelos cfg-orcada.json "sua missão aqui"
+  python -m motor --modelos cfg-orcada.json --spec exemplos/missao.json
   python -m motor ... --caixa "<dir>"          # gate via nota no vault + resume durável
-  python -m motor ... --modelos exemplos/modelos-nvidia.json  # papéis baratos → DeepSeek/Kimi
-                                               # (exige env var da chave, ex. NVIDIA_API_KEY)
-  python -m motor ... --modelos cfg.json --esgotado claude     # claude indisponível →
-                                               # reroteia pro fallback (Corte B). Repetível.
   python -m motor ... --auto                   # auto-mode: gates resolvem sozinhos (Corte C)
   python -m motor ... --auto --gate cobertura=manual  # tudo auto, MENOS o gate de cobertura
   python -m motor ... --escalar                # verifier reprovou → retry sobe um tier
-  python -m motor ... --modelos cfg.json --pin synthesizer=oc/openai/gpt-5.5  # fixa modelo
-                                               # numa chave (papel|tier|"*"), precedência máxima.
-                                               # Pins globais (todos os projetos): ~/.motor/pins.json
   python -m motor ... --registro "4. Registry/Modelos"  # catálogo via entidades .md
   python -m motor ... --registro Registry --rota construcao  # estratégia explícita do planner
   python -m motor ... --workspace runs  # base dos artefatos por execução
 
-Requer `claude` CLI no PATH (Mac do Caio). Gate do fundador: sem `--caixa`, a
-decisão é via input() e o checkpointer é em memória (volátil). Com `--caixa
+A execução de modelo exige composição `orcamento_openai` válida; configurações
+legadas falham antes do efeito. Gate do fundador: sem `--caixa`, a decisão é via
+input() e o checkpointer é em memória (volátil). Com `--caixa
 <dir>`, a decisão vai para uma nota na Caixa do fundador (T3) e o estado do
 grafo é persistido em `motor.db` na raiz do repo — religar o processo retoma do
 gate pendente.
@@ -26,9 +20,16 @@ gate pendente.
 from __future__ import annotations
 
 import json
+import re
+import shlex
 import sqlite3
+import subprocess
 import sys
+import time
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Protocol
+from uuid import uuid4
 
 from langgraph.types import Command
 
@@ -40,9 +41,23 @@ except ImportError:  # nome antigo
 from langgraph.checkpoint.sqlite import SqliteSaver
 
 from .caixa import CaixaFundador, rodar_com_caixa
+from .composicao_orcamento import (
+    compor_orcamento_multi,
+    compor_orcamento_omniroute,
+    compor_orcamento_openai,
+    validar_independencia_orcada,
+)
 from .eventos import LogEventos
 from .grafo import construir_grafo
 from .modelos import ClienteClaudeCLI, ClienteModelo, ProvedorIndisponivel, cliente_de_config
+from .orcamento import (
+    ErroOrcamento,
+    Moeda,
+    RepositorioOrcamento,
+    publicar_pendentes_por_moeda,
+)
+from .runner import CommandResult, compor_sandbox
+from .spec import WorkflowSpec
 from .registro import (
     cliente_de_registro,
     ferramentas_de_registro,
@@ -68,6 +83,56 @@ def _lista_str(valor) -> list[str]:
     return [str(valor)]
 
 
+class _SondaModulosSandbox(Protocol):
+    def importar_modulo_python(self, executavel: str, modulo: str) -> CommandResult: ...
+
+
+def _preflight_modulos_sandbox(
+    spec: WorkflowSpec, runner: _SondaModulosSandbox, caminho_sandbox: str,
+) -> None:
+    """Verifica dependências declaradas antes de compor qualquer cliente de modelo."""
+    for subagente in spec.subagentes:
+        validador = subagente.validador
+        if validador is None or validador.kind != "comando":
+            continue
+        config = validador.config
+        modulos = config.modulos_python
+        if not modulos:
+            continue
+        try:
+            executavel = shlex.split(config.comando)[0]
+        except (IndexError, ValueError) as erro:
+            raise ValueError(
+                f"validador '{subagente.id}' tem comando inválido para preflight"
+            ) from erro
+        for modulo in modulos:
+            resultado = runner.importar_modulo_python(executavel, modulo)
+            if resultado.erro is not None:
+                raise ValueError(
+                    f"sandbox '{caminho_sandbox}' não pôde verificar módulo Python "
+                    f"'{modulo}' exigido pelo validador '{subagente.id}': {resultado.motivo}"
+                )
+            if resultado.returncode != 0:
+                raise ValueError(
+                    f"sandbox '{caminho_sandbox}' não contém módulo Python "
+                    f"'{modulo}' exigido pelo validador '{subagente.id}'"
+                )
+
+
+def _drenar_orcamento_cli(
+    repositorios: Mapping[Moeda, RepositorioOrcamento],
+    run_id: str,
+    log: LogEventos,
+    *,
+    agora: int | None = None,
+) -> bool:
+    instante = int(time.time()) if agora is None else agora
+    owner = f"cli-{uuid4().hex}"
+    return publicar_pendentes_por_moeda(
+        repositorios, run_id, owner, instante, 30, log.publicar_orcamento,
+    )
+
+
 def construir_cliente(cfg_modelos: dict | None, dir_registro: str | None,
                       log: LogEventos | None = None) -> ClienteModelo:
     """Monta o cliente de modelo para uso programático.
@@ -81,14 +146,14 @@ def construir_cliente(cfg_modelos: dict | None, dir_registro: str | None,
         return cliente_de_config(cfg_modelos, log=log)
     if not ClienteClaudeCLI.disponivel():
         raise ProvedorIndisponivel(
-            "`claude` CLI não encontrado no PATH — rode no Mac do Caio ou use o ClienteStub em testes."
+            "`claude` CLI não encontrado no PATH; instale o CLI ou use o ClienteStub em testes."
         )
     return ClienteClaudeCLI(log=log)
 
 
 def main() -> int:
     args = sys.argv[1:]
-    if not args:
+    if not args or "--help" in args or "-h" in args:
         print(__doc__)
         return 2
 
@@ -99,11 +164,55 @@ def main() -> int:
         dir_caixa = args[i + 1]
         args = args[:i] + args[i + 2:]
 
+    # --sandbox <cfg.json>: habilita execução real de comando em container
+    # isolado. Sem a flag, `command_runner` continua sendo DenyCommandRunner e
+    # nenhum comando roda -- que é o default seguro, não um bug.
+    command_runner = None
+    caminho_sandbox: str | None = None
+    if "--sandbox" in args:
+        i = args.index("--sandbox")
+        if i + 1 >= len(args):
+            print("erro: --sandbox exige o caminho de uma config.")
+            return 2
+        try:
+            caminho_sandbox = args[i + 1]
+            command_runner, evidencia_sandbox = compor_sandbox(caminho_sandbox)
+        except (OSError, ValueError, json.JSONDecodeError,
+                subprocess.SubprocessError) as erro:
+            print(f"erro: sandbox indisponível: {erro}")
+            return 2
+        # A identidade efetiva vai para o operador ANTES da missão começar. Ela
+        # é evidência de deployment, não certificação: rodar em macOS/Docker
+        # Desktop satisfaz o preflight e ainda assim não é o runner Linux
+        # dedicado que `sandbox-conformance.md` exige.
+        print(f"sandbox: {evidencia_sandbox.engine_version} "
+              f"{evidencia_sandbox.os_type} {evidencia_sandbox.policy_version} "
+              f"{evidencia_sandbox.effective_repo_digest}")
+        args = args[:i] + args[i + 2:]
+
     workspace_base = "runs"
     if "--workspace" in args:
         i = args.index("--workspace")
         workspace_base = args[i + 1]
         args = args[:i] + args[i + 2:]
+
+    run_id = uuid4().hex
+    run_id_explicito = False
+    if "--run-id" in args:
+        i = args.index("--run-id")
+        if i + 1 >= len(args):
+            print("erro: --run-id exige um valor.")
+            return 2
+        run_id = args[i + 1]
+        run_id_explicito = True
+        args = args[:i] + args[i + 2:]
+    if (re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", run_id) is None
+            or ".." in run_id):
+        print("erro: --run-id inválido.")
+        return 2
+    if dir_caixa is not None and not run_id_explicito:
+        print("erro: --caixa exige --run-id estável para permitir retomada.")
+        return 2
 
     # --modelos <cfg.json>: multi-provider (papéis baratos → OpenAI-compat;
     # resto → claude). Sem a flag, comportamento intacto: tudo no claude.
@@ -199,76 +308,150 @@ def main() -> int:
         max_rodadas_reconciliacao = int(args[i + 1])
         args = args[:i] + args[i + 2:]
 
+    if not args:
+        print("erro: informe uma missão ou --spec.")
+        return 2
+    # O que sobrou vira TEXTO DE MISSÃO. Sem esta checagem, uma flag digitada
+    # errada -- ou `--help`, que este parser manual nunca tratou -- é despachada
+    # ao planner e gasta orçamento antes de qualquer erro aparecer.
+    if args[0] != "--spec" and any(arg.startswith("--") for arg in args):
+        desconhecidas = [arg for arg in args if arg.startswith("--")]
+        print(f"erro: opção desconhecida: {' '.join(desconhecidas)}")
+        print(__doc__)
+        return 2
     entrada: dict
     if args[0] == "--spec":
         entrada = {"spec": json.loads(Path(args[1]).read_text(encoding="utf-8"))}
+        if command_runner is not None and caminho_sandbox is not None:
+            try:
+                _preflight_modulos_sandbox(
+                    WorkflowSpec.model_validate(entrada["spec"]),
+                    command_runner,
+                    caminho_sandbox,
+                )
+            except ValueError as erro:
+                print(f"erro: pareamento spec/sandbox inválido: {erro}")
+                return 2
     else:
         entrada = {"missao_texto": " ".join(args)}
+    entrada.update({"run_id": run_id, "thread_id": run_id})
 
     raiz = Path(__file__).parent.parent
     log = LogEventos(raiz / "log.jsonl")
-    config = {"configurable": {"thread_id": "cli"}}
-    ferramentas = ferramentas_de_registro(dir_registro) if dir_registro is not None else {}
-    ferramentas_permitidas = _lista_str((cfg_modelos or {}).get("ferramentas_permitidas"))
-    if not ferramentas_permitidas and dir_registro is not None:
-        ferramentas_permitidas = ferramentas_permitidas_de_registro(dir_registro)
-    if cfg_modelos and cfg_modelos.get("pins") and not (
-        "provedores" in cfg_modelos or "base_url" in cfg_modelos
-    ):
-        print("aviso: pins ignorados — precisam de 'provedores' (via --modelos ou ~/.motor/pins.json).")
-    cliente_por_config = bool(
-        cfg_modelos and ("provedores" in cfg_modelos or "base_url" in cfg_modelos)
-    )
+    repositorios_orcamento: dict[Moeda, RepositorioOrcamento] = {}
+    dreno_emergencial_habilitado = False
+    dreno_final_tentado = False
     try:
-        cliente = construir_cliente(cfg_modelos, None if cliente_por_config else dir_registro, log=log)
-    except ProvedorIndisponivel as ex:
-        print(f"erro: {ex}")
-        return 1
-    if esgotados:
-        if hasattr(cliente, "esgotados"):
-            cliente.esgotados |= set(esgotados)
-            log.evento("provedor.esgotado", provedores=esgotados)
+        config = {"configurable": {"thread_id": run_id}}
+        ferramentas = ferramentas_de_registro(dir_registro) if dir_registro is not None else {}
+        ferramentas_permitidas = _lista_str((cfg_modelos or {}).get("ferramentas_permitidas"))
+        if not ferramentas_permitidas and dir_registro is not None:
+            ferramentas_permitidas = ferramentas_permitidas_de_registro(dir_registro)
+        if cfg_modelos and cfg_modelos.get("pins") and not (
+            "provedores" in cfg_modelos or "base_url" in cfg_modelos
+        ):
+            print("aviso: pins ignorados — precisam de 'provedores' (via --modelos ou ~/.motor/pins.json).")
+        try:
+            # A config escolhe o arranjo por presenca POSITIVA dos blocos multi.
+            # Ausencia nao elege nada: config sem bloco nenhum tem que continuar
+            # caindo no compositor antigo e falhando com a mensagem dele, senao
+            # troca-se um erro conhecido por outro so porque o default mudou.
+            cfg_orcada = cfg_modelos or {}
+            if "omniroute" in cfg_orcada:
+                compor = compor_orcamento_omniroute
+            elif {"gemini", "anthropic"} <= set(cfg_orcada):
+                compor = compor_orcamento_multi
+            else:
+                compor = compor_orcamento_openai
+            deps_orcamento = compor(cfg_orcada, workspace_base)
+            validar_independencia_orcada(deps_orcamento.rotas_certificadas)
+            cliente = deps_orcamento.cliente
+            orcamento_brl = deps_orcamento.orcamentos["BRL"]
+            repositorios_orcamento = {
+                moeda: orcamento.repositorio
+                for moeda, orcamento in deps_orcamento.orcamentos.items()
+            }
+            if not _drenar_orcamento_cli(repositorios_orcamento, run_id, log):
+                raise ErroOrcamento("relay monetario pendente")
+            dreno_emergencial_habilitado = True
+        except ErroOrcamento as ex:
+            print(f"erro: orçamento indisponível: {ex}")
+            return 1
+        if esgotados:
+            if hasattr(cliente, "esgotados"):
+                cliente.esgotados |= set(esgotados)
+                log.evento("provedor.esgotado", provedores=esgotados)
+            else:
+                print(f"aviso: --esgotado {esgotados} ignorado (precisa de --modelos com roteador).")
+
+        if dir_caixa:
+            # Persistente: sobrevive a crash. Conexão própria (check_same_thread=False)
+            # para não fechar ao sair de um context manager — durabilidade real exige
+            # que o arquivo motor.db permaneça consistente entre execuções.
+            conn = sqlite3.connect(str(raiz / "motor.db"), check_same_thread=False)
+            try:
+                checkpointer = SqliteSaver(conn)
+                checkpointer.setup()
+                grafo = construir_grafo(cliente, log, checkpointer=checkpointer, politica=politica,
+                                        workspace_base=workspace_base, ferramentas=ferramentas,
+                                        rota=rota, rotas=rotas,
+                                        escalar_em_retry=escalar_em_retry,
+                                        max_rodadas_reconciliacao=max_rodadas_reconciliacao,
+                                        perfil_execucao=perfil_execucao,
+                                        ferramentas_permitidas=ferramentas_permitidas,
+                                        repositorio_orcamento=orcamento_brl.repositorio,
+                                        fabrica_tentativas_orcadas=deps_orcamento.fabrica,
+                                        teto_bootstrap=orcamento_brl.teto_bootstrap,
+                                        command_runner=command_runner)
+                caixa = CaixaFundador(dir_caixa, log)
+                resultado = rodar_com_caixa(grafo, entrada, config, caixa, log)
+            finally:
+                conn.close()
         else:
-            print(f"aviso: --esgotado {esgotados} ignorado (precisa de --modelos com roteador).")
+            # Comportamento default intacto: input() + InMemorySaver (volátil).
+            grafo = construir_grafo(cliente, log, checkpointer=InMemorySaver(), politica=politica,
+                                    workspace_base=workspace_base, ferramentas=ferramentas,
+                                    rota=rota, rotas=rotas,
+                                    escalar_em_retry=escalar_em_retry,
+                                    max_rodadas_reconciliacao=max_rodadas_reconciliacao,
+                                    perfil_execucao=perfil_execucao,
+                                    ferramentas_permitidas=ferramentas_permitidas,
+                                    repositorio_orcamento=orcamento_brl.repositorio,
+                                    fabrica_tentativas_orcadas=deps_orcamento.fabrica,
+                                    teto_bootstrap=orcamento_brl.teto_bootstrap,
+                                    command_runner=command_runner)
+            resultado = grafo.invoke(entrada, config)
+            while "__interrupt__" in resultado:  # gate do fundador
+                pedido = resultado["__interrupt__"][0].value
+                print(f"\n[GATE {pedido['portao']}] {pedido['pergunta']}")
+                print(f"  lacunas: {pedido.get('lacunas')}\n  opções: {pedido['opcoes']}")
+                decisao = input("decisão> ").strip()
+                resultado = grafo.invoke(Command(resume=decisao), config)
 
-    if dir_caixa:
-        # Persistente: sobrevive a crash. Conexão própria (check_same_thread=False)
-        # para não fechar ao sair de um context manager — durabilidade real exige
-        # que o arquivo motor.db permaneça consistente entre execuções.
-        conn = sqlite3.connect(str(raiz / "motor.db"), check_same_thread=False)
-        checkpointer = SqliteSaver(conn)
-        checkpointer.setup()
-        grafo = construir_grafo(cliente, log, checkpointer=checkpointer, politica=politica,
-                                workspace_base=workspace_base, ferramentas=ferramentas,
-                                rota=rota, rotas=rotas,
-                                escalar_em_retry=escalar_em_retry,
-                                max_rodadas_reconciliacao=max_rodadas_reconciliacao,
-                                perfil_execucao=perfil_execucao,
-                                ferramentas_permitidas=ferramentas_permitidas)
-        caixa = CaixaFundador(dir_caixa, log)
-        resultado = rodar_com_caixa(grafo, entrada, config, caixa, log)
-        conn.close()
-    else:
-        # Comportamento default intacto: input() + InMemorySaver (volátil).
-        grafo = construir_grafo(cliente, log, checkpointer=InMemorySaver(), politica=politica,
-                                workspace_base=workspace_base, ferramentas=ferramentas,
-                                rota=rota, rotas=rotas,
-                                escalar_em_retry=escalar_em_retry,
-                                max_rodadas_reconciliacao=max_rodadas_reconciliacao,
-                                perfil_execucao=perfil_execucao,
-                                ferramentas_permitidas=ferramentas_permitidas)
-        resultado = grafo.invoke(entrada, config)
-        while "__interrupt__" in resultado:  # gate do fundador
-            pedido = resultado["__interrupt__"][0].value
-            print(f"\n[GATE {pedido['portao']}] {pedido['pergunta']}")
-            print(f"  lacunas: {pedido.get('lacunas')}\n  opções: {pedido['opcoes']}")
-            decisao = input("decisão> ").strip()
-            resultado = grafo.invoke(Command(resume=decisao), config)
-
-    print("\n=== RESPOSTA FINAL ===\n")
-    print(resultado.get("resposta_final", "(missão abortada)"))
-    log.fechar()
-    return 0
+        try:
+            dreno_final_tentado = True
+            if not _drenar_orcamento_cli(repositorios_orcamento, run_id, log):
+                raise ErroOrcamento("relay monetario pendente")
+        except Exception as ex:
+            print(f"erro: relay monetário indisponível: {ex}")
+            return 1
+        print("\n=== RESPOSTA FINAL ===\n")
+        print(resultado.get("resposta_final", "(missão abortada)"))
+        return 0
+    finally:
+        try:
+            if dreno_emergencial_habilitado and not dreno_final_tentado:
+                try:
+                    if not _drenar_orcamento_cli(
+                        repositorios_orcamento, run_id, log,
+                    ):
+                        raise ErroOrcamento("relay monetario pendente")
+                except Exception as erro_relay:
+                    raise ErroOrcamento(
+                        "execucao falhou e relay monetario ficou pendente"
+                    ) from erro_relay
+        finally:
+            log.fechar()
 
 
 if __name__ == "__main__":

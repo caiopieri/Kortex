@@ -24,7 +24,7 @@ const STYLE_TAG = `
   .avatar.ring-red { border-color: var(--red); }
   .lnk { font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: .6px; text-transform: uppercase; color: var(--text2); cursor: pointer; text-decoration: none; }
   .lnk:hover { color: var(--text); }
-  .toast { position: fixed; right: 26px; bottom: 26px; z-index: 40; max-width: 360px; background: var(--surface); border: 1px solid var(--red); border-left: 3px solid var(--red); border-radius: 2px; padding: 12px 14px; box-shadow: 0 8px 30px rgba(0,0,0,.4); }
+  .toast { position: fixed; right: 26px; bottom: 26px; z-index: 40; max-width: 360px; background: var(--surface); border: 1px solid var(--red); border-left: 3px solid var(--red); border-radius: 2px; padding: 12px 14px; box-shadow: var(--card-shadow, 0 8px 30px rgba(0,0,0,.4)); }
 `;
 
 export default function Home() {
@@ -76,10 +76,7 @@ export default function Home() {
 
   const hoje = `US$ ${totalCusto.toFixed(2)}`;
   const hojeD = `${nChamadas} chamadas (${(totalTokens / 1000).toFixed(1)}k tokens)`;
-  const mes = `US$ ${(totalCusto * 12.5 + 18.2).toFixed(2)}`;
-  const mesD = `Est. baseado na sessão`;
   const prov = costsData?.por_modelo?.map(m => m.modelo.split('/').pop()).join(' · ') || '—';
-  const proj = `US$ ${(totalCusto * 25).toFixed(2)}`;
 
   // AO VIVO or OCIOSO status
   const temAtivas = runs.some(r => r.estado === 'ativa');
@@ -113,20 +110,8 @@ export default function Home() {
       });
     }
   });
-  if (feed.length < 4) {
-    feed.push({ txt: 'sistema operacional meta-fábrica online', hasBtn: false });
-    feed.push({ txt: 'conector de provedores inicializado', hasBtn: false });
-  }
-
-  // Agents
-  const defaultAgents = [
-    { mono: 'αlf', role: 'pesquisador', now: 'pesquisando', avatarClass: 'avatar ring-blue' },
-    { mono: 'βet', role: 'pesquisador', now: 'aguardando', avatarClass: 'avatar ring-amber' },
-    { mono: 'pln', role: 'planner', now: 'planejando', avatarClass: 'avatar ring-blue' },
-    { mono: 'qae', role: 'qa_engineer', now: 'verificando', avatarClass: 'avatar ring-blue' },
-    { mono: 'syn', role: 'synthesizer', now: 'ocioso', avatarClass: 'avatar ring-green' },
-    { mono: 'arq', role: 'arquiteto', now: 'ocioso', avatarClass: 'avatar ring-green' },
-  ];
+  /* Feed curto fica curto. Encher com linha generica ("conector inicializado")
+     e inventar evento que nunca aconteceu. */
 
   const getAgentAvatarClass = (agent) => {
     if (agent.falhas > 0) return 'avatar ring-red';
@@ -144,12 +129,13 @@ export default function Home() {
     return id.slice(0, 3);
   };
 
-  const activeAgents = agentsData && agentsData.length > 0 ? agentsData.map(a => ({
+  const hasRealAgents = agentsData && agentsData.length > 0;
+  const activeAgents = hasRealAgents ? agentsData.map(a => ({
     mono: getAgentLabel(a.id),
     role: a.papel || 'agente',
     now: a.falhas > 0 ? 'falhou' : a.chamadas > 0 ? 'ativo' : 'ocioso',
     avatarClass: getAgentAvatarClass(a)
-  })) : defaultAgents;
+  })) : [];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 26 }}>
@@ -171,8 +157,8 @@ export default function Home() {
               </div>
               <div className="kpi">
                 <div className="eyebrow">Mês</div>
-                <div className="mono" style={{ fontSize: 20, fontWeight: 600, marginTop: 6 }}>{mes}</div>
-                <div className="mono" style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>{mesD}</div>
+                <div className="mono" style={{ fontSize: 20, fontWeight: 600, marginTop: 6, color: 'var(--text3)' }}>—</div>
+                <div className="mono" style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>requer histórico com timestamp</div>
               </div>
               <div className="kpi">
                 <div className="eyebrow">Por provedor</div>
@@ -180,7 +166,8 @@ export default function Home() {
               </div>
               <div className="kpi">
                 <div className="eyebrow">Projeção do mês</div>
-                <div className="mono" style={{ fontSize: 20, fontWeight: 600, marginTop: 6 }}>{proj}</div>
+                <div className="mono" style={{ fontSize: 20, fontWeight: 600, marginTop: 6, color: 'var(--text3)' }}>—</div>
+                <div className="mono" style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>requer histórico com timestamp</div>
               </div>
             </div>
           </div>
@@ -313,16 +300,11 @@ export default function Home() {
               <span className="bk tl"></span><span className="bk tr"></span><span className="bk bl"></span><span className="bk br"></span>
               {/* chat */}
               <div style={{ padding: 16, borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column' }}>
-                <div className="eyebrow">Chat · dispara missão em linguagem natural</div>
+                <div className="eyebrow">Resumo · status ao vivo</div>
                 <div style={{ flex: 1, margin: '12px 0', display: 'flex', flexDirection: 'column', gap: 8, justifyContent: 'flex-end' }}>
-                  <div className="mono" style={{ fontSize: 11.5, color: 'var(--text2)', alignSelf: 'flex-start', background: 'var(--surface2)', border: '1px solid var(--border)', padding: '8px 10px', borderRadius: 2, maxWidth: '90%' }}>Como estão os runs de hoje?</div>
                   <div className="mono" style={{ fontSize: 11.5, color: 'var(--text)', alignSelf: 'flex-end', maxWidth: '92%', lineHeight: 1.5 }}>
                     {runs.length} missão{runs.length !== 1 ? 's' : ''} registrada{runs.length !== 1 ? 's' : ''} ({runs.filter(r => r.estado === 'ativa').length} ativa{runs.filter(r => r.estado === 'ativa').length !== 1 ? 's' : ''}). {gates.length > 0 ? `${gates.length} aguarda você na Caixa do Fundador.` : 'Nenhuma pendência activa.'} Custo total {hoje}.
                   </div>
-                </div>
-                <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: 'var(--bg)' }}>
-                  <span className="mono" style={{ fontSize: 11.5, color: 'var(--text3)', flex: 1 }}>Peça um status ou descreva uma missão…</span>
-                  <span className="arrow">↑</span>
                 </div>
               </div>
               {/* feed */}
@@ -359,10 +341,17 @@ export default function Home() {
           {/* 06 AGENTES */}
           <div>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12 }}>
-              <span className="num">06 — Agentes</span>
+              <span className="num" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                06 — Agentes
+              </span>
               <span className="lnk" onClick={() => window.location.hash = '/agentes'}>ver todos →</span>
             </div>
             <div style={{ display: 'flex', gap: 22, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+              {!hasRealAgents && (
+                <span className="mono" style={{ fontSize: 11, color: 'var(--text3)' }}>
+                  Nenhum executor chamado ainda nesta run.
+                </span>
+              )}
               {activeAgents.map((a, i) => (
                 <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7, width: 78 }} title={a.now}>
                   <div className={a.avatarClass}>{a.mono}</div>

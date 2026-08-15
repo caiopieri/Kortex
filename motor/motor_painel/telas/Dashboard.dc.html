@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<script src="mf-themes.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  body{margin:0;background:#0B0C0E}
+  .mf-root{
+    --bg:#0B0C0E;--surface:#121417;--surface2:#17191D;--border:#26292E;--focus:#3E434A;
+    --text:#E8E6E1;--text2:#8A8F98;--text3:#5A5F66;--accent:#E8A33D;
+    --red:#E5484D;--amber:#E8A33D;--green:#30A46C;--blue:#3E63DD;--inv-bg:#E8E6E1;--inv-text:#0B0C0E;
+    min-height:100vh;background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif;font-size:14px;display:flex;flex-direction:column;
+  }
+  .mf-root[data-theme="stark"]{
+    --bg:#F4F3F0;--surface:#FFFFFF;--surface2:#EDEBE6;--border:#D8D6D0;--focus:#A9A69E;
+    --text:#111213;--text2:#5D6167;--text3:#8B8E93;--accent:#B87514;
+    --red:#C62A30;--amber:#B87514;--green:#1E7F50;--blue:#2F4FC4;--inv-bg:#111213;--inv-text:#F4F3F0;
+  }
+  .mf-top{display:flex;align-items:center;gap:12px;height:52px;padding:0 18px;border-bottom:1px solid var(--border);background:var(--surface);flex:none}
+  .mf-body{display:flex;flex:1;min-height:0}
+  .mf-side{width:238px;flex:none;border-right:1px solid var(--border);background:var(--surface);overflow:auto;padding:8px 0}
+  .mf-main{flex:1;min-width:0;overflow:auto;padding:22px 24px 50px;display:flex;flex-direction:column;gap:24px;background:var(--bg)}
+  .eyebrow{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3)}
+  .num{font-family:'IBM Plex Mono',monospace;font-size:10.5px;font-weight:600;letter-spacing:1.4px;color:var(--text2);text-transform:uppercase}
+  .mono{font-family:'IBM Plex Mono',monospace}
+  .title{font-family:'Space Grotesk',system-ui;font-weight:600;letter-spacing:.2px}
+  .pill{display:inline-flex;align-items:center;gap:6px;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.9px;text-transform:uppercase;padding:5px 9px;border:1px solid var(--border);border-radius:2px;color:var(--text2);background:transparent;cursor:pointer}
+  .pill.on{color:var(--text);border-color:var(--focus);background:var(--surface2)}
+  .btn{display:inline-flex;align-items:center;gap:7px;font-family:Inter;font-weight:600;font-size:12px;padding:8px 13px;border-radius:2px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer}
+  .btn-primary{background:var(--inv-bg);color:var(--inv-text);border-color:var(--inv-bg)}
+  .btn-sm{padding:5px 10px;font-size:11px}
+  .zt{display:flex;justify-content:space-between;align-items:center;padding:15px 18px 6px;font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:600;letter-spacing:1.6px;text-transform:uppercase;color:var(--text3)}
+  .zt.fixed{color:var(--accent)}
+  .ni{display:flex;align-items:center;gap:9px;padding:7px 18px;font-size:13px;color:var(--text2);cursor:pointer;border-left:2px solid transparent}
+  .ni:hover{color:var(--text);background:var(--surface2)}
+  .ni.on{color:var(--text);background:var(--surface2);border-left-color:var(--accent);font-weight:600}
+  .ni.sub{padding-left:36px;font-size:12.5px}
+  .badge{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;background:var(--accent);color:#0B0C0E;border-radius:2px;padding:1px 6px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:2px}
+  .sh{flex:none;position:relative;display:inline-block}
+  .sh.green{width:9px;height:9px;border-radius:50%;background:var(--green)}
+  .sh.blue{width:9px;height:9px;border-radius:50%;background:var(--blue)}
+  .sh.amber{width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:11px solid var(--amber)}
+  .sh.red{width:11px;height:11px;background:var(--red);clip-path:polygon(30% 0,70% 0,100% 30%,100% 70%,70% 100%,30% 100%,0 70%,0 30%)}
+  .sh.idle{width:9px;height:9px;border-radius:50%;background:var(--text3)}
+  .kpi{padding:15px 16px;background:var(--surface);border:1px solid var(--border);border-radius:2px;min-width:0}
+  .kbig{font-family:'IBM Plex Mono',monospace;font-size:22px;font-weight:600;margin-top:7px}
+  .lnk{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.6px;text-transform:uppercase;color:var(--text2);cursor:pointer}
+  .lnk:hover{color:var(--text)}
+  .trow{display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid var(--border);font-family:'IBM Plex Mono',monospace;font-size:11.5px}
+  .bar{flex:1;background:var(--surface2);border-radius:1px;position:relative;overflow:hidden}
+  .barf{position:absolute;left:0;top:0;bottom:0;background:var(--accent);opacity:.75}
+</style>
+</helmet>
+
+<div class="mf-root" data-theme="{{ theme }}">
+  <!-- TOPBAR -->
+  <div class="mf-top">
+    <div style="width:19px;height:19px;border:1.5px solid var(--text);border-radius:2px;position:relative"><div style="position:absolute;inset:4px;border:1.5px solid var(--accent)"></div></div>
+    <span class="title" style="font-size:13px;letter-spacing:1px">META-FÁBRICA</span>
+    <span class="pill on">Projeto: csv→json ▾</span>
+    <div style="flex:1"></div>
+    <span class="pill" onClick="{{ toggleTheme }}">◐ {{ themeLabel }}</span>
+    <span class="btn btn-primary btn-sm">+ Nova missão</span>
+    <span class="pill" style="padding:5px 8px">🔔 <span class="badge">3</span></span>
+  </div>
+
+  <div class="mf-body">
+    <!-- SIDEBAR -->
+    <div class="mf-side">
+      <div class="zt fixed"><span>Fixas</span></div>
+      <div class="ni">Home</div>
+      <div class="ni">Caixa do Fundador <span class="badge" style="margin-left:auto">3</span></div>
+      <div class="ni">Mapa geral</div>
+      <div class="zt"><span>Projeto: csv→json</span><span>▾</span></div>
+      <div class="ni on">Dashboard</div>
+      <div class="ni">Grafos ▾</div>
+      <div class="ni sub">Workflows</div>
+      <div class="ni sub">Datahouse</div>
+      <div class="ni">Runs &amp; Histórico</div>
+      <div class="zt"><span>Biblioteca</span><span>▾</span></div>
+      <div class="ni">Agentes</div>
+      <div class="ni">Skills</div>
+      <div class="ni">Curador</div>
+      <div class="ni">Logs</div>
+      <div class="ni">Custos</div>
+    </div>
+
+    <!-- MAIN -->
+    <div class="mf-main">
+      <div style="display:flex;align-items:baseline;justify-content:space-between">
+        <div><div class="title" style="font-size:22px">csv→json</div><div class="mono" style="font-size:11px;color:var(--text3);margin-top:3px">rota forja · software · pipeline CSV→JSON com validação e testes</div></div>
+        <div style="display:flex;gap:8px"><span class="pill">Grafo 2D →</span><span class="pill">Grafo 3D →</span><span class="pill">Datahouse →</span></div>
+      </div>
+
+      <!-- KPIs -->
+      <div>
+        <div class="num" style="margin-bottom:10px">01 — Indicadores</div>
+        <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px">
+          <div class="kpi"><div class="eyebrow">Runs</div><div class="kbig">2<span style="font-size:13px;color:var(--text3)"> / 18</span></div><div class="mono" style="font-size:10px;color:var(--text3)">ativos / concluídos</div></div>
+          <div class="kpi"><div class="eyebrow">Custo hoje</div><div class="kbig">US$ 1.20</div><div class="mono" style="font-size:10px;color:var(--text3)">▲ 8% · mês 34.10</div></div>
+          <div class="kpi"><div class="eyebrow">1ª tentativa</div><div class="kbig" style="color:var(--green)">74%</div><div class="mono" style="font-size:10px;color:var(--text3)">aprovação inicial</div></div>
+          <div class="kpi"><div class="eyebrow">Latência</div><div class="kbig">3.2s</div><div class="mono" style="font-size:10px;color:var(--text3)">mediana · p90 8.1s</div></div>
+          <div class="kpi"><div class="eyebrow">Escaladas</div><div class="kbig">12</div><div class="mono" style="font-size:10px;color:var(--text3)">convergência 83%</div></div>
+          <div class="kpi" style="border-color:var(--accent)"><div class="eyebrow" style="color:var(--accent)">Pendências</div><div class="kbig" style="color:var(--amber)">1</div><div class="mono" style="font-size:10px;color:var(--text3)">aguardando você</div></div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:20px">
+        <!-- custo trend -->
+        <div style="min-width:0">
+          <div class="num" style="margin-bottom:10px">02 — Custo · 14 dias</div>
+          <div class="card" style="padding:16px">
+            <div style="display:flex;align-items:flex-end;gap:5px;height:120px">
+              <sc-for list="{{ costBars }}" as="b" hint-placeholder-count="14">
+                <div class="bar" style="{{ b.wrap }}"><div class="barf" style="{{ b.fill }}"></div></div>
+              </sc-for>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-top:10px"><span class="mono" style="font-size:10px;color:var(--text3)">14d atrás</span><span class="mono" style="font-size:10px;color:var(--text2)">projeção mês <b style="color:var(--text)">US$ 61</b></span><span class="mono" style="font-size:10px;color:var(--text3)">hoje</span></div>
+          </div>
+        </div>
+        <!-- 1a tentativa por tier -->
+        <div style="min-width:0">
+          <div class="num" style="margin-bottom:10px">03 — Aprovação 1ª tentativa · por tier</div>
+          <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:12px">
+            <sc-for list="{{ tiers }}" as="t" hint-placeholder-count="3">
+              <div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:5px"><span class="mono" style="font-size:11px;color:var(--text2)">{{ t.tier }}</span><span class="mono" style="font-size:11px;color:var(--text)">{{ t.pct }}%</span></div>
+                <div class="bar" style="height:8px"><div class="barf" style="{{ t.fill }};opacity:1;background:{{ t.color }}"></div></div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+        <!-- provedores -->
+        <div style="min-width:0">
+          <div class="num" style="margin-bottom:10px">04 — Saúde dos provedores</div>
+          <div class="card" style="padding:4px 16px">
+            <sc-for list="{{ providers }}" as="p" hint-placeholder-count="4">
+              <div class="trow">
+                <span class="{{ p.shape }}"></span>
+                <span style="color:var(--text);width:120px;flex:none">{{ p.name }}</span>
+                <span style="color:var(--text2);flex:1">{{ p.status }}</span>
+                <span style="color:var(--text3)">{{ p.note }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <!-- digests -->
+        <div style="min-width:0">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px"><span class="num">05 — Últimos digests</span><span class="lnk">Runs &amp; Histórico →</span></div>
+          <div class="card" style="padding:4px 16px">
+            <sc-for list="{{ digests }}" as="d" hint-placeholder-count="4">
+              <div class="trow">
+                <span class="{{ d.shape }}"></span>
+                <span style="color:var(--text);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ d.run }}</span>
+                <span style="color:var(--text3);width:64px;flex:none;text-align:right">{{ d.custo }}</span>
+                <span style="color:var(--text3);width:54px;flex:none;text-align:right">{{ d.dur }}</span>
+                <span style="color:var(--text3);width:60px;flex:none;text-align:right">{{ d.ciclos }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;100%&quot;,&quot;height&quot;:&quot;100%&quot;}}">
+class Component extends DCLogic {
+  state = { theme: 'paperclip' };
+
+  renderVals() {
+    const raw = [2, 3, 2, 4, 3, 5, 4, 3, 6, 4, 5, 4, 6, 7];
+    const max = Math.max(...raw);
+    const costBars = raw.map((v, i) => ({
+      wrap: 'height:100%;width:100%',
+      fill: 'height:' + Math.round((v / max) * 100) + '%;top:auto;bottom:0;' + (i === raw.length - 1 ? 'opacity:1' : ''),
+    }));
+    const tiers = [
+      { tier: 'simples', pct: 58, color: 'var(--blue)', fill: 'width:58%' },
+      { tier: 'media', pct: 82, color: 'var(--green)', fill: 'width:82%' },
+      { tier: 'complexa', pct: 94, color: 'var(--green)', fill: 'width:94%' },
+    ];
+    const providers = [
+      { name: 'nvidia · llama', shape: 'sh green', status: 'disponível', note: 'custo 1' },
+      { name: 'nvidia · kimi', shape: 'sh amber', status: 'throttled (429)', note: 'auto-esgotar' },
+      { name: 'codex', shape: 'sh green', status: 'disponível', note: 'credencial: sim' },
+      { name: 'claude', shape: 'sh idle', status: 'sem-chave', note: 'credencial: não' },
+    ];
+    const digests = [
+      { run: 'RUN-…-018 · validação de schema', shape: 'sh green', custo: 'US$ 0.42', dur: '3m12s', ciclos: '2 ciclos' },
+      { run: 'RUN-…-017 · transform CSV→JSON', shape: 'sh green', custo: 'US$ 0.55', dur: '4m01s', ciclos: '1 ciclo' },
+      { run: 'RUN-…-016 · testes destrutivos', shape: 'sh amber', custo: 'US$ 0.31', dur: '2m40s', ciclos: 'pendente' },
+      { run: 'RUN-…-015 · gravação em lote', shape: 'sh red', custo: 'US$ 0.88', dur: '5m50s', ciclos: 'abortado' },
+    ];
+    return {
+      theme: this.state.theme, themeLabel: this.state.theme === 'paperclip' ? 'ESCURO' : 'CLARO',
+      costBars, tiers, providers, digests,
+      toggleTheme: () => this.setState({ theme: this.state.theme === 'paperclip' ? 'stark' : 'paperclip' }),
+    };
+  }
+}
+</script>
+</body>
+</html>

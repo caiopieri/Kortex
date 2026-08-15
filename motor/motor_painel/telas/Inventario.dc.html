@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<script src="mf-themes.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  body{margin:0;background:#0B0C0E}
+  .mf-root{
+    --bg:#0B0C0E;--surface:#121417;--surface2:#17191D;--border:#26292E;--focus:#3E434A;
+    --text:#E8E6E1;--text2:#8A8F98;--text3:#5A5F66;--accent:#E8A33D;
+    --red:#E5484D;--amber:#E8A33D;--green:#30A46C;--blue:#3E63DD;--inv-bg:#E8E6E1;--inv-text:#0B0C0E;
+    min-height:100vh;background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif;font-size:14px;
+  }
+  .mf-root[data-theme="stark"]{
+    --bg:#F4F3F0;--surface:#FFFFFF;--surface2:#EDEBE6;--border:#D8D6D0;--focus:#A9A69E;
+    --text:#111213;--text2:#5D6167;--text3:#8B8E93;--accent:#B87514;
+    --red:#C62A30;--amber:#B87514;--green:#1E7F50;--blue:#2F4FC4;--inv-bg:#111213;--inv-text:#F4F3F0;
+  }
+  .mf-root *{transition:background-color .32s ease,border-color .32s ease,color .32s ease}
+  .eyebrow{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3)}
+  .num{font-family:'IBM Plex Mono',monospace;font-size:10.5px;font-weight:600;letter-spacing:1.4px;color:var(--text2);text-transform:uppercase}
+  .mono{font-family:'IBM Plex Mono',monospace}
+  .title{font-family:'Space Grotesk',system-ui;font-weight:600;letter-spacing:.2px}
+  .pill{display:inline-flex;align-items:center;gap:6px;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.9px;text-transform:uppercase;padding:5px 9px;border:1px solid var(--border);border-radius:2px;color:var(--text2);background:transparent;cursor:pointer}
+  .pill.on{color:var(--text);border-color:var(--focus);background:var(--surface2)}
+  .btn{display:inline-flex;align-items:center;gap:7px;font-family:Inter;font-weight:600;font-size:12px;padding:8px 13px;border-radius:2px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer}
+  .btn-primary{background:var(--inv-bg);color:var(--inv-text);border-color:var(--inv-bg)}
+  .badge{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;background:var(--accent);color:#0B0C0E;border-radius:2px;padding:1px 6px}
+  .sh{flex:none;position:relative;display:inline-block}
+  .sh.blue{width:9px;height:9px;border-radius:50%;background:var(--blue)}
+  .sh.green{width:9px;height:9px;border-radius:50%;background:var(--green)}
+  .sh.idle{width:9px;height:9px;border-radius:50%;background:var(--text3)}
+  .sh.amber{width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:11px solid var(--amber)}
+  .sh.red{width:11px;height:11px;background:var(--red);clip-path:polygon(30% 0,70% 0,100% 30%,100% 70%,70% 100%,30% 100%,0 70%,0 30%)}
+  .sh.blue.pulse::after{content:"";position:absolute;left:0;top:0;width:9px;height:9px;border-radius:50%;background:var(--blue);animation:mfpulse 2.1s ease-out infinite}
+  @keyframes mfpulse{0%{opacity:.65;transform:scale(1)}100%{opacity:0;transform:scale(3)}}
+  .vsq{width:10px;height:10px;background:var(--green);display:inline-block}
+  .sec{border:1px solid var(--border);border-radius:2px;background:var(--surface);padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0;position:relative}
+  .bk{position:absolute;width:12px;height:12px;border-color:var(--focus);border-style:solid;border-width:0}
+  .it{display:flex;flex-direction:column;gap:7px;padding:10px;border:1px dashed var(--border);border-radius:2px}
+  .itl{display:flex;align-items:baseline;gap:8px}
+  .use{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--text3);line-height:1.5}
+  .cap{display:inline-flex;align-items:center;gap:5px;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.5px;text-transform:uppercase;color:var(--text2);border:1px solid var(--border);border-radius:2px;padding:2px 7px}
+  .cert{display:inline-flex;align-items:center;gap:4px;font-family:'IBM Plex Mono',monospace;font-size:8.5px;letter-spacing:.5px;text-transform:uppercase;color:var(--green);border:1px solid var(--green);border-radius:2px;padding:2px 6px}
+  .aut{display:inline-flex;align-items:center;gap:5px;font-family:'IBM Plex Mono',monospace;font-size:8.5px;letter-spacing:.5px;text-transform:uppercase;border:1px solid var(--blue);border-radius:2px;padding:2px 6px;color:var(--blue)}
+  .ragbadge{display:inline-flex;align-items:center;gap:5px;font-family:'IBM Plex Mono',monospace;font-size:8.5px;letter-spacing:.4px;color:var(--text2);border:1px solid var(--focus);border-radius:2px;padding:2px 5px;background:var(--bg)}
+  .stat{display:inline-flex;flex-direction:column;gap:2px}
+  .stat .v{font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:600;color:var(--text)}
+  .stat .l{font-family:'IBM Plex Mono',monospace;font-size:8.5px;letter-spacing:.8px;text-transform:uppercase;color:var(--text3)}
+  .meter{height:4px;background:var(--surface2);border-radius:2px;overflow:hidden;width:160px}
+  .meter i{display:block;height:100%;width:60%;background:var(--blue)}
+  .ncard{width:210px;background:var(--surface);border:1px solid var(--border);border-radius:2px;padding:10px;display:flex;flex-direction:column;gap:5px}
+  .vnode{width:190px;background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--green);border-radius:2px;padding:9px;display:flex;flex-direction:column;gap:5px}
+</style>
+</helmet>
+
+<div class="mf-root" data-theme="{{ theme }}">
+  <div style="display:flex;align-items:center;gap:12px;height:52px;padding:0 18px;border-bottom:1px solid var(--border);background:var(--surface)">
+    <div style="width:19px;height:19px;border:1.5px solid var(--text);border-radius:2px;position:relative"><div style="position:absolute;inset:4px;border:1.5px solid var(--accent)"></div></div>
+    <span class="title" style="font-size:13px;letter-spacing:1px">META-FÁBRICA</span>
+    <span class="eyebrow" style="border-left:1px solid var(--border);padding-left:12px">§14.8 · inventário de componentes</span>
+    <div style="flex:1"></div>
+    <span class="pill" onClick="{{ toggleTheme }}">◐ {{ themeLabel }}</span>
+  </div>
+
+  <div style="max-width:1180px;margin:0 auto;padding:20px 24px 40px;display:flex;flex-direction:column;gap:14px">
+    <div class="mono" style="font-size:11px;color:var(--text2);line-height:1.6">Catálogo dos reutilizáveis do v2. Cada tela é um DC autocontido que repete este kit inline — este arquivo é a referência canônica de nome, forma e onde cada peça é usada.</div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+
+      <!-- vocabulário de status -->
+      <div class="sec">
+        <div class="bk" style="left:6px;top:6px;border-left-width:1px;border-top-width:1px"></div>
+        <span class="eyebrow" style="color:var(--accent)">01 · formas de status (.sh)</span>
+        <div class="it">
+          <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap">
+            <span style="display:inline-flex;align-items:center;gap:7px"><span class="sh blue pulse"></span><span class="mono" style="font-size:10px;color:var(--text2)">executando</span></span>
+            <span style="display:inline-flex;align-items:center;gap:7px"><span class="sh green"></span><span class="mono" style="font-size:10px;color:var(--text2)">concluído</span></span>
+            <span style="display:inline-flex;align-items:center;gap:7px"><span class="sh amber"></span><span class="mono" style="font-size:10px;color:var(--text2)">aguardando você</span></span>
+            <span style="display:inline-flex;align-items:center;gap:7px"><span class="sh red"></span><span class="mono" style="font-size:10px;color:var(--text2)">erro</span></span>
+            <span style="display:inline-flex;align-items:center;gap:7px"><span class="sh idle"></span><span class="mono" style="font-size:10px;color:var(--text2)">ocioso/fila</span></span>
+          </div>
+          <div class="use">forma ≠ só cor (§ brief): círculo=fluxo, triângulo=gate humano, losango=erro. Em TODAS as telas.</div>
+        </div>
+        <div class="it">
+          <div style="display:flex;align-items:center;gap:18px">
+            <span style="display:inline-flex;align-items:center;gap:7px"><span style="width:9px;height:9px;border-radius:50%;border:1.4px solid var(--text2);display:inline-block"></span><span class="mono" style="font-size:10px;color:var(--text2)">verificador · juízo LLM</span></span>
+            <span style="display:inline-flex;align-items:center;gap:7px"><span class="vsq"></span><span class="mono" style="font-size:10px;color:var(--text2)">validador · determinístico</span></span>
+          </div>
+          <div class="use">os dois tipos de gate — círculo=opinião de modelo, quadrado=verdade por algoritmo. Grafo2D, GrafoEdicao, Runs.</div>
+        </div>
+      </div>
+
+      <!-- tipografia -->
+      <div class="sec">
+        <div class="bk" style="right:6px;top:6px;border-right-width:1px;border-top-width:1px"></div>
+        <span class="eyebrow" style="color:var(--accent)">02 · tipografia + chrome</span>
+        <div class="it">
+          <span class="title" style="font-size:18px">Space Grotesk · títulos (.title)</span>
+          <span style="font-size:13px">Inter · corpo</span>
+          <span class="mono" style="font-size:11px;color:var(--text2)">IBM Plex Mono · dados/IDs (.mono)</span>
+          <span class="eyebrow">EYEBROW · MICRO-LABEL CAIXA-ALTA (.eyebrow)</span>
+          <span class="num">NUM · LEITURA DE INSTRUMENTO (.num)</span>
+          <div class="use">chrome grau-defesa: hairlines 1px var(--border), cantos de registro (.bk) em modais/cards de destaque.</div>
+        </div>
+      </div>
+
+      <!-- controles -->
+      <div class="sec">
+        <div class="bk" style="left:6px;bottom:6px;border-left-width:1px;border-bottom-width:1px"></div>
+        <span class="eyebrow" style="color:var(--accent)">03 · controles</span>
+        <div class="it">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <span class="btn btn-primary" style="padding:6px 11px;font-size:11px">primário (inv-bg)</span>
+            <span class="btn" style="padding:6px 11px;font-size:11px">secundário</span>
+            <span class="pill on">pill ativa</span>
+            <span class="pill">pill</span>
+            <span class="pill" style="padding:5px 8px">🔔 <span class="badge">3</span></span>
+          </div>
+          <div class="use">1 primário por tela no máximo. Badge âmbar = contagem da Caixa. Topbar + toolbars.</div>
+        </div>
+        <div class="it">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span class="cap">capacidade</span>
+            <span class="cert">✓ certificado</span>
+            <span class="aut">planejador</span>
+            <span class="ragbadge">◇ consultou datahouse · 6 chunks</span>
+          </div>
+          <div class="use">chips: .cap (Runners), .cert (Catálogo/Agentes), .aut autoria você/planejador/curador, .ragbadge (Grafo2D).</div>
+        </div>
+      </div>
+
+      <!-- dados -->
+      <div class="sec">
+        <div class="bk" style="right:6px;bottom:6px;border-right-width:1px;border-bottom-width:1px"></div>
+        <span class="eyebrow" style="color:var(--accent)">04 · leitura de dados</span>
+        <div class="it">
+          <div style="display:flex;gap:20px;align-items:flex-end">
+            <span class="stat"><span class="v">US$ 0.44</span><span class="l">custo · run</span></span>
+            <span class="stat"><span class="v" style="color:var(--green)">86%</span><span class="l">1ª aprovação</span></span>
+            <span class="meter"><i></i></span>
+          </div>
+          <div class="use">.stat = KPI mono (Dashboard, Catálogo, Runners). .meter = ocupação/progresso. Custo sempre visível — cidadão de 1ª classe.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- nó-cartão -->
+    <div class="sec">
+      <span class="eyebrow" style="color:var(--accent)">05 · nós do grafo</span>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start">
+        <div class="ncard">
+          <div style="display:flex;align-items:center;gap:6px"><span class="sh blue pulse"></span><span class="mono" style="font-size:9px;color:var(--text2)">executando</span><span class="mono" style="font-size:8.5px;color:var(--text3);margin-left:auto">media · t.2</span></div>
+          <span class="title" style="font-size:13px">nó-cartão (.nodecard)</span>
+          <span class="mono" style="font-size:9.5px;color:var(--text2)">papel · modelo · provedor</span>
+          <span class="mono" style="font-size:9px;color:var(--text3)">✎ editando saida.md</span>
+        </div>
+        <div class="ncard" style="width:150px;background:var(--surface2)">
+          <div style="display:flex;align-items:center;gap:6px"><span style="width:9px;height:9px;border-radius:50%;border:1.4px solid var(--text2)"></span><span class="mono" style="font-size:9px;color:var(--text2)">verificador (.gnode)</span></div>
+          <span class="mono" style="font-size:10px">crítico LLM · rubricas</span>
+        </div>
+        <div class="vnode">
+          <div style="display:flex;align-items:center;gap:6px"><span class="vsq"></span><span class="mono" style="font-size:9px;color:var(--green)">passou</span><span class="mono" style="font-size:8px;color:var(--green);border:1px solid var(--green);border-radius:2px;padding:0 4px;margin-left:auto">DETERMINÍSTICO</span></div>
+          <span class="mono" style="font-size:10px">validador (.vnode)</span>
+          <span class="mono" style="font-size:9px;color:var(--green);border:1px solid var(--border);border-radius:2px;padding:3px 6px;align-self:flex-start">✓ POR ALGORITMO · SEM LLM</span>
+        </div>
+        <div class="ncard" style="border:1px dashed var(--focus);width:170px">
+          <div style="display:flex;align-items:center;gap:6px"><span style="color:var(--text2)">◇</span><span class="mono" style="font-size:9px;color:var(--text2)">dataset · datahouse (.dsnode)</span></div>
+          <span class="mono" style="font-size:10px">fonte RAG · borda tracejada</span>
+        </div>
+      </div>
+      <div class="use">Grafo2D / GrafoEdicao / Runs. Estados do nó-cartão: executando, aprovado, ↑escalado, aguardando-você (âmbar herói), erro, fila, concluído.</div>
+    </div>
+
+    <!-- padrões compostos -->
+    <div class="sec">
+      <span class="eyebrow" style="color:var(--accent)">06 · padrões compostos (onde estão)</span>
+      <div class="mono" style="font-size:10.5px;color:var(--text2);line-height:1.9">
+        topbar 52px + sidebar 238px (4 zonas) — todas as telas · copiar e trocar o .ni.on<br>
+        drawer lateral 360px — Grafo2D (nó), Catálogo (versões), Datahouse (ficha), MapaGeral<br>
+        card kanban (.bcard) — Board · arrastável só até Produção, chip "⬡ motor" dali em diante<br>
+        linha de versões (.vrow) — Catálogo · autoria + evidência do Curador<br>
+        timeline de eventos recolhível — Grafo2D, Runs · motivo expansível por evento<br>
+        fila honesta — Runners ("aguardando capacidade"), Board ("Precisa de você") · o que destrava sempre dito
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;100%&quot;,&quot;height&quot;:&quot;100%&quot;}}">
+class Component extends DCLogic {
+  state = { theme: 'paperclip' };
+  renderVals() {
+    return {
+      theme: this.state.theme,
+      themeLabel: this.state.theme === 'paperclip' ? 'ESCURO' : 'CLARO',
+      toggleTheme: () => this.setState({ theme: this.state.theme === 'paperclip' ? 'stark' : 'paperclip' }),
+    };
+  }
+}
+</script>
+</body>
+</html>

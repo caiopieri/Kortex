@@ -28,7 +28,7 @@ function NodeCard({ data, selected }) {
     background: 'var(--surface)',
     border: data.kind === 'ds' ? '1px dashed var(--focus)' : '1px solid ' + (data.paused ? 'var(--amber)' : selected ? 'var(--accent)' : 'var(--border)'),
     borderLeft: data.kind === 'valid' ? '3px solid var(--green)' : undefined,
-    boxShadow: data.paused ? '0 0 0 1px var(--amber),0 0 26px rgba(232,163,61,.22)' : (selected ? '0 0 0 1px var(--accent)' : 'none'),
+    boxShadow: data.paused ? '0 0 0 1px var(--amber),0 0 26px color-mix(in srgb, var(--amber) 22%, transparent)' : (selected ? '0 0 0 1px var(--accent)' : 'none'),
     borderRadius: 2,
     padding: 11,
     display: 'flex',
@@ -79,7 +79,7 @@ function NodeCard({ data, selected }) {
         </div>
       ) : null}
       <div style={{ flex: 1 }} />
-      {data.cost ? (
+      {data.tokens ? (
         <div style={{
           fontFamily: "'IBM Plex Mono',monospace",
           fontSize: '9.5px',
@@ -90,8 +90,8 @@ function NodeCard({ data, selected }) {
           justifyContent: 'space-between',
           gap: 6
         }}>
-          <span style={{ color: 'var(--text3)', fontSize: '8.5px', letterSpacing: '.6px' }}>CUSTO</span>
-          <span>{data.cost}</span>
+          <span style={{ color: 'var(--text3)', fontSize: '8.5px', letterSpacing: '.6px' }}>TOKENS</span>
+          <span>{data.tokens}</span>
         </div>
       ) : null}
       {data.foot ? (
@@ -194,7 +194,8 @@ function derivarDetalhesNo(no, eventos) {
   let meta = '';
   let badge = '';
   let badgeColor = '';
-  let cost = '';
+  let tokens = '';
+  let totalTokens = 0;
   let foot = '';
   let footColor = '';
   let slim = false;
@@ -213,23 +214,22 @@ function derivarDetalhesNo(no, eventos) {
   
   if (id === 'ds' || id.includes('benchmark')) {
     role = 'dataset · datahouse';
-    meta = 'HF · RAG · 6 chunks';
-    word = 'receitas-benchmark';
+    meta = 'dataset';
     wordColor = 'var(--text2)';
     slim = true;
     shape = 'ds';
   } else if (id === 'planner') {
     role = 'planner';
-    meta = 'planner · kimi-k2.6';
+    meta = 'planner';
     slim = false;
   } else if (id === 'global_evaluator' || id === 'gEval') {
     role = 'global_evaluator';
-    meta = 'evaluator · codex/gpt-5.4';
+    meta = 'evaluator';
     badge = '⚖ verificação';
     slim = false;
   } else if (id === 'synthesizer' || id === 'synth') {
     role = 'synthesizer';
-    meta = 'synthesizer · codex/gpt-5.4';
+    meta = 'synthesizer';
     slim = false;
   } else if (id === 'gate' || id === 'cobertura') {
     role = 'portão humano';
@@ -245,11 +245,11 @@ function derivarDetalhesNo(no, eventos) {
     slim = true;
   } else if (id.startsWith('verifier:')) {
     role = 'verificador · crítico LLM';
-    meta = 'crítico LLM · codex';
+    meta = 'crítico LLM';
     slim = true;
   } else if (id.includes('valid') || id.includes('validador')) {
     role = 'validador determinístico';
-    meta = 'schema_json';
+    meta = 'validador';
     badge = 'determinístico';
     badgeColor = 'var(--green)';
     foot = '✓ por algoritmo · sem LLM';
@@ -320,53 +320,24 @@ function derivarDetalhesNo(no, eventos) {
     }
     
     if (evName === 'modelo.uso') {
-      const prompt = ev.prompt_tokens || 0;
-      const completion = ev.completion_tokens || 0;
-      let p_in = 0.0015, p_out = 0.005;
-      const precos = {
-        'llama-3.3-70b': { in: 0.0007, out: 0.0009 },
-        'kimi-k2.6': { in: 0.001, out: 0.002 },
-        'gpt-5.4': { in: 0.002, out: 0.006 },
-        'codex': { in: 0.0015, out: 0.005 }
-      };
-      const modelLower = (ev.modelo || '').toLowerCase();
-      Object.keys(precos).forEach(k => {
-        if (modelLower.includes(k)) {
-          p_in = precos[k].in;
-          p_out = precos[k].out;
-        }
-      });
-      const c = (prompt / 1000) * p_in + (completion / 1000) * p_out;
-      if (c > 0) {
-        cost = `US$ ${c.toFixed(4)}`;
-      }
+      totalTokens += (ev.prompt_tokens || 0) + (ev.completion_tokens || 0);
+    }
+
+    if (evName === 'artefato.atualizou') {
+      const caminho = ev.artefato || ev.caminho;
+      if (caminho) files.push({ n: caminho });
     }
   });
+
+  if (totalTokens > 0) {
+    tokens = totalTokens >= 1000 ? `${(totalTokens / 1000).toFixed(1)}k` : String(totalTokens);
+  }
   
   if (liveLogs.length === 0) {
-    if (id === 'ds') {
-      liveLogs.push('receitas-benchmark consultado como fonte RAG.');
-    } else if (id === 'planner') {
-      liveLogs.push('aguardando spec de missão...');
-    } else {
-      liveLogs.push('na fila de execução do workflow.');
-    }
+    liveLogs.push('sem eventos registrados para este nó.');
   }
-  
-  if (id === 'planner') {
-    files = [{ n: 'plano.md', d: '+64 −0' }, { n: 'spec.json', d: '+12' }];
-  } else if (id.includes('alfa')) {
-    files = [{ n: 'alfa.md', d: '+38 −2' }];
-  } else if (id.includes('beta')) {
-    files = [{ n: 'beta.md', d: '+41 −9' }, { n: 'fontes.json', d: '+6' }];
-  } else if (id === 'global_evaluator' || id === 'gEval') {
-    files = [{ n: 'cobertura.md', d: '+18' }];
-  }
-  
-  if (id === 'ds') {
-    word = 'receitas-benchmark';
-    meta = 'HF · RAG · 6 chunks';
-  } else if (id === 'art') {
+
+  if (id === 'art') {
     word = 'artefato · digest';
     meta = 'saída final do run';
     if (eventos.some(e => e.evento === 'tarefa.concluida')) {
@@ -384,7 +355,7 @@ function derivarDetalhesNo(no, eventos) {
     meta,
     badge,
     badgeColor,
-    cost,
+    tokens,
     foot,
     footColor,
     slim,
@@ -518,7 +489,7 @@ export default function Grafo2D() {
           meta: details.meta,
           badge: details.badge,
           badgeColor: details.badgeColor,
-          cost: details.cost,
+          tokens: details.tokens,
           foot: details.foot,
           footColor: details.footColor,
           slim: details.slim,
@@ -590,15 +561,13 @@ export default function Grafo2D() {
     return getTipoEvento(ev) === filter;
   });
 
-  // Identificação do ID da Run para exibição na Timeline
-  let runId = 'RUN-2026-07-02-013';
-  const firstMissionEvent = eventos.find(e => e.missao || e.run);
-  if (firstMissionEvent) {
-    runId = firstMissionEvent.missao || firstMissionEvent.run;
-  }
+  // O grafo agrega TODAS as runs presentes no log — rótulo honesto com o N real
+  const missoes = new Set();
+  eventos.forEach(e => { if (e.missao) missoes.add(e.missao); if (e.run) missoes.add(e.run); });
+  const runsLabel = missoes.size > 0 ? `todas as runs · ${missoes.size}` : '—';
 
   const liveShape = mode === 'live' ? 'sh blue pulse' : 'sh idle';
-  const liveLabel = mode === 'live' ? 'AO VIVO' : 'REPLAY';
+  const liveLabel = mode === 'live' ? 'AO VIVO' : 'PAUSADO';
 
   return (
     <div style={{
@@ -695,8 +664,10 @@ export default function Grafo2D() {
         background: 'var(--surface)',
         flex: 'none'
       }}>
-        <span className="num">Grafo 2D · {runId}</span>
-        <span className="pill">filtro: workflow ▾</span>
+        <span className="num" style={{ cursor: 'pointer' }} onClick={() => window.location.hash = '/grafo'}>Grafo 2D</span>
+        <span className="num" style={{ color: 'var(--text3)' }}>|</span>
+        <span className="num" style={{ cursor: 'pointer', color: 'var(--text3)' }} onClick={() => window.location.hash = '/grafo3d'}>Grafo 3D</span>
+        <span className="num" style={{ color: 'var(--text3)', marginLeft: 8 }}>· {runsLabel}</span>
         <div style={{ width: 1, height: 16, background: 'var(--border)', margin: '0 2px' }} />
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: "'IBM Plex Mono',monospace", fontSize: 9, letterSpacing: '.5px', textTransform: 'uppercase', color: 'var(--text2)' }}>
           <span style={{ width: 9, height: 9, borderRadius: '50%', border: '1.4px solid var(--text2)', flex: 'none' }} />
@@ -710,11 +681,8 @@ export default function Grafo2D() {
         <span className={`pill${mode === 'live' ? ' on' : ''}`} onClick={() => setMode('live')}>
           ● Ao vivo
         </span>
-        <span className={`pill${mode === 'replay' ? ' on' : ''}`} onClick={() => setMode('replay')}>
-          ⏮ Replay
-        </span>
-        <span className="pill" style={{ color: 'var(--amber)', borderColor: 'var(--amber)', cursor: 'default' }}>
-          ✎ Edição
+        <span className={`pill${mode === 'pausado' ? ' on' : ''}`} onClick={() => setMode('pausado')}>
+          ⏸ pausar
         </span>
         <span className="mono" style={{ fontSize: 10, color: 'var(--text2)', display: 'flex', alignItems: 'center', gap: 6 }}>
           <span className={liveShape} />
@@ -763,9 +731,11 @@ export default function Grafo2D() {
                   </span>
                 </div>
                 <div className="title" style={{ fontSize: 16, marginTop: 8 }}>{selectedNodeId}</div>
-                <div className="mono" style={{ fontSize: 11, color: 'var(--text2)', marginTop: 3 }}>
-                  {selectedNodeDetails.model || 'algoritmo · sem LLM'}
-                </div>
+                {selectedNodeDetails.model && (
+                  <div className="mono" style={{ fontSize: 11, color: 'var(--text2)', marginTop: 3 }}>
+                    {selectedNodeDetails.model}
+                  </div>
+                )}
               </div>
 
               {selectedNodeDetails.paused && (
@@ -792,27 +762,13 @@ export default function Grafo2D() {
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                   {selectedNodeDetails.files && selectedNodeDetails.files.map((f, i) => (
-                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'IBM Plex Mono',monospace", fontSize: 11, color: 'var(--text2)', padding: '5px 8px', border: '1px solid var(--border)', borderRadius: 2 }}>
-                      <span>{f.n}</span>
-                      <span style={{ color: 'var(--green)' }}>{f.d}</span>
+                    <div key={i} style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 11, color: 'var(--text2)', padding: '5px 8px', border: '1px solid var(--border)', borderRadius: 2 }}>
+                      {f.n}
                     </div>
                   ))}
                   {(!selectedNodeDetails.files || selectedNodeDetails.files.length === 0) && (
-                    <div className="mono" style={{ fontSize: 10, color: 'var(--text3)' }}>nenhum arquivo tocado ainda</div>
+                    <div className="mono" style={{ fontSize: 10, color: 'var(--text3)' }}>nenhum arquivo registrado</div>
                   )}
-                </div>
-              </div>
-
-              <div>
-                <div className="eyebrow" style={{ marginBottom: 8 }}>Chat do nó · 3 modos</div>
-                <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
-                  <span className="pill on">Enfileirar</span>
-                  <span className="pill">Direcionar</span>
-                  <span className="pill">Perguntar</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 11px', border: '1px solid var(--border)', borderRadius: 2, background: 'var(--bg)' }}>
-                  <span className="mono" style={{ fontSize: 11, color: 'var(--text3)', flex: 1 }}>Injeta um prompt ou anexo…</span>
-                  <span style={{ color: 'var(--text3)' }}>↑</span>
                 </div>
               </div>
             </div>
@@ -823,7 +779,7 @@ export default function Grafo2D() {
       {/* TIMELINE */}
       <div className="tl">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 16px', borderBottom: '1px solid var(--border)' }}>
-          <span className="num">Timeline · {runId}</span>
+          <span className="num">Timeline · {runsLabel}</span>
           <div style={{ width: 1, height: 16, background: 'var(--border)', margin: '0 2px' }} />
           <span className={`pill${filter === 'todos' ? ' on' : ''}`} onClick={() => setFilter('todos')}>todos</span>
           <span className={`pill${filter === 'exec' ? ' on' : ''}`} onClick={() => setFilter('exec')}>execução</span>

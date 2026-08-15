@@ -7,6 +7,21 @@ import Runs from './pages/Runs';
 import CaixaFundador from './pages/CaixaFundador';
 import Grafo2D from './pages/Grafo2D';
 import Custos from './pages/Custos';
+import Dashboard from './pages/Dashboard';
+import Agentes from './pages/Agentes';
+import Board from './pages/Board';
+import CatalogoWorkflows from './pages/CatalogoWorkflows';
+import Configuracoes from './pages/Configuracoes';
+import Datahouse from './pages/Datahouse';
+import Logs from './pages/Logs';
+import MapaGeral from './pages/MapaGeral';
+import NovaMissao from './pages/NovaMissao';
+import Runners from './pages/Runners';
+import Skills from './pages/Skills';
+import Curador from './pages/Curador';
+import Conexoes from './pages/Conexoes';
+import Inventario from './pages/Inventario';
+import Grafo3D from './pages/Grafo3D';
 
 /* Roteador hash-based — mais leve possível, zero deps */
 function useHashRoute() {
@@ -30,6 +45,26 @@ function App() {
     applyTheme(themeId, mode);
   }, [themeId, mode]);
 
+  /* Configuracoes troca tema E modo chamando applyTheme direto. Sem sincronizar
+     os dois: o themeId fica velho e o toggle ◐ reverte para o tema anterior; e
+     o mode fica velho, entao o data-theme do .mf-root nao acompanha — theme.js
+     clareia o body enquanto .mf-root segue com as vars escuras e a tela fica
+     metade clara, metade escura. */
+  useEffect(() => {
+    const sincronizar = (e) => {
+      setThemeId(e.detail.id);
+      if (e.detail.modo) setMode(e.detail.modo);
+    };
+    document.addEventListener('mf-theme-applied', sincronizar);
+    return () => document.removeEventListener('mf-theme-applied', sincronizar);
+  }, []);
+
+  /* Reaplica preferências persistidas (densidade/animações) em qualquer rota */
+  useEffect(() => {
+    document.documentElement.setAttribute('data-density', localStorage.getItem('mf-density') || 'normal');
+    document.documentElement.setAttribute('data-anim', localStorage.getItem('mf-anim') !== 'off' ? 'on' : 'off');
+  }, []);
+
   const toggleTheme = useCallback(() => {
     setMode((prev) => {
       const next = prev === 'escuro' ? 'claro' : 'escuro';
@@ -43,7 +78,22 @@ function App() {
   else if (route.startsWith('/runs')) Page = <Runs route={route} />;
   else if (route === '/caixa') Page = <CaixaFundador />;
   else if (route === '/grafo') Page = <Grafo2D />;
+  else if (route === '/grafo3d') Page = <Grafo3D />;
   else if (route === '/custos') Page = <Custos />;
+  else if (route === '/agentes') Page = <Agentes />;
+  else if (route === '/dashboard') Page = <Dashboard />;
+  else if (route === '/board') Page = <Board />;
+  else if (route === '/workflows') Page = <CatalogoWorkflows />;
+  else if (route === '/config') Page = <Configuracoes />;
+  else if (route === '/datahouse') Page = <Datahouse />;
+  else if (route === '/logs') Page = <Logs />;
+  else if (route === '/mapa') Page = <MapaGeral />;
+  else if (route === '/nova-missao') Page = <NovaMissao />;
+  else if (route === '/runners') Page = <Runners />;
+  else if (route === '/skills') Page = <Skills />;
+  else if (route === '/curador') Page = <Curador />;
+  else if (route === '/conexoes') Page = <Conexoes />;
+  else if (route === '/inventario') Page = <Inventario />;
   else Page = <Home />;
 
   return (

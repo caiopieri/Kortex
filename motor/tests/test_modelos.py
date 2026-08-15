@@ -7,7 +7,9 @@ eles ativam sozinhos e são o DoD: NUNCA ajustar o teste à implementação.
 """
 from __future__ import annotations
 
+import json
 import types
+from pathlib import Path
 
 import pytest
 
@@ -207,7 +209,7 @@ def test_roteador_descricao_de_usa_mapa_papeis_do_cliente_compartilhado():
 
 
 def test_esgotar_claude_reroteia_julgamento_ao_codex():
-    """O cenário que travou o Caio: synthesizer (papel sem tier → padrao=claude)
+    """Synthesizer (papel sem tier → padrao=claude)
     com claude esgotado deve cair no Codex, não pendurar."""
     claude = _stub_prov("do-claude", "claude")
     codex = _stub_prov("do-codex", "codex")
@@ -263,7 +265,7 @@ def test_construir_cliente_sem_config_com_claude_devolve_cliente_cli(monkeypatch
     assert isinstance(construir_cliente(None, None), ClienteClaudeCLI)
 
 
-def test_main_sem_claude_mantem_saida_humana(monkeypatch, capsys):
+def test_main_sem_config_orcada_mantem_saida_humana(monkeypatch, capsys):
     from motor import __main__ as cli
 
     monkeypatch.setattr(cli.sys, "argv", ["python -m motor", "missao"])
@@ -271,7 +273,7 @@ def test_main_sem_claude_mantem_saida_humana(monkeypatch, capsys):
 
     assert cli.main() == 1
     saida = capsys.readouterr().out
-    assert "erro: `claude` CLI não encontrado no PATH" in saida
+    assert "erro: orçamento indisponível: configuracao orcada ausente" in saida
 
 
 def test_config_esgotados_e_cadeia(monkeypatch):
@@ -762,7 +764,7 @@ def test_juiz_sem_conflito_nao_desvia():
 
 
 def test_pin_vence_guard_do_juiz():
-    """Pin explícito do Caio no verifier vence o guard (decisão consciente)."""
+    """Pin explícito do operador no verifier vence o guard."""
     codex_pin, claude = _stub_prov("PIN-CODEX", "codex"), _stub_prov("do-claude", "claude")
     r = ClienteRoteador(padrao=claude, pins={"verifier": codex_pin}, cadeia=[claude])
     # mesmo com evitar=codex, o pin manda
@@ -790,6 +792,35 @@ def test_config_tiers_e_papeis_coexistem(monkeypatch):
            "papeis": {"pesquisador": "codex/default"}}
     r = cliente_de_config(cfg)
     assert set(r.tiers) == {"media"} and set(r.mapa) == {"pesquisador"}
+
+
+def test_config_codex_resolve_papeis_do_planner_por_tier_e_capacidade(monkeypatch):
+    from motor.modelos import cliente_de_config
+
+    cfg = json.loads(
+        (Path(__file__).parent.parent / "exemplos" / "modelos-codex.json").read_text()
+    )
+    roteador = cliente_de_config(cfg)
+    monkeypatch.setattr(
+        roteador.tiers["media"], "chamar", lambda *_args, **_kwargs: "CODEX"
+    )
+    monkeypatch.setattr(
+        roteador.padrao, "chamar", lambda *_args, **_kwargs: "CLAUDE"
+    )
+
+    assert roteador.descricao_de(
+        "redator", tier="media", capacidades=["redacao"]
+    ) == "codex/default"
+    assert roteador.chamar(
+        "redator", "p", tier="media", capacidades=["redacao"]
+    ) == "CODEX"
+    assert roteador.descricao_de(
+        "analista", tier="complexa", capacidades=["calculo", "raciocinio-longo"]
+    ) == "claude"
+    assert roteador.chamar(
+        "analista", "p", tier="complexa",
+        capacidades=["calculo", "raciocinio-longo"],
+    ) == "CLAUDE"
 
 
 def test_config_tier_destino_invalido_falha(monkeypatch):

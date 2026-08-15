@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  body{margin:0;background:#0B0C0E}
+  /* CHROME do laboratório — cores FIXAS (não editáveis) para a ferramenta nunca ficar ilegível */
+  .lab{--c-bg:#0B0C0E;--c-surface:#121417;--c-surface2:#17191D;--c-border:#26292E;--c-focus:#3E434A;--c-text:#E8E6E1;--c-text2:#8A8F98;--c-text3:#5A5F66;--c-accent:#E8A33D;
+    min-height:100vh;background:var(--c-bg);color:var(--c-text);font-family:Inter,system-ui,sans-serif;font-size:14px;display:flex;flex-direction:column}
+  .ctop{display:flex;align-items:center;gap:12px;height:52px;padding:0 18px;border-bottom:1px solid var(--c-border);background:var(--c-surface);flex:none}
+  .ceyebrow{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--c-text3)}
+  .cmono{font-family:'IBM Plex Mono',monospace}
+  .ctitle{font-family:'Space Grotesk';font-weight:600;letter-spacing:.3px}
+  .cseg{display:inline-flex;border:1px solid var(--c-border);border-radius:2px;overflow:hidden}
+  .cseg span{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.8px;padding:6px 12px;color:var(--c-text2);cursor:pointer;user-select:none}
+  .cseg span.on{background:var(--c-surface2);color:var(--c-text)}
+  .cbtn{display:inline-flex;align-items:center;gap:7px;font-family:Inter;font-weight:600;font-size:12px;padding:7px 12px;border-radius:2px;border:1px solid var(--c-border);background:transparent;color:var(--c-text);cursor:pointer;user-select:none}
+  .cbtn:hover{border-color:var(--c-focus)}
+  .cbtn.prim{background:var(--c-accent);border-color:var(--c-accent);color:#0B0C0E}
+  .trow{display:flex;align-items:center;gap:11px;padding:7px 0;border-bottom:1px solid var(--c-border)}
+  .swatch{width:30px;height:30px;flex:none;padding:0;border:1px solid var(--c-focus);border-radius:2px;background:none;cursor:pointer}
+  .swatch::-webkit-color-swatch-wrapper{padding:2px}
+  .swatch::-webkit-color-swatch{border:none;border-radius:1px}
+  .tk{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--c-text)}
+  .thex{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--c-text3);text-transform:uppercase}
+  .tuse{font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:var(--c-text3);margin-left:auto;text-align:right;max-width:120px}
+  .pre{font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--c-text2);white-space:pre-wrap;line-height:1.55;background:#08090b;border:1px solid var(--c-border);border-radius:2px;padding:12px;overflow:auto;max-height:230px}
+  /* ---- componentes de PREVIEW (usam as vars EDITÁVEIS) ---- */
+  .pv{--bg:#0B0C0E;--surface:#121417;--surface2:#17191D;--border:#26292E;--focus:#3E434A;--text:#E8E6E1;--text2:#8A8F98;--text3:#5A5F66;--accent:#E8A33D;--red:#E5484D;--amber:#E8A33D;--green:#30A46C;--blue:#3E63DD;--inv-bg:#E8E6E1;--inv-text:#0B0C0E;--grap1:#20242A;--grap2:#171A1F;--rim:#3A4048;
+    background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif}
+  .pv .eyebrow{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3)}
+  .pv .mono{font-family:'IBM Plex Mono',monospace}
+  .pv .title{font-family:'Space Grotesk';font-weight:600}
+  .pv .pill{display:inline-flex;align-items:center;gap:6px;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.6px;padding:5px 9px;border:1px solid var(--border);border-radius:2px;color:var(--text2);background:transparent}
+  .pv .pill.on{color:var(--text);border-color:var(--accent);background:var(--surface2)}
+  .pv .btn{display:inline-flex;align-items:center;gap:7px;font-family:Inter;font-weight:600;font-size:12px;padding:8px 13px;border-radius:2px;border:1px solid var(--border);background:transparent;color:var(--text)}
+  .pv .btn-primary{background:var(--inv-bg);color:var(--inv-text);border-color:var(--inv-bg)}
+  .pv .card{background:var(--surface);border:1px solid var(--border);border-radius:2px}
+  .pv .badge{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;background:var(--accent);color:var(--inv-text);border-radius:2px;padding:1px 6px}
+  .pv .sh{flex:none;display:inline-block}
+  .pv .sh.blue{width:10px;height:10px;border-radius:50%;background:var(--blue)}
+  .pv .sh.green{width:10px;height:10px;border-radius:50%;background:var(--green)}
+  .pv .sh.amber{width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:11px solid var(--amber)}
+  .pv .sh.red{width:11px;height:11px;background:var(--red);clip-path:polygon(30% 0,70% 0,100% 30%,100% 70%,70% 100%,30% 100%,0 70%,0 30%)}
+  .pv .sh.idle{width:10px;height:10px;border-radius:50%;background:var(--text3)}
+  .pv .ni{display:flex;align-items:center;gap:9px;padding:7px 12px;font-size:13px;color:var(--text2);border-left:2px solid transparent}
+  .pv .ni.on{color:var(--text);background:var(--surface2);border-left-color:var(--accent);font-weight:600}
+  .pv .bust{position:relative;width:70px;height:56px}
+  .pv .bshoulder{position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:70px;height:34px;background:linear-gradient(160deg,var(--grap1),var(--grap2));border:1px solid var(--rim);border-bottom:none;border-radius:36px 36px 3px 3px}
+  .pv .bhead{position:absolute;top:0;left:50%;transform:translateX(-50%);width:36px;height:42px;background:linear-gradient(155deg,var(--grap1),var(--grap2));border:1px solid var(--rim);border-radius:15px}
+  .pv .bvisor{position:absolute;top:44%;left:18%;right:18%;height:3px;border-radius:2px;background:var(--accent);box-shadow:0 0 7px 0 var(--accent)}
+  .pv .bring{position:absolute;left:50%;top:-4px;transform:translateX(-50%);width:44px;height:44px;border-radius:50%;border:2px solid var(--blue);box-shadow:0 0 12px -3px var(--blue)}
+</style>
+</helmet>
+
+<div class="lab">
+  <div class="ctop">
+    <div style="width:19px;height:19px;border:1.5px solid var(--c-text);border-radius:2px;position:relative"><div style="position:absolute;inset:4px;border:1.5px solid var(--c-accent)"></div></div>
+    <span class="ctitle" style="font-size:13px;letter-spacing:1px">META-FÁBRICA</span>
+    <span class="ceyebrow" style="border-left:1px solid var(--c-border);padding-left:12px">Laboratório de Temas</span>
+    <div style="flex:1"></div>
+    <span class="ceyebrow" style="margin-right:6px">editando</span>
+    <div class="cseg">
+      <span class="{{ segPaper }}" onClick="{{ editPaper }}">◐ ESCURO</span>
+      <span class="{{ segStark }}" onClick="{{ editStark }}">☀ CLARO</span>
+    </div>
+    <span class="cbtn" onClick="{{ reset }}" style="margin-left:6px">↺ padrão</span>
+    <span class="cbtn prim" onClick="{{ copyTokens }}">{{ copyLabel }}</span>
+  </div>
+
+  <div style="display:flex;flex:1;min-height:0">
+    <!-- CONTROLES -->
+    <div style="width:340px;flex:none;border-right:1px solid var(--c-border);background:var(--c-surface);overflow:auto;padding:14px 16px">
+      <div class="cmono" style="font-size:11px;color:var(--c-text2);line-height:1.55;margin-bottom:14px">Ajuste cada token; a prévia à direita reflete na hora. Quando aprovar, eu propago para as 14 telas.</div>
+      <sc-for list="{{ groups }}" as="g" hint-placeholder-count="5">
+        <div class="ceyebrow" style="margin:14px 0 4px">{{ g.label }}</div>
+        <sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="4">
+          <div class="trow">
+            <input type="color" class="swatch" value="{{ r.val }}" onInput="{{ r.onInput }}"/>
+            <div style="min-width:0"><div class="tk">--{{ r.token }}</div><div class="thex">{{ r.val }}</div></div>
+            <div class="tuse">{{ r.use }}</div>
+          </div>
+        </sc-for>
+      </sc-for>
+      <div class="ceyebrow" style="margin:18px 0 6px">Bloco de tokens · CSS</div>
+      <div class="pre">{{ tokenBlock }}</div>
+    </div>
+
+    <!-- PRÉVIA -->
+    <div ref="{{ pvRef }}" class="pv" style="flex:1;min-width:0;overflow:auto">
+      <div style="padding:0 0 40px">
+        <!-- topbar preview -->
+        <div style="display:flex;align-items:center;gap:12px;height:52px;padding:0 18px;border-bottom:1px solid var(--border);background:var(--surface)">
+          <div style="width:19px;height:19px;border:1.5px solid var(--text);border-radius:2px;position:relative"><div style="position:absolute;inset:4px;border:1.5px solid var(--accent)"></div></div>
+          <span class="title" style="font-size:13px;letter-spacing:1px">META-FÁBRICA</span>
+          <span class="pill on">Projeto: Todos ▾</span>
+          <div style="flex:1"></div>
+          <span class="btn btn-primary" style="padding:6px 11px;font-size:11px">+ Nova missão</span>
+          <span class="pill" style="padding:5px 8px">🔔 <span class="badge">3</span></span>
+        </div>
+
+        <div style="display:flex;gap:0">
+          <!-- mini sidebar -->
+          <div style="width:190px;flex:none;border-right:1px solid var(--border);background:var(--surface);padding:12px 0">
+            <div class="eyebrow" style="padding:4px 12px 8px;color:var(--accent)">Fixas</div>
+            <div class="ni">Home</div>
+            <div class="ni">Caixa do Fundador <span class="badge" style="margin-left:auto;margin-right:4px">3</span></div>
+            <div class="ni on">Mapa geral</div>
+            <div class="ni">Dashboard</div>
+          </div>
+
+          <div style="flex:1;min-width:0;padding:20px;display:flex;flex-direction:column;gap:20px">
+            <!-- header -->
+            <div>
+              <div class="eyebrow" style="margin-bottom:4px">Meso · Prévia dos componentes</div>
+              <div class="title" style="font-size:22px;color:var(--text)">Como o tema se aplica</div>
+            </div>
+
+            <!-- status shapes -->
+            <div class="card" style="padding:16px">
+              <div class="eyebrow" style="margin-bottom:12px">Sistema de status (§4) — cor + forma</div>
+              <div style="display:flex;gap:22px;flex-wrap:wrap;align-items:center">
+                <span class="mono" style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:8px"><span class="sh blue"></span>executando</span>
+                <span class="mono" style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:8px"><span class="sh green"></span>concluído</span>
+                <span class="mono" style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:8px"><span class="sh amber"></span>aguardando você</span>
+                <span class="mono" style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:8px"><span class="sh red"></span>erro</span>
+                <span class="mono" style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:8px"><span class="sh idle"></span>ocioso</span>
+              </div>
+            </div>
+
+            <!-- controls row -->
+            <div style="display:flex;gap:20px;flex-wrap:wrap">
+              <div class="card" style="padding:16px;flex:1;min-width:220px">
+                <div class="eyebrow" style="margin-bottom:12px">Controles</div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+                  <span class="pill">pill</span><span class="pill on">pill · ativo</span>
+                  <span class="btn">Secundário</span><span class="btn btn-primary">Primário</span>
+                </div>
+              </div>
+              <!-- KPI -->
+              <div class="card" style="padding:14px 16px;width:180px">
+                <div class="eyebrow">Custo · run</div>
+                <div class="mono" style="font-size:23px;color:var(--accent);margin-top:8px;font-weight:600">$0.71</div>
+                <div class="mono" style="font-size:10px;color:var(--text3);margin-top:4px">+12% vs ontem</div>
+              </div>
+            </div>
+
+            <!-- node card + agent bust + table -->
+            <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start">
+              <div class="card" style="padding:11px;width:220px;display:flex;flex-direction:column;gap:7px">
+                <div style="display:flex;align-items:center;gap:6px"><span class="sh amber"></span><span class="mono" style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--amber)">aguardando você</span></div>
+                <div class="title" style="font-size:14px;color:var(--text)">gate cobertura</div>
+                <div class="mono" style="font-size:9.5px;color:var(--text2)">portão humano · reprovado ciclo 2</div>
+                <div class="mono" style="font-size:9px;color:var(--amber);border:1px solid var(--border);border-radius:2px;padding:6px;background:var(--bg)">escalado → fundador (2×) · ⏸ pausado</div>
+              </div>
+
+              <div class="card" style="padding:16px 22px;display:flex;flex-direction:column;align-items:center;gap:10px">
+                <div class="eyebrow">Agente</div>
+                <div class="bust"><div class="bring"></div><div class="bshoulder"></div><div class="bhead"><div class="bvisor"></div></div></div>
+                <div class="mono" style="font-size:10px;color:var(--text3)">grafite + visor âmbar</div>
+              </div>
+
+              <div class="card" style="flex:1;min-width:240px">
+                <div style="display:flex;padding:9px 14px;border-bottom:1px solid var(--border)"><span class="eyebrow" style="flex:1">Run</span><span class="eyebrow" style="width:60px;text-align:right">Custo</span><span class="eyebrow" style="width:90px;text-align:right">Resultado</span></div>
+                <div style="display:flex;align-items:center;padding:9px 14px;border-bottom:1px solid var(--border)"><span class="mono" style="font-size:11px;color:var(--text);flex:1">RUN-…-013</span><span class="mono" style="font-size:11px;color:var(--text2);width:60px;text-align:right">$0.71</span><span style="width:90px;display:flex;justify-content:flex-end;align-items:center;gap:6px"><span class="sh amber"></span><span class="mono" style="font-size:10px;color:var(--amber)">aguardando</span></span></div>
+                <div style="display:flex;align-items:center;padding:9px 14px"><span class="mono" style="font-size:11px;color:var(--text);flex:1">RUN-…-012</span><span class="mono" style="font-size:11px;color:var(--text2);width:60px;text-align:right">$0.18</span><span style="width:90px;display:flex;justify-content:flex-end;align-items:center;gap:6px"><span class="sh green"></span><span class="mono" style="font-size:10px;color:var(--green)">concluído</span></span></div>
+              </div>
+            </div>
+
+            <!-- accent rule -->
+            <div class="card" style="padding:14px 16px;display:flex;align-items:center;gap:12px">
+              <span class="sh amber"></span>
+              <span style="font-size:13px;color:var(--text2);line-height:1.5">Regra de ouro: o <b style="color:var(--accent)">acento âmbar</b> é a cor de "precisa de você". Marca, badge da fila e pendências compartilham a mesma família.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;100%&quot;,&quot;height&quot;:&quot;100%&quot;}}">
+class Component extends DCLogic {
+  DEF = {
+    paperclip: { bg: '#0B0C0E', surface: '#121417', surface2: '#17191D', border: '#26292E', focus: '#3E434A', text: '#E8E6E1', text2: '#8A8F98', text3: '#5A5F66', accent: '#E8A33D', red: '#E5484D', amber: '#E8A33D', green: '#30A46C', blue: '#3E63DD', 'inv-bg': '#E8E6E1', 'inv-text': '#0B0C0E', grap1: '#20242A', grap2: '#171A1F', rim: '#3A4048' },
+    stark: { bg: '#F4F3F0', surface: '#FFFFFF', surface2: '#EDEBE6', border: '#D8D6D0', focus: '#A9A69E', text: '#111213', text2: '#5D6167', text3: '#8B8E93', accent: '#B87514', red: '#C62A30', amber: '#B87514', green: '#1E7F50', blue: '#2F4FC4', 'inv-bg': '#111213', 'inv-text': '#F4F3F0', grap1: '#3A3E44', grap2: '#2A2E34', rim: '#6A6F76' },
+  };
+  GROUPS = [
+    { label: 'Superfície', tokens: [['bg', 'fundo geral'], ['surface', 'cards, painéis'], ['surface2', 'elevação, hover'], ['border', 'toda borda 1px'], ['focus', 'hover/foco borda']] },
+    { label: 'Texto', tokens: [['text', 'principal'], ['text2', 'labels, meta'], ['text3', 'ids, timestamps']] },
+    { label: 'Acento & status (§4)', tokens: [['accent', 'precisa de você'], ['red', 'erro/reprovado'], ['amber', 'aguardando'], ['green', 'concluído'], ['blue', 'executando']] },
+    { label: 'Inversão (botão primário)', tokens: [['inv-bg', 'fundo invertido'], ['inv-text', 'texto invertido']] },
+    { label: 'Grafite (retratos de agente)', tokens: [['grap1', 'polímero claro'], ['grap2', 'polímero escuro'], ['rim', 'rim light / juntas']] },
+  ];
+
+  state = { edit: 'paperclip', palette: null, copied: false };
+
+  componentDidMount() {
+    let p = null;
+    try { const raw = localStorage.getItem('mf-theme-palette'); if (raw) p = JSON.parse(raw); } catch (e) {}
+    this.setState({ palette: p || JSON.parse(JSON.stringify(this.DEF)) }, () => this.apply());
+  }
+
+  pal() { return this.state.palette || this.DEF; }
+  save() { try { localStorage.setItem('mf-theme-palette', JSON.stringify(this.state.palette)); } catch (e) {} }
+
+  apply() {
+    if (!this._pv) return;
+    const cur = this.pal()[this.state.edit];
+    Object.entries(cur).forEach(([k, v]) => this._pv.style.setProperty('--' + k, v));
+  }
+
+  setColor(token, val) {
+    const palette = JSON.parse(JSON.stringify(this.pal()));
+    palette[this.state.edit][token] = val.toUpperCase();
+    this.setState({ palette, copied: false }, () => { this.apply(); this.save(); });
+  }
+
+  block(theme, sel) {
+    const p = this.pal()[theme];
+    const line = Object.entries(p).map(([k, v]) => '--' + k + ':' + v).join(';');
+    return sel + '{' + line + '}';
+  }
+
+  renderVals() {
+    const s = this.state;
+    const cur = this.pal()[s.edit];
+    const groups = this.GROUPS.map(g => ({
+      label: g.label,
+      rows: g.tokens.map(([tk, use]) => ({ token: tk, use, val: cur[tk], onInput: (e) => this.setColor(tk, e.target.value) })),
+    }));
+    const tokenBlock = this.block('paperclip', '.mf-root') + '\n\n' + this.block('stark', '.mf-root[data-theme="stark"]');
+
+    return {
+      pvRef: (el) => { this._pv = el; this.apply(); },
+      segPaper: s.edit === 'paperclip' ? 'on' : '', segStark: s.edit === 'stark' ? 'on' : '',
+      editPaper: () => this.setState({ edit: 'paperclip' }, () => this.apply()),
+      editStark: () => this.setState({ edit: 'stark' }, () => this.apply()),
+      groups, tokenBlock,
+      reset: () => this.setState({ palette: JSON.parse(JSON.stringify(this.DEF)), copied: false }, () => { this.apply(); this.save(); }),
+      copyLabel: s.copied ? '✓ copiado' : '⧉ copiar tokens',
+      copyTokens: () => { try { navigator.clipboard.writeText(tokenBlock); } catch (e) {} this.setState({ copied: true }); },
+    };
+  }
+}
+</script>
+</body>
+</html>

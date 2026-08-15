@@ -364,6 +364,7 @@ def test_get_dados_custos():
     assert isinstance(payload["por_run"], list)
     assert isinstance(payload["por_modelo"], list)
     assert set(payload["total"].keys()) == {"custo_total", "tokens_total", "n_chamadas"}
+    assert payload["total"]["custo_total"] is None
 
 
 def test_get_dados_catalogo():
@@ -414,11 +415,11 @@ def _http_post_safe(path: str, body: dict, log_path: Path, db_path: Path):
 
 
 _LOG_GATE_PENDENTE = [
-    json.dumps({"t": 0.0, "evento": "spec.recebida", "missao": "m-gate", "objetivo": "x"}),
-    json.dumps({"t": 0.1, "evento": "portao.reprovado", "portao": "cobertura",
-                "lacunas": ["falta x"], "missao": "m-gate"}),
-    json.dumps({"t": 0.2, "evento": "escalado", "para": "fundador",
-                "portao": "cobertura", "missao": "m-gate"}),
+    json.dumps({"t": 0.0, "seq": 1, "evento": "spec.recebida",
+                "missao": "m-gate", "subagentes": 1}),
+    json.dumps({"t": 0.1, "seq": 2, "evento": "portao.reprovado",
+                "portao": "cobertura", "lacunas": ["falta x"]}),
+    json.dumps({"t": 0.2, "seq": 3, "evento": "escalado", "para": "fundador"}),
 ]
 
 
@@ -489,3 +490,85 @@ def test_post_dados_gates_decisao_invalida(tmp_path):
         "/dados/gates/cobertura", {"decisao": "invalidar"}, log, db
     )
     assert status == 400
+
+
+# ---------------------------------------------------------------------------
+# inventario / conexoes — projeções do registry (disco), não do log
+# ---------------------------------------------------------------------------
+
+def test_inventario_lista_entidades_do_registry():
+    inventario = painel.obter_inventario()
+    assert inventario, "o registry de exemplos tem entidades"
+    for item in inventario:
+        assert set(item) == {"id", "tipo", "papel", "origem"}
+        assert isinstance(item["papel"], list)
+    tipos = {item["tipo"] for item in inventario}
+    assert {"modelo-executor", "rota"} <= tipos
+
+
+def test_conexoes_expoem_fato_de_credencial_e_nunca_o_segredo():
+    conexoes = painel.obter_conexoes()
+    assert conexoes, "ha ao menos um modelo-executor no registry de exemplos"
+    for conexao in conexoes:
+        assert set(conexao) == {"id", "nome", "tipo", "tem_credencial", "origem"}
+        # o contrato é um fato booleano (ou None quando o transporte é desconhecido)
+        assert conexao["tem_credencial"] in (True, False, None)
+    # nenhum valor serializado pode parecer um segredo
+    bruto = json.dumps(conexoes)
+    assert "sk-" not in bruto and "API_KEY" not in bruto
+
+
+def test_conexoes_so_traz_modelo_executor(monkeypatch):
+    """Rotas não são conexões — só entidades que falam com provedor."""
+    conexoes = painel.obter_conexoes()
+    inventario = painel.obter_inventario()
+    executores = {i["id"] for i in inventario if i["tipo"] == "modelo-executor"}
+    assert {c["id"] for c in conexoes} == executores
+
+
+def test_inventario_e_conexoes_vazios_sem_registry(monkeypatch, tmp_path):
+    """Sem registry, estado vazio honesto — nunca dado inventado."""
+    monkeypatch.setattr(painel, "_pasta_registro", lambda: None)
+    assert painel.obter_inventario() == []
+    assert painel.obter_conexoes() == []
+
+
+def test_transporte_desconhecido_responde_none_em_vez_de_mentir(tmp_path, monkeypatch):
+    entidade = tmp_path / "exotico.md"
+    entidade.write_text(
+        "---\ntipo: modelo-executor\ntransporte: transporte-que-nao-existe\n---\ncorpo\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(painel, "_pasta_registro", lambda: tmp_path)
+    monkeypatch.setattr(painel, "BASE", type(painel.BASE)(tmp_path / "x"))
+    (conexao,) = painel.obter_conexoes()
+    assert conexao["tem_credencial"] is None
+
+
+def test_rota_de_dados_desconhecida_responde_404_e_nao_html(tmp_path):
+    """Contrato: /dados/* que o processo nao conhece e 404, nunca index.html.
+
+    Antes caía no fallback estático e devolvia HTML com 200. A tela via
+    `res.ok` passar e o `res.json()` estourava parseando HTML — erro que não
+    apontava para a causa real (painel no ar mais velho que o código).
+    """
+    log = tmp_path / "log.jsonl"
+    log.write_text(
+        json.dumps({"t": 0.0, "evento": "spec.recebida", "missao": "x", "subagentes": 1}) + "\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(urllib.error.HTTPError) as excinfo:
+        _http_get("/dados/rota-que-nao-existe", log)
+    assert excinfo.value.code == 404
+    assert b"<html" not in excinfo.value.read().lower()
+
+
+def test_rota_de_dados_conhecida_continua_json(tmp_path):
+    log = tmp_path / "log.jsonl"
+    log.write_text(
+        json.dumps({"t": 0.0, "evento": "spec.recebida", "missao": "x", "subagentes": 1}) + "\n",
+        encoding="utf-8",
+    )
+    status, content_type, _ = _http_get("/dados/conexoes", log)
+    assert status == 200
+    assert "application/json" in content_type

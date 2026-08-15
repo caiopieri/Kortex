@@ -12,6 +12,6 @@ custo_ordem: 1
 NVIDIA llama-3.3-70b (FREE) = executor generalista barato pros tiers simples/media.
 custo_ordem 1 = primeiro da escada. Rótulo de provedor PRÓPRIO (nvidia-llama) pra failover
 modelo-a-modelo (se este rate-limita, não derruba o qwen-coder).
-NÃO tem `codigo` de propósito — código vai pro especialista (qwen-coder). [APTIDÃO: CONFIRMAR
-com Caio quais capacidades este modelo realmente cobre bem.]
+NÃO tem `codigo` de propósito — código vai pro especialista (qwen-coder). As demais aptidões
+devem ser validadas por experimento antes de uso em produção.
 Requer NVIDIA_API_KEY no ambiente + certificados do Python (Install Certificates.command).

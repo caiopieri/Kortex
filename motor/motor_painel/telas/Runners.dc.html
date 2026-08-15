@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<script src="mf-themes.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  body{margin:0;background:#0B0C0E}
+  .mf-root{
+    --bg:#0B0C0E;--surface:#121417;--surface2:#17191D;--border:#26292E;--focus:#3E434A;
+    --text:#E8E6E1;--text2:#8A8F98;--text3:#5A5F66;--accent:#E8A33D;
+    --red:#E5484D;--amber:#E8A33D;--green:#30A46C;--blue:#3E63DD;--inv-bg:#E8E6E1;--inv-text:#0B0C0E;
+    min-height:100vh;background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif;font-size:14px;display:flex;flex-direction:column;
+  }
+  .mf-root[data-theme="stark"]{
+    --bg:#F4F3F0;--surface:#FFFFFF;--surface2:#EDEBE6;--border:#D8D6D0;--focus:#A9A69E;
+    --text:#111213;--text2:#5D6167;--text3:#8B8E93;--accent:#B87514;
+    --red:#C62A30;--amber:#B87514;--green:#1E7F50;--blue:#2F4FC4;--inv-bg:#111213;--inv-text:#F4F3F0;
+  }
+  .mf-root,.mf-top,.mf-side,.rcard,.pill,.btn{transition:background-color .32s ease,border-color .32s ease,color .32s ease}
+  .eyebrow{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3)}
+  .num{font-family:'IBM Plex Mono',monospace;font-size:10.5px;font-weight:600;letter-spacing:1.4px;color:var(--text2);text-transform:uppercase}
+  .mono{font-family:'IBM Plex Mono',monospace}
+  .title{font-family:'Space Grotesk',system-ui;font-weight:600;letter-spacing:.2px}
+  .mf-top{display:flex;align-items:center;gap:12px;height:52px;padding:0 18px;border-bottom:1px solid var(--border);background:var(--surface);flex:none;z-index:5}
+  .mf-body{display:flex;flex:1;min-height:0}
+  .mf-side{width:238px;flex:none;border-right:1px solid var(--border);background:var(--surface);overflow:auto;padding:8px 0}
+  .pill{display:inline-flex;align-items:center;gap:6px;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.9px;text-transform:uppercase;padding:5px 9px;border:1px solid var(--border);border-radius:2px;color:var(--text2);background:transparent;cursor:pointer}
+  .pill.on{color:var(--text);border-color:var(--focus);background:var(--surface2)}
+  .btn{display:inline-flex;align-items:center;gap:7px;font-family:Inter;font-weight:600;font-size:12px;padding:8px 13px;border-radius:2px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer}
+  .btn:hover{border-color:var(--focus)}
+  .btn-primary{background:var(--inv-bg);color:var(--inv-text);border-color:var(--inv-bg)}
+  .btn-sm{padding:4px 9px;font-size:11px}
+  .zt{display:flex;justify-content:space-between;align-items:center;padding:15px 18px 6px;font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:600;letter-spacing:1.6px;text-transform:uppercase;color:var(--text3)}
+  .zt.fixed{color:var(--accent)}
+  .ni{display:flex;align-items:center;gap:9px;padding:7px 18px;font-size:13px;color:var(--text2);cursor:pointer;border-left:2px solid transparent}
+  .ni:hover{color:var(--text);background:var(--surface2)}
+  .ni.on{color:var(--text);background:var(--surface2);border-left-color:var(--accent);font-weight:600}
+  .ni.sub{padding-left:36px;font-size:12.5px}
+  .badge{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;background:var(--accent);color:#0B0C0E;border-radius:2px;padding:1px 6px}
+  .badge.mla{margin-left:auto}
+  .sh{flex:none;position:relative}
+  .sh.green{width:9px;height:9px;border-radius:50%;background:var(--green)}
+  .sh.blue{width:9px;height:9px;border-radius:50%;background:var(--blue)}
+  .sh.idle{width:9px;height:9px;border-radius:50%;background:var(--text3)}
+  .sh.red{width:11px;height:11px;background:var(--red);clip-path:polygon(30% 0,70% 0,100% 30%,100% 70%,70% 100%,30% 100%,0 70%,0 30%)}
+  .sh.blue.pulse::after{content:"";position:absolute;left:0;top:0;width:9px;height:9px;border-radius:50%;background:var(--blue);animation:mfpulse 2.1s ease-out infinite}
+  @keyframes mfpulse{0%{opacity:.65;transform:scale(1)}100%{opacity:0;transform:scale(3)}}
+  .rcard{background:var(--surface);border:1px solid var(--border);border-radius:2px;padding:14px 15px;display:flex;flex-direction:column;gap:10px;min-width:0;position:relative}
+  .rcard.off{opacity:.72}
+  .bk{position:absolute;width:12px;height:12px;border-color:var(--focus);border-style:solid;border-width:0}
+  .cap{display:inline-flex;align-items:center;gap:5px;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.5px;text-transform:uppercase;color:var(--text2);border:1px solid var(--border);border-radius:2px;padding:2px 7px}
+  .cap.hot{color:var(--text);border-color:var(--focus)}
+  .meter{height:4px;background:var(--surface2);border-radius:2px;overflow:hidden}
+  .meter i{display:block;height:100%;background:var(--blue)}
+  .qrow{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--text2)}
+  .stat{display:flex;flex-direction:column;gap:2px}
+  .stat .v{font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:600;color:var(--text)}
+  .stat .l{font-family:'IBM Plex Mono',monospace;font-size:8.5px;letter-spacing:.8px;text-transform:uppercase;color:var(--text3)}
+</style>
+</helmet>
+
+<div class="mf-root" data-theme="{{ theme }}">
+  <div class="mf-top">
+    <div style="width:19px;height:19px;border:1.5px solid var(--text);border-radius:2px;position:relative"><div style="position:absolute;inset:4px;border:1.5px solid var(--accent)"></div></div>
+    <span class="title" style="font-size:13px;letter-spacing:1px">META-FÁBRICA</span>
+    <span class="pill on" style="margin-left:4px">Projeto: Todos ▾</span>
+    <div style="flex:1"></div>
+    <span class="pill" onClick="{{ toggleTheme }}">◐ {{ themeLabel }}</span>
+    <span class="btn btn-primary btn-sm" style="margin-left:2px">+ Nova missão</span>
+    <span class="pill" style="padding:5px 8px">🔔 <span class="badge">3</span></span>
+  </div>
+
+  <div class="mf-body">
+    <div class="mf-side">
+      <div class="zt fixed"><span>Fixas</span></div>
+      <div class="ni">Home</div>
+      <div class="ni">Board de missões</div>
+      <div class="ni">Caixa do Fundador <span class="badge mla">3</span></div>
+      <div class="ni">Mapa geral</div>
+      <div class="zt"><span>Projeto: Todos</span><span>▾</span></div>
+      <div class="ni">Dashboard</div>
+      <div class="ni">Grafos ▾</div>
+      <div class="ni sub">Workflows</div>
+      <div class="ni sub">Datahouse</div>
+      <div class="ni">Runs &amp; Histórico</div>
+      <div class="zt"><span>Biblioteca</span><span>▾</span></div>
+      <div class="ni">Workflows (catálogo)</div>
+      <div class="ni">Agentes</div>
+      <div class="ni">Skills</div>
+      <div class="ni">Curador</div>
+      <div class="ni">Logs</div>
+      <div class="ni">Custos</div>
+      <div class="zt"><span>Sistema</span><span>▾</span></div>
+      <div class="ni">Conexões</div>
+      <div class="ni on">Runners</div>
+      <div class="ni">Configurações</div>
+    </div>
+
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;overflow-y:auto">
+      <div style="display:flex;align-items:center;gap:12px;padding:16px 20px 4px;flex:none">
+        <span class="title" style="font-size:20px">Runners</span>
+        <span class="eyebrow" style="border-left:1px solid var(--border);padding-left:12px">máquinas de execução · despacho por capacidade</span>
+        <div style="flex:1"></div>
+        <span class="mono" style="font-size:10px;color:var(--text2);display:flex;align-items:center;gap:6px"><span class="sh blue pulse"></span>AO VIVO · MOTOR</span>
+        <span class="btn btn-sm">+ registrar runner</span>
+      </div>
+      <div class="mono" style="font-size:11px;color:var(--text2);padding:8px 20px 0;line-height:1.5;flex:none">O motor despacha cada subtarefa para a máquina que tem a <b style="color:var(--text)">capacidade</b> exigida — não para "a máquina X". Se nenhum runner online cobre a capacidade, a subtarefa espera na fila (e isso aparece aqui, não some).</div>
+
+      <!-- runner cards -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;padding:14px 20px">
+        <sc-for list="{{ runners }}" as="r" hint-placeholder-count="3">
+          <div class="{{ r.cls }}">
+            <div class="bk" style="left:6px;top:6px;border-left-width:1px;border-top-width:1px"></div>
+            <div class="bk" style="right:6px;top:6px;border-right-width:1px;border-top-width:1px"></div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="{{ r.shape }}"></span>
+              <span class="title" style="font-size:14.5px">{{ r.nome }}</span>
+              <span class="num" style="font-size:9px;color:{{ r.stColor }};margin-left:auto">{{ r.status }}</span>
+            </div>
+            <div class="mono" style="font-size:10px;color:var(--text2)">{{ r.host }}</div>
+            <div style="display:flex;gap:5px;flex-wrap:wrap">
+              <sc-for list="{{ r.caps }}" as="c"><span class="{{ c.cls }}">{{ c.label }}</span></sc-for>
+            </div>
+            <div>
+              <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+                <span class="eyebrow" style="font-size:8.5px">ocupação · {{ r.slotsTxt }}</span>
+                <span class="mono" style="font-size:9px;color:var(--text3)">{{ r.tarefa }}</span>
+              </div>
+              <div class="meter"><i style="width:{{ r.occ }};background:{{ r.occColor }}"></i></div>
+            </div>
+            <div style="display:flex;gap:14px;padding-top:9px;border-top:1px solid var(--border)">
+              <div class="stat"><span class="v">{{ r.hoje }}</span><span class="l">subtarefas hoje</span></div>
+              <div class="stat"><span class="v">{{ r.uptime }}</span><span class="l">visto por último</span></div>
+              <div class="stat"><span class="v">{{ r.ver }}</span><span class="l">runner</span></div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+
+      <!-- waiting queue: capability with no runner -->
+      <div style="padding:4px 20px 26px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+          <span class="eyebrow" style="color:var(--amber)">fila · aguardando capacidade</span>
+          <div style="flex:1;height:1px;background:var(--border)"></div>
+        </div>
+        <sc-for list="{{ fila }}" as="q" hint-placeholder-count="2">
+          <div class="qrow">
+            <span class="{{ q.shape }}"></span>
+            <span style="color:var(--text)">{{ q.sub }}</span>
+            <span>exige</span><span class="cap hot">{{ q.cap }}</span>
+            <span style="margin-left:auto;color:var(--text3)">{{ q.desde }}</span>
+            <span class="mono" style="font-size:9.5px;color:{{ q.hintColor }}">{{ q.hint }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;100%&quot;,&quot;height&quot;:&quot;100%&quot;}}">
+class Component extends DCLogic {
+  state = { theme: 'paperclip' };
+
+  renderVals() {
+    const cap = (l, hot) => ({ label: l, cls: hot ? 'cap hot' : 'cap' });
+    const runners = [
+      { nome: 'estacao-mac', host: 'macbook-m3 · local · runner.conectado', status: 'EXECUTANDO', stColor: 'var(--blue)', shape: 'sh blue pulse', cls: 'rcard',
+        caps: [cap('llm', true), cap('render-3d', true), cap('navegador', false), cap('fs-projeto', true)],
+        occ: '66%', occColor: 'var(--blue)', slotsTxt: '2/3 slots', tarefa: 'render peça-3D · anuncio-3d', hoje: '14', uptime: 'agora', ver: 'v0.5.2' },
+      { nome: 'servidor-hetzner', host: 'ubuntu 24 · vps · runner.conectado', status: 'EXECUTANDO', stColor: 'var(--blue)', shape: 'sh blue pulse', cls: 'rcard',
+        caps: [cap('llm', true), cap('docker', true), cap('fs-projeto', true)],
+        occ: '33%', occColor: 'var(--blue)', slotsTxt: '1/3 slots', tarefa: 'converter-linhas · csv→json', hoje: '22', uptime: 'agora', ver: 'v0.5.2' },
+      { nome: 'gpu-colab', host: 'colab-a100 · efêmero · runner.desconectado', status: 'OFFLINE', stColor: 'var(--text3)', shape: 'sh idle', cls: 'rcard off',
+        caps: [cap('gpu-treino', true), cap('llm-local', false)],
+        occ: '0%', occColor: 'var(--text3)', slotsTxt: '0/1 slot', tarefa: '—', hoje: '0', uptime: 'há 3h', ver: 'v0.5.1' },
+      { nome: 'nuc-escritorio', host: 'debian · lan · runner.erro', status: 'ERRO', stColor: 'var(--red)', shape: 'sh red', cls: 'rcard',
+        caps: [cap('navegador', true), cap('llm', false)],
+        occ: '0%', occColor: 'var(--red)', slotsTxt: 'sem heartbeat', tarefa: 'playwright travou · reiniciar?', hoje: '5', uptime: 'há 22min', ver: 'v0.5.2' },
+    ];
+    const fila = [
+      { sub: 'treinar-lora · voz-orion', cap: 'gpu-treino', desde: 'esperando há 3h', shape: 'sh idle', hint: 'runner gpu-colab offline — ligar destrava', hintColor: 'var(--amber)' },
+      { sub: 'screenshot-site · landing', cap: 'navegador', desde: 'esperando há 22min', shape: 'sh idle', hint: 'nuc-escritorio em erro — reiniciar destrava', hintColor: 'var(--amber)' },
+    ];
+    return {
+      theme: this.state.theme, themeLabel: this.state.theme === 'paperclip' ? 'ESCURO' : 'CLARO',
+      toggleTheme: () => this.setState({ theme: this.state.theme === 'paperclip' ? 'stark' : 'paperclip' }),
+      runners, fila,
+    };
+  }
+}
+</script>
+</body>
+</html>

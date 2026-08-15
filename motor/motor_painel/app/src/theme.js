@@ -102,11 +102,66 @@ const BUILTINS = [
     },
     claro: LIGHT_AZUL,
   },
+  {
+    /* Portado de landing/styles.css (branch landing-page) — monocromatico de
+       precisao, dark-first com claro espelhado. A landing reserva cor
+       cromatica para telemetria e nunca para UI, por isso o accent aqui e o
+       proprio off-white e nao uma cor de marca.
+       Ressalva: a landing nao define ambar nem azul. Esses dois tokens sao os
+       do metafabrica, porque as 4 formas de status do painel exigem os quatro.
+       Nao inventei cor de marca para preencher. */
+    id: 'kortex',
+    nome: 'Kortex (landing)',
+    escuro: {
+      '--bg': '#0B0C0E',
+      '--surface': '#111318',
+      '--surface2': '#161920',
+      '--border': 'rgba(235,236,240,.09)',
+      '--focus': 'rgba(235,236,240,.18)',
+      '--text': '#F2F1ED',
+      '--text2': '#A7AAB2',
+      '--text3': '#6C7077',
+      '--accent': '#F2F1ED',
+      '--red': '#E05B4E',
+      '--amber': '#E8A33D',
+      '--green': '#3DC97E',
+      '--blue': '#3E63DD',
+      '--inv-bg': '#F2F1ED',
+      '--inv-text': '#0B0C0E',
+      '--grap1': '#1E2128',
+      '--grap2': '#2A2E37',
+      '--rim': '#6C707700',
+    },
+    claro: {
+      '--bg': '#F4F3EF',
+      '--surface': '#FFFFFF',
+      '--surface2': '#F8F7F3',
+      '--border': 'rgba(23,24,26,.10)',
+      '--focus': 'rgba(23,24,26,.22)',
+      '--text': '#141518',
+      '--text2': '#4C4F54',
+      '--text3': '#8B8E93',
+      '--accent': '#141518',
+      '--red': '#E05B4E',
+      '--amber': '#9A6A1A',
+      '--green': '#3DC97E',
+      '--blue': '#3F62A8',
+      '--inv-bg': '#141518',
+      '--inv-text': '#F4F3EF',
+      '--grap1': '#EDECE6',
+      '--grap2': '#DAD8D0',
+      '--rim': '#8B8E93',
+      '--card-shadow': '0 1px 2px rgba(23,24,26,.06), 0 4px 14px rgba(23,24,26,.07)',
+    },
+  },
 ];
 
 const THEME_KEY = 'mf-theme-active';
 const MODE_KEY = 'mf-theme-mode';
 const CUSTOM_THEMES_KEY = 'mf-themes-custom';
+const TEMA_PADRAO = 'kortex';
+/* Marca que a migracao do default antigo ja rodou, para acontecer uma vez so. */
+const MIGRACAO_KEY = 'mf-theme-migrado-kortex';
 
 export function getCustomThemes() {
   try {
@@ -126,8 +181,21 @@ export function getAllThemes() {
   return [...BUILTINS, ...getCustomThemes()];
 }
 
+/* Le o tema ativo. Tem efeito colateral de proposito: quem ficou parado no
+   default antigo herda o novo uma unica vez. Depois disso a escolha do usuario
+   sempre vence, inclusive se ele voltar para metafabrica. */
 export function getStoredTheme() {
-  return localStorage.getItem(THEME_KEY) || 'metafabrica';
+  const salvo = localStorage.getItem(THEME_KEY);
+  if (!salvo) return TEMA_PADRAO;
+  if (salvo === 'metafabrica' && !localStorage.getItem(MIGRACAO_KEY)) {
+    try {
+      localStorage.setItem(MIGRACAO_KEY, '1');
+    } catch (e) {
+      return salvo;
+    }
+    return TEMA_PADRAO;
+  }
+  return salvo;
 }
 
 export function getStoredMode() {
@@ -168,8 +236,10 @@ export function applyTheme(themeId, mode) {
   localStorage.setItem(THEME_KEY, themeId);
   localStorage.setItem(MODE_KEY, mode);
 
-  // Dispatch event for other parts of the application to listen to
-  document.dispatchEvent(new CustomEvent('mf-theme-applied', { detail: theme }));
+  /* O modo vai junto no detail. Sem ele o App nao tem como saber que alguem
+     trocou de modo por fora e o atributo data-theme do .mf-root fica velho —
+     o body clareia e o conteudo continua escuro. */
+  document.dispatchEvent(new CustomEvent('mf-theme-applied', { detail: { ...theme, modo: mode } }));
 }
 
 export { BUILTINS };

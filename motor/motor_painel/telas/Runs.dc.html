@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<script src="mf-themes.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  body{margin:0;background:#0B0C0E}
+  .mf-root{
+    --bg:#0B0C0E;--surface:#121417;--surface2:#17191D;--border:#26292E;--focus:#3E434A;
+    --text:#E8E6E1;--text2:#8A8F98;--text3:#5A5F66;--accent:#E8A33D;
+    --red:#E5484D;--amber:#E8A33D;--green:#30A46C;--blue:#3E63DD;--inv-bg:#E8E6E1;--inv-text:#0B0C0E;
+    min-height:100vh;background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif;font-size:14px;display:flex;flex-direction:column;
+  }
+  .mf-root[data-theme="stark"]{
+    --bg:#F4F3F0;--surface:#FFFFFF;--surface2:#EDEBE6;--border:#D8D6D0;--focus:#A9A69E;
+    --text:#111213;--text2:#5D6167;--text3:#8B8E93;--accent:#B87514;
+    --red:#C62A30;--amber:#B87514;--green:#1E7F50;--blue:#2F4FC4;--inv-bg:#111213;--inv-text:#F4F3F0;
+  }
+  .force-dark{--bg:#0A0B0D;--surface:#111417;--surface2:#17191D;--border:#2a2e33;--focus:#3E434A;--text:#E8E6E1;--text2:#8A8F98;--text3:#5A5F66}
+  .mf-top{display:flex;align-items:center;gap:12px;height:52px;padding:0 18px;border-bottom:1px solid var(--border);background:var(--surface);flex:none}
+  .mf-body{display:flex;flex:1;min-height:0}
+  .mf-side{width:238px;flex:none;border-right:1px solid var(--border);background:var(--surface);overflow:auto;padding:8px 0}
+  .eyebrow{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3)}
+  .mono{font-family:'IBM Plex Mono',monospace}
+  .title{font-family:'Space Grotesk',system-ui;font-weight:600;letter-spacing:.2px}
+  .pill{display:inline-flex;align-items:center;gap:6px;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.6px;padding:5px 9px;border:1px solid var(--border);border-radius:2px;color:var(--text2);background:transparent;cursor:pointer;user-select:none}
+  .pill:hover{border-color:var(--focus);color:var(--text)}
+  .pill.on{color:var(--text);border-color:var(--accent);background:var(--surface2)}
+  .btn{display:inline-flex;align-items:center;gap:7px;font-family:Inter;font-weight:600;font-size:12px;padding:8px 13px;border-radius:2px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;user-select:none}
+  .btn:hover{border-color:var(--focus)}
+  .btn-primary{background:var(--inv-bg);color:var(--inv-text);border-color:var(--inv-bg)}
+  .btn-sm{padding:5px 10px;font-size:11px}
+  .zt{display:flex;justify-content:space-between;align-items:center;padding:15px 18px 6px;font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:600;letter-spacing:1.6px;text-transform:uppercase;color:var(--text3)}
+  .zt.fixed{color:var(--accent)}
+  .ni{display:flex;align-items:center;gap:9px;padding:7px 18px;font-size:13px;color:var(--text2);cursor:pointer;border-left:2px solid transparent}
+  .ni:hover{color:var(--text);background:var(--surface2)}
+  .ni.on{color:var(--text);background:var(--surface2);border-left-color:var(--accent);font-weight:600}
+  .badge{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;background:var(--accent);color:#0B0C0E;border-radius:2px;padding:1px 6px}
+  .sh{flex:none;position:relative;display:inline-block}
+  .sh.blue{width:9px;height:9px;border-radius:50%;background:var(--blue)}
+  .sh.green{width:9px;height:9px;border-radius:50%;background:var(--green)}
+  .sh.idle{width:9px;height:9px;border-radius:50%;background:var(--text3)}
+  .sh.amber{width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:9px solid var(--amber)}
+  .sh.red{width:10px;height:10px;background:var(--red);clip-path:polygon(30% 0,70% 0,100% 30%,100% 70%,70% 100%,30% 100%,0 70%,0 30%)}
+  .sh.blue.pulse::after{content:"";position:absolute;left:50%;top:50%;width:9px;height:9px;margin:-4.5px 0 0 -4.5px;border-radius:50%;background:var(--blue);animation:mfpulse 2.1s ease-out infinite}
+  @keyframes mfpulse{0%{opacity:.6;transform:scale(1)}100%{opacity:0;transform:scale(3)}}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:2px}
+  .rrow{display:flex;align-items:center;gap:10px;padding:0 14px;height:50px;border-bottom:1px solid var(--border);cursor:pointer}
+  .rrow:hover{background:var(--surface2)}
+  .cm{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--text2)}
+  /* replay graph */
+  .stage{flex:1;position:relative;overflow:auto;background:#0A0B0D;background-image:radial-gradient(circle,#1a1d21 1px,transparent 1px);background-size:26px 26px}
+  .rworld{position:relative;width:1210px;height:360px}
+  .redge{stroke-width:1.6;fill:none}
+  .redge.done{stroke:var(--green)}
+  .redge.act{stroke:var(--blue);stroke-dasharray:3 6;animation:mfflow 1.4s linear infinite}
+  .redge.err{stroke:var(--red)}
+  .redge.wait{stroke:var(--amber);stroke-dasharray:4 5}
+  .redge.idle{stroke:#262a30}
+  @keyframes mfflow{to{stroke-dashoffset:-18}}
+  .mf-root[data-anim="off"] .redge.act,.mf-root[data-anim="off"] .sh.pulse::after{animation:none}
+  .rnode{position:absolute;width:158px;background:var(--surface);border:1px solid var(--border);border-radius:2px;padding:9px 10px;display:flex;flex-direction:column;gap:5px}
+  .rnode.small{width:132px}
+  .rnode.hero{border-color:var(--amber);box-shadow:0 0 0 1px var(--amber),0 0 26px rgba(232,163,61,.22)}
+  .rnode.dead{opacity:.5}
+  .rword{font-family:'IBM Plex Mono',monospace;font-size:9.5px;font-weight:600;letter-spacing:.4px;text-transform:uppercase}
+  .rname{font-family:'Space Grotesk';font-weight:600;font-size:12.5px}
+  .rmeta{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--text3)}
+  .rbadge{font-family:'IBM Plex Mono',monospace;font-size:8.5px;padding:0 4px;border:1px solid var(--border);border-radius:2px;color:var(--accent)}
+  input[type=range].scrub{-webkit-appearance:none;appearance:none;height:4px;background:var(--border);border-radius:2px;outline:none;cursor:pointer}
+  input[type=range].scrub::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:2px;background:var(--accent);cursor:pointer;border:2px solid var(--bg)}
+  input[type=range].scrub::-moz-range-thumb{width:14px;height:14px;border-radius:2px;background:var(--accent);cursor:pointer;border:2px solid var(--bg)}
+  .evrow{display:flex;align-items:center;gap:9px;padding:6px 14px;border-bottom:1px solid var(--border);cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:10.5px}
+  .evrow:hover{background:var(--surface2)}
+  .evrow.cur{background:var(--surface2)}
+  .evrow.future{opacity:.4}
+</style>
+</helmet>
+
+<div class="mf-root" data-theme="{{ theme }}" data-anim="{{ anim }}">
+  <div class="mf-top">
+    <div style="width:19px;height:19px;border:1.5px solid var(--text);border-radius:2px;position:relative"><div style="position:absolute;inset:4px;border:1.5px solid var(--accent)"></div></div>
+    <span class="title" style="font-size:13px;letter-spacing:1px">META-FÁBRICA</span>
+    <span class="pill on">Projeto: Todos ▾</span>
+    <div style="flex:1"></div>
+    <span class="pill" onClick="{{ toggleTheme }}">◐ {{ themeLabel }}</span>
+    <span class="btn btn-primary btn-sm">+ Nova missão</span>
+    <span class="pill" style="padding:5px 8px">🔔 <span class="badge">3</span></span>
+  </div>
+
+  <div class="mf-body">
+    <div class="mf-side">
+      <div class="zt fixed"><span>Fixas</span></div>
+      <div class="ni">Home</div>
+      <div class="ni">Caixa do Fundador <span class="badge" style="margin-left:auto">3</span></div>
+      <div class="ni">Mapa geral</div>
+      <div class="zt"><span>Projeto: Todos</span><span>▾</span></div>
+      <div class="ni">Dashboard</div>
+      <div class="ni">Grafos ▾</div>
+      <div class="ni on">Runs &amp; Histórico</div>
+      <div class="zt"><span>Biblioteca</span><span>▾</span></div>
+      <div class="ni">Agentes</div>
+      <div class="ni">Skills</div>
+      <div class="ni">Curador</div>
+      <div class="ni">Logs</div>
+      <div class="ni">Custos</div>
+    </div>
+
+    <div style="flex:1;display:flex;flex-direction:column;min-width:0">
+      <!-- header -->
+      <div style="display:flex;align-items:center;gap:12px;padding:12px 20px;border-bottom:1px solid var(--border);background:var(--surface);flex:none">
+        <sc-if value="{{ onReplay }}" hint-placeholder-val="{{ false }}">
+          <span class="mono" style="font-size:12px;color:var(--text2);cursor:pointer" onClick="{{ back }}">← Runs</span>
+        </sc-if>
+        <div style="min-width:0">
+          <div class="eyebrow" style="margin-bottom:3px">{{ eyebrow }}</div>
+          <div class="title" style="font-size:19px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ headTitle }}</div>
+        </div>
+        <div style="flex:1"></div>
+        <sc-if value="{{ onReplay }}" hint-placeholder-val="{{ false }}">
+          <span class="mono" style="font-size:10px;color:var(--amber);display:flex;align-items:center;gap:6px;border:1px solid color-mix(in srgb,var(--amber) 45%,transparent);padding:5px 9px;border-radius:2px">⏮ REPLAY</span>
+        </sc-if>
+        <sc-if value="{{ onList }}" hint-placeholder-val="{{ true }}">
+          <span class="pill">período: 30d ▾</span>
+          <span class="pill">rota ▾</span>
+        </sc-if>
+      </div>
+
+      <!-- ============ LISTA ============ -->
+      <sc-if value="{{ onList }}" hint-placeholder-val="{{ true }}">
+      <div style="flex:1;overflow:auto;padding:18px 20px">
+        <div class="card">
+          <div style="display:flex;align-items:center;gap:10px;padding:0 14px;height:32px;border-bottom:1px solid var(--border)">
+            <span class="eyebrow" style="width:120px">Run</span>
+            <span class="eyebrow" style="flex:1;min-width:0">Digest</span>
+            <span class="eyebrow" style="width:52px;text-align:right">Custo</span>
+            <span class="eyebrow" style="width:50px;text-align:right">Dur.</span>
+            <span class="eyebrow" style="width:38px;text-align:right">Cicl.</span>
+            <span class="eyebrow" style="width:38px;text-align:right">Esc.</span>
+            <span class="eyebrow" style="width:104px;text-align:right">Resultado</span>
+          </div>
+          <sc-for list="{{ runs }}" as="r" hint-placeholder-count="6">
+            <div class="rrow" onClick="{{ r.open }}">
+              <span style="width:120px;display:flex;flex-direction:column;gap:2px;min-width:0">
+                <span class="mono" style="font-size:11px;color:var(--text)">{{ r.id }}</span>
+                <span class="mono" style="font-size:9px;color:var(--text3)">{{ r.proj }}</span>
+              </span>
+              <span style="flex:1;min-width:0;font-size:12.5px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.digest }}</span>
+              <span class="cm" style="width:52px;text-align:right;color:var(--text)">{{ r.cost }}</span>
+              <span class="cm" style="width:50px;text-align:right">{{ r.dur }}</span>
+              <span class="cm" style="width:38px;text-align:right">{{ r.cycles }}</span>
+              <span class="cm" style="width:38px;text-align:right">{{ r.escal }}</span>
+              <span style="width:104px;display:flex;align-items:center;gap:7px;justify-content:flex-end"><span class="{{ r.sh }}"></span><span class="mono" style="font-size:10.5px;color:{{ r.color }}">{{ r.result }}</span></span>
+            </div>
+          </sc-for>
+        </div>
+        <div class="mono" style="font-size:10px;color:var(--text3);margin-top:12px">Abrir um run = replay do grafo com scrubber de tempo · P2: exportar replay em vídeo.</div>
+      </div>
+      </sc-if>
+
+      <!-- ============ REPLAY ============ -->
+      <sc-if value="{{ onReplay }}" hint-placeholder-val="{{ false }}">
+      <div style="flex:1;display:flex;flex-direction:column;min-height:0">
+        <!-- HUD -->
+        <div style="display:flex;align-items:stretch;border-bottom:1px solid var(--border);background:var(--surface);flex:none">
+          <div style="padding:11px 16px;border-right:1px solid var(--border)">
+            <div class="eyebrow">Custo · run</div>
+            <div class="mono" style="font-size:19px;color:var(--accent);margin-top:5px;letter-spacing:.5px">{{ hud.cost }}</div>
+          </div>
+          <div style="padding:11px 16px;border-right:1px solid var(--border)">
+            <div class="eyebrow">Evento</div>
+            <div class="mono" style="font-size:19px;color:var(--text);margin-top:5px">{{ hud.pos }}</div>
+          </div>
+          <div style="padding:11px 16px;border-right:1px solid var(--border)">
+            <div class="eyebrow">t (rel.)</div>
+            <div class="mono" style="font-size:19px;color:var(--text);margin-top:5px">{{ hud.t }}s</div>
+          </div>
+          <div style="padding:11px 16px;border-right:1px solid var(--border)">
+            <div class="eyebrow">Escaladas</div>
+            <div class="mono" style="font-size:19px;color:var(--text);margin-top:5px">{{ hud.escal }}</div>
+          </div>
+          <div style="flex:1;padding:11px 16px;min-width:0;display:flex;flex-direction:column;justify-content:center">
+            <div class="eyebrow">Agora</div>
+            <div class="mono" style="font-size:12px;color:var(--text);margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ hud.now }}</div>
+          </div>
+        </div>
+
+        <div style="display:flex;flex:1;min-height:0">
+          <!-- graph stage -->
+          <div class="stage force-dark">
+            <div class="rworld">
+              <svg viewBox="0 0 1210 360" style="position:absolute;inset:0;width:1210px;height:360px;z-index:0">
+                <sc-for list="{{ edges }}" as="g" hint-placeholder-count="9">
+                  <line class="redge {{ g.cls }}" x1="{{ g.x1 }}" y1="{{ g.y1 }}" x2="{{ g.x2 }}" y2="{{ g.y2 }}"></line>
+                </sc-for>
+              </svg>
+              <sc-for list="{{ nodes }}" as="n" hint-placeholder-count="9">
+                <div class="rnode {{ n.cls }}" style="left:{{ n.x }};top:{{ n.y }}">
+                  <div style="display:flex;align-items:center;gap:6px"><span class="{{ n.sh }}"></span><span class="rword" style="color:{{ n.wcolor }}">{{ n.word }}</span><span class="{{ n.badgeCls }}">{{ n.badge }}</span></div>
+                  <div class="rname">{{ n.name }}</div>
+                  <div class="rmeta">{{ n.meta }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <!-- event list -->
+          <div style="width:326px;flex:none;border-left:1px solid var(--border);background:var(--surface);display:flex;flex-direction:column">
+            <div style="padding:11px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between"><span class="eyebrow">Eventos · fold puro</span><span class="mono" style="font-size:9px;color:var(--text3)">clique = ir para</span></div>
+            <div style="flex:1;overflow:auto">
+              <sc-for list="{{ evlist }}" as="e" hint-placeholder-count="13">
+                <div class="evrow {{ e.cls }}" onClick="{{ e.go }}">
+                  <span style="color:var(--text3);width:40px;flex:none">{{ e.t }}s</span>
+                  <span class="{{ e.dot }}"></span>
+                  <span style="color:var(--text2);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ e.evt }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+
+        <!-- transport + scrubber -->
+        <div style="border-top:1px solid var(--border);background:var(--surface);flex:none;padding:12px 18px;display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span class="pill" onClick="{{ restart }}">⏮</span>
+            <span class="pill" onClick="{{ stepBack }}">◀ passo</span>
+            <span class="btn btn-primary btn-sm" style="min-width:96px;justify-content:center" onClick="{{ togglePlay }}">{{ playLabel }}</span>
+            <span class="pill" onClick="{{ stepFwd }}">passo ▶</span>
+            <div style="flex:1"></div>
+            <span class="eyebrow">velocidade</span>
+            <span class="{{ spd.slow }}" onClick="{{ setSlow }}">0.5×</span>
+            <span class="{{ spd.norm }}" onClick="{{ setNorm }}">1×</span>
+            <span class="{{ spd.fast }}" onClick="{{ setFast }}">2×</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px">
+            <span class="mono" style="font-size:10px;color:var(--text3);width:36px">{{ hud.tStart }}s</span>
+            <input type="range" class="scrub" min="0" max="{{ maxIdx }}" step="1" value="{{ idx }}" onInput="{{ onScrub }}" style="flex:1"/>
+            <span class="mono" style="font-size:10px;color:var(--text3);width:36px;text-align:right">{{ hud.tEnd }}s</span>
+          </div>
+        </div>
+      </div>
+      </sc-if>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;100%&quot;,&quot;height&quot;:&quot;100%&quot;}}">
+class Component extends DCLogic {
+  state = { theme: 'paperclip', view: 'list', runId: 'RUN-2026-07-02-013', idx: 12, playing: false, speed: 1 };
+
+  componentWillUnmount() { if (this._t) clearInterval(this._t); }
+
+  runsData() {
+    return [
+      { id: 'RUN-…-013', full: 'RUN-2026-07-02-013', proj: 'pesquisa-receita', digest: 'Ticket médio por canal — escalou beta e parou no gate de cobertura', cost: '$0.71', dur: '4m12s', cycles: '2', escal: '2', result: 'aguardando', sh: 'sh amber', color: 'var(--amber)', replay: true },
+      { id: 'RUN-…-012', full: 'RUN-2026-07-02-012', proj: 'csv→json', digest: 'Pipeline CSV→JSON: 312 registros transformados e validados', cost: '$0.18', dur: '2m04s', cycles: '1', escal: '0', result: 'concluído', sh: 'sh green', color: 'var(--green)' },
+      { id: 'RUN-…-011', full: 'RUN-2026-07-02-011', proj: 'logisti-fatia2', digest: 'Fatiamento de rota logística — 2ª fatia entregue', cost: '$0.42', dur: '3m38s', cycles: '1', escal: '1', result: 'concluído', sh: 'sh green', color: 'var(--green)' },
+      { id: 'RUN-…-010', full: 'RUN-2026-07-02-010', proj: 'impressao-3d', digest: 'Spec de fatiador 3D — abortado: ferramenta indisponível', cost: '$0.09', dur: '0m51s', cycles: '1', escal: '0', result: 'abortado', sh: 'sh red', color: 'var(--red)' },
+      { id: 'RUN-…-009', full: 'RUN-2026-07-02-009', proj: 'csv→json', digest: 'Refino de schema — reconciliação em 1 rodada, aprovado', cost: '$0.27', dur: '2m47s', cycles: '2', escal: '1', result: 'concluído', sh: 'sh green', color: 'var(--green)' },
+      { id: 'RUN-…-008', full: 'RUN-2026-07-01-008', proj: 'pesquisa-receita', digest: 'Levantamento de fontes — síntese entregue', cost: '$0.55', dur: '5m19s', cycles: '1', escal: '0', result: 'concluído', sh: 'sh green', color: 'var(--green)' },
+    ];
+  }
+
+  runEvents() {
+    return [
+      { id: 'e1', t: '0.013', evt: 'spec.recebida', dot: 'sh idle' },
+      { id: 'e2', t: '0.014', evt: 'paralelo.iniciado · 2 subag.', dot: 'sh idle' },
+      { id: 'e3', t: '0.016', evt: 'executor.chamado · alfa', dot: 'sh blue' },
+      { id: 'e4', t: '0.016', evt: 'executor.chamado · beta', dot: 'sh blue' },
+      { id: 'e5', t: '0.018', evt: 'portao.aprovado · verifier:alfa', dot: 'sh green' },
+      { id: 'e6', t: '0.018', evt: 'portao.reprovado · verifier:beta', dot: 'sh red' },
+      { id: 'e7', t: '0.020', evt: 'escalado · simples → media', dot: 'sh blue' },
+      { id: 'e8', t: '0.020', evt: 'executor.chamado · beta · t.2', dot: 'sh blue' },
+      { id: 'e9', t: '0.021', evt: 'portao.aprovado · verifier:beta c2', dot: 'sh green' },
+      { id: 'e10', t: '0.022', evt: 'paralelo.concluido · commit 2', dot: 'sh green' },
+      { id: 'e11', t: '0.023', evt: 'executor.chamado · global_evaluator', dot: 'sh blue' },
+      { id: 'e12', t: '0.024', evt: 'portao.reprovado · cobertura c2', dot: 'sh red' },
+      { id: 'e13', t: '0.024', evt: 'escalado → fundador', dot: 'sh amber' },
+    ];
+  }
+
+  costOf(id) { return ({ e3: 0.004, e4: 0.004, e8: 0.021, e11: 0.038 })[id] || 0; }
+
+  // FOLD PURO: recomputa o estado completo do grafo para qualquer idx
+  deriveState(idx) {
+    const st = { planner: 'idle', alfa: 'idle', beta: 'idle', vA: 'idle', vB: 'idle', gEval: 'idle', gate: 'idle', synth: 'idle', art: 'idle' };
+    const wd = { planner: 'na fila', alfa: 'na fila', beta: 'na fila', vA: 'na fila', vB: 'na fila', gEval: 'na fila', gate: 'na fila', synth: 'na fila', art: 'pendente' };
+    let cost = 0, escal = 0;
+    const ev = this.runEvents();
+    for (let i = 0; i <= idx && i < ev.length; i++) {
+      const e = ev[i]; cost += this.costOf(e.id);
+      switch (e.id) {
+        case 'e1': st.planner = 'active'; wd.planner = 'planejando'; break;
+        case 'e2': st.planner = 'done'; wd.planner = 'concluído'; st.alfa = 'queue'; st.beta = 'queue'; wd.alfa = 'na fila'; wd.beta = 'na fila'; break;
+        case 'e3': st.alfa = 'active'; wd.alfa = 'pesquisando'; break;
+        case 'e4': st.beta = 'active'; wd.beta = 'pesquisando'; break;
+        case 'e5': st.alfa = 'done'; wd.alfa = 'aprovado'; st.vA = 'done'; wd.vA = 'aprovado'; break;
+        case 'e6': st.beta = 'error'; wd.beta = 'reprovado'; st.vB = 'error'; wd.vB = 'reprovado'; break;
+        case 'e7': st.beta = 'esc'; wd.beta = 'escalando'; escal++; break;
+        case 'e8': st.beta = 'active'; wd.beta = 'pesquisando t.2'; break;
+        case 'e9': st.beta = 'done'; wd.beta = 'aprovado'; st.vB = 'done'; wd.vB = 'aprovado'; break;
+        case 'e10': st.alfa = 'done'; st.beta = 'done'; break;
+        case 'e11': st.gEval = 'active'; wd.gEval = 'avaliando'; break;
+        case 'e12': st.gEval = 'done'; wd.gEval = 'concluído'; st.gate = 'error'; wd.gate = 'reprovado'; break;
+        case 'e13': st.gate = 'wait'; wd.gate = 'aguardando você'; escal++; st.synth = 'block'; wd.synth = 'bloqueado'; break;
+      }
+    }
+    return { st, wd, cost, escal };
+  }
+
+  shOf(s) { return ({ active: 'sh blue pulse', esc: 'sh blue pulse', done: 'sh green', error: 'sh red', wait: 'sh amber', queue: 'sh idle', block: 'sh idle', idle: 'sh idle' })[s]; }
+  edgeCls(s) { return ({ done: 'done', active: 'act', esc: 'act', error: 'err', wait: 'wait', queue: 'idle', block: 'idle', idle: 'idle' })[s]; }
+
+  renderVals() {
+    const s = this.state;
+    const anim = 'on';
+    const runs = this.runsData().map(r => ({ ...r, open: () => this.openRun(r) }));
+
+    const N = this.runEvents().length;
+    const maxIdx = N - 1;
+    const idx = Math.min(s.idx, maxIdx);
+    const { st, wd, cost, escal } = this.deriveState(idx);
+    const ev = this.runEvents();
+    const cur = ev[idx] || {};
+
+    const meta = {
+      planner: { name: 'planner', meta: 'kimi-k2.6 · nvidia', x: 24, y: 150 },
+      alfa: { name: 'pesquisa-alfa', meta: 'llama-3.3-70b', x: 208, y: 40 },
+      beta: { name: 'pesquisa-beta', meta: 'llama → kimi', x: 208, y: 258 },
+      vA: { name: 'verifier:alfa', meta: 'gate auto · codex', x: 400, y: 44, small: true },
+      vB: { name: 'verifier:beta', meta: 'gate auto · codex', x: 400, y: 262, small: true },
+      gEval: { name: 'global_evaluator', meta: 'codex/gpt-5.4', x: 566, y: 150 },
+      gate: { name: 'gate cobertura', meta: 'portão humano', x: 764, y: 44 },
+      synth: { name: 'synthesizer', meta: 'codex/gpt-5.4', x: 764, y: 262 },
+      art: { name: 'artefato · digest', meta: 'saída', x: 968, y: 262, small: true },
+    };
+    const badgeFor = (k) => k === 'beta' && st.beta === 'esc' ? '↑' : (k === 'gate' && st.gate === 'wait' ? '⏸' : '');
+    const nodes = Object.keys(meta).map(k => {
+      const status = st[k];
+      let cls = (meta[k].small ? 'small ' : '');
+      if (k === 'gate' && status === 'wait') cls += 'hero';
+      else if (status === 'idle' || status === 'queue' || status === 'block') cls += 'dead';
+      const b = badgeFor(k);
+      return {
+        name: meta[k].name, meta: meta[k].meta, x: meta[k].x + 'px', y: meta[k].y + 'px',
+        cls: cls.trim(), sh: this.shOf(status), word: wd[k],
+        wcolor: status === 'wait' ? 'var(--amber)' : status === 'error' ? 'var(--red)' : status === 'done' ? 'var(--green)' : 'var(--text2)',
+        badge: b, badgeCls: b ? 'rbadge' : 'rbadge hidden', 
+      };
+    }).map(n => ({ ...n, badgeCls: n.badge ? 'rbadge' : '' }));
+
+    const E = (t) => this.edgeCls(st[t]);
+    const edges = [
+      { x1: 182, y1: 176, x2: 208, y2: 66, cls: E('alfa') },
+      { x1: 182, y1: 176, x2: 208, y2: 284, cls: E('beta') },
+      { x1: 366, y1: 66, x2: 400, y2: 70, cls: E('vA') },
+      { x1: 366, y1: 284, x2: 400, y2: 288, cls: E('vB') },
+      { x1: 532, y1: 70, x2: 566, y2: 176, cls: E('vA') },
+      { x1: 532, y1: 288, x2: 566, y2: 176, cls: E('vB') },
+      { x1: 724, y1: 176, x2: 764, y2: 80, cls: E('gEval') },
+      { x1: 843, y1: 108, x2: 843, y2: 262, cls: E('gate') },
+      { x1: 922, y1: 288, x2: 968, y2: 288, cls: E('synth') },
+    ];
+
+    const evlist = ev.map((e, i) => ({
+      ...e, cls: i === idx ? 'cur' : (i > idx ? 'future' : ''),
+      go: () => this.scrubTo(i),
+    }));
+
+    const run = this.runsData().find(r => r.full === s.runId) || this.runsData()[0];
+    const fmt = (v) => '$' + v.toFixed(3);
+
+    const spdPill = (v) => 'pill' + (s.speed === v ? ' on' : '');
+
+    return {
+      theme: s.theme, themeLabel: s.theme === 'paperclip' ? 'ESCURO' : 'CLARO', anim,
+      toggleTheme: () => this.setState({ theme: s.theme === 'paperclip' ? 'stark' : 'paperclip' }),
+      onList: s.view === 'list', onReplay: s.view === 'replay',
+      eyebrow: s.view === 'replay' ? 'Meso · Replay do run · ' + run.proj : 'Histórico · todos os projetos',
+      headTitle: s.view === 'replay' ? run.full : 'Runs & Histórico',
+      runs, back: () => { this.stop(); this.setState({ view: 'list' }); },
+      nodes, edges, evlist, idx, maxIdx,
+      hud: {
+        cost: fmt(cost), pos: (idx + 1) + '/' + N, t: cur.t || '0.000', escal: String(escal),
+        now: cur.evt || '—', tStart: ev[0].t, tEnd: ev[N - 1].t,
+      },
+      playLabel: s.playing ? '⏸ Pausar' : '▶ Reproduzir',
+      togglePlay: () => s.playing ? this.stop() : this.play(),
+      restart: () => { this.stop(); this.setState({ idx: 0 }); },
+      stepFwd: () => { this.stop(); this.setState({ idx: Math.min(maxIdx, idx + 1) }); },
+      stepBack: () => { this.stop(); this.setState({ idx: Math.max(0, idx - 1) }); },
+      onScrub: (e) => { this.stop(); this.setState({ idx: +e.target.value }); },
+      spd: { slow: spdPill(0.5), norm: spdPill(1), fast: spdPill(2) },
+      setSlow: () => this.setSpeed(0.5), setNorm: () => this.setSpeed(1), setFast: () => this.setSpeed(2),
+    };
+  }
+
+  openRun(r) { this.setState({ view: 'replay', runId: r.full, idx: r.replay ? 12 : this.runEvents().length - 1, playing: false }); }
+  scrubTo(i) { this.stop(); this.setState({ idx: i }); }
+  setSpeed(v) { this.setState({ speed: v }); if (this._t) { this.stop(); this.play(); } }
+  play() {
+    if (this._t) return;
+    const N = this.runEvents().length;
+    if (this.state.idx >= N - 1) this.setState({ idx: 0 });
+    this.setState({ playing: true });
+    this._t = setInterval(() => {
+      this.setState(st => {
+        if (st.idx >= N - 1) { clearInterval(this._t); this._t = null; return { playing: false }; }
+        return { idx: st.idx + 1 };
+      });
+    }, 850 / this.state.speed);
+  }
+  stop() { if (this._t) { clearInterval(this._t); this._t = null; } if (this.state.playing) this.setState({ playing: false }); }
+}
+</script>
+</body>
+</html>

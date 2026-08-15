@@ -8,24 +8,27 @@ const NAV = [
     fixed: true,
     items: [
       { label: 'Home', path: '/' },
-      { label: 'Runs', path: '/runs' },
+      { label: 'Board de missões', path: '/board' },
       { label: 'Caixa do Fundador', path: '/caixa' },
-      { label: 'Grafo 2D', path: '/grafo' },
+      { label: 'Mapa geral', path: '/mapa' },
     ],
   },
   {
     zone: 'Projeto: Todos',
     items: [
       { label: 'Dashboard', path: '/dashboard' },
-      { label: 'Grafos', path: '/grafos' },
-      { label: 'Workflows', path: '/workflows', sub: true },
-      { label: 'Datahouse', path: '/datahouse', sub: true },
+      { label: 'Grafo 2D', path: '/grafo' },
+      { label: 'Grafo 3D', path: '/grafo3d' },
+      { label: 'Workflows', path: '/workflows' },
+      { label: 'Datahouse', path: '/datahouse' },
+      { label: 'Runs & Histórico', path: '/runs' },
     ],
   },
   {
     zone: 'Biblioteca',
     items: [
       { label: 'Agentes', path: '/agentes' },
+      { label: 'Inventário', path: '/inventario' },
       { label: 'Skills', path: '/skills' },
       { label: 'Curador', path: '/curador' },
       { label: 'Logs', path: '/logs' },
@@ -35,6 +38,7 @@ const NAV = [
   {
     zone: 'Sistema',
     items: [
+      { label: 'Runners', path: '/runners' },
       { label: 'Conexões', path: '/conexoes' },
       { label: 'Configurações', path: '/config' },
     ],
@@ -46,21 +50,22 @@ function navTo(path) {
 }
 
 export default function Sidebar({ route }) {
-  const isActive = (path) => {
+  const active = (path) => {
     if (path === '/') return route === '/' || route === '';
-    return route === path || route.startsWith(path + '/');
+    return route.startsWith(path);
   };
 
   return (
     <aside className="mf-side">
-      {NAV.map((group) => (
-        <div key={group.zone}>
-          <div className={`zt${group.fixed ? ' fixed' : ''}`}>{group.zone}</div>
-          {group.items.map((item) => (
+      {NAV.map((z, i) => (
+        <div key={i}>
+          <div className={`zt${z.fixed ? ' fixed' : ''}`}>{z.zone}</div>
+          {z.items.map((item, j) => (
             <div
-              key={item.path}
-              className={`ni${item.sub ? ' sub' : ''}${isActive(item.path) ? ' on' : ''}`}
+              key={j}
+              className={`ni${item.sub ? ' sub' : ''}${active(item.path) ? ' on' : ''}`}
               onClick={() => navTo(item.path)}
+              style={{ cursor: 'pointer' }}
             >
               {item.label}
             </div>

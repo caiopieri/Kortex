@@ -1,0 +1,4 @@
+{
+  "image_digest": "localhost/kortex/sandbox@sha256:a58d4e0c47902ca67f2ca0f983ef6e1a19aa5eb58168081ccc3a8b05d1363919",
+  "executaveis": ["/usr/local/bin/python3"]
+}

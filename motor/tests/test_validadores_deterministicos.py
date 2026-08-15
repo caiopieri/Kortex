@@ -10,10 +10,11 @@ except ImportError:
     from langgraph.checkpoint.memory import MemorySaver as InMemorySaver
 
 from motor.eventos import LogEventos
-from motor.grafo import construir_grafo
+from tests.helpers_grafo import construir_grafo_teste as construir_grafo
 from motor.modelos import ClienteStub
 from motor.politica import PoliticaGates
 from motor.spec import WorkflowSpec
+from tests.runner_fake import RunnerFake
 
 
 def _sub_modelo(sid: str = "produtor") -> dict:
@@ -65,7 +66,7 @@ def _eventos(tmp_path):
     ]
 
 
-def _script(tmp_path, nome: str, corpo: str) -> Path:
+def _script(tmp_path: Path, nome: str, corpo: str) -> Path:
     caminho = tmp_path / nome
     caminho.write_text(corpo, encoding="utf-8")
     return caminho
@@ -102,6 +103,7 @@ def _rodar(
         politica=PoliticaGates(overrides={"plano": "prosseguir", "cobertura": cobertura}),
         workspace_base=tmp_path / "runs",
         ferramentas_permitidas=ferramentas_permitidas,
+        command_runner=RunnerFake(),
     )
     resultado = grafo.invoke({"spec": spec}, {"configurable": {"thread_id": "validadores"}})
     return resultado, estado, _eventos(tmp_path)
@@ -114,7 +116,7 @@ def test_spec_validador_exige_alvo_e_kind_valido():
         WorkflowSpec.model_validate(sem_alvo)
 
     kind_ruim = _spec(_sub_validador("pytest", {}))
-    with pytest.raises(ValueError, match="kind inválido"):
+    with pytest.raises(ValueError, match="Input tag 'pytest'"):
         WorkflowSpec.model_validate(kind_ruim)
 
     dep_ausente = _spec(_sub_validador("contem", {"requer": ["x"]}))
@@ -181,7 +183,7 @@ def test_validador_comando_sucesso(tmp_path):
         tmp_path,
         spec,
         ["saida qualquer"],
-        ferramentas_permitidas=[Path(sys.executable).name],
+        ferramentas_permitidas=[sys.executable],
     )
 
     item = next(r for r in resultado["resultados"] if r["id"] == "valida-comando")
@@ -210,7 +212,7 @@ def test_validador_comando_falha_redispara_alvo(tmp_path):
         spec,
         ["primeira versao INVALIDA", "segunda versao PASSOU"],
         cobertura="preencher",
-        ferramentas_permitidas=[Path(sys.executable).name],
+        ferramentas_permitidas=[sys.executable],
     )
 
     item = next(r for r in resultado["resultados"] if r["id"] == "valida-comando")
@@ -234,7 +236,7 @@ def test_comando_reprova_com_stdout_e_refaz_alvo(tmp_path):
         tmp_path,
         spec,
         ["saida qualquer"],
-        ferramentas_permitidas=[Path(sys.executable).name],
+        ferramentas_permitidas=[sys.executable],
     )
 
     item = next(r for r in resultado["resultados"] if r["id"] == "valida-comando")
@@ -249,14 +251,14 @@ def test_validador_comando_bloqueado_por_allowlist(tmp_path, monkeypatch):
     def subprocess_proibido(*args, **kwargs):
         raise AssertionError("subprocess.run não deveria ser chamado")
 
-    monkeypatch.setattr("motor.grafo.subprocess.run", subprocess_proibido)
+    monkeypatch.setattr(RunnerFake, "run", subprocess_proibido)
     spec = _spec(_sub_validador("comando", {"comando": "bash -c 'echo nao-roda'"}))
 
     resultado, _, eventos = _rodar(
         tmp_path,
         spec,
         ["saida qualquer"],
-        ferramentas_permitidas=[Path(sys.executable).name],
+        ferramentas_permitidas=[sys.executable],
     )
 
     item = next(r for r in resultado["resultados"] if r["id"] == "valida-comando")
@@ -272,14 +274,14 @@ def test_validador_comando_bloqueado_por_allowlist(tmp_path, monkeypatch):
 
 
 def test_comando_respeita_timeout_configurado(tmp_path):
-    comando = f"{sys.executable} -c \"import time; time.sleep(0.1)\""
-    spec = _spec(_sub_validador("comando", {"comando": comando, "timeout": 0}))
+    comando = f"{sys.executable} -c \"import time; time.sleep(2)\""
+    spec = _spec(_sub_validador("comando", {"comando": comando, "timeout": 1}))
 
     resultado, _, eventos = _rodar(
         tmp_path,
         spec,
         ["saida qualquer"],
-        ferramentas_permitidas=[Path(sys.executable).name],
+        ferramentas_permitidas=[sys.executable],
     )
 
     item = next(r for r in resultado["resultados"] if r["id"] == "valida-comando")

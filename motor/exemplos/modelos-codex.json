@@ -1,8 +1,14 @@
 {
   "_comentario": "Roteamento por custo (tier→modelo) + rota legada (papel→modelo). O planner classifica o tier de cada subagente; a tabela 'tiers' mapeia tier→modelo. 'padrao' = claude. Subagente SEM tier cai na rota 'papeis'. Codex = executor (assinatura, sem chave). Julgamento (planner/verifier/evaluator/synthesizer) fica no claude por estar fora das duas tabelas.",
   "provedores": {
-    "codex": { "tipo": "codex" }
+    "codex": {
+      "tipo": "codex",
+      "custo_ordem": 1,
+      "capacidades": ["codigo", "redacao", "calculo", "pesquisa", "raciocinio-longo"]
+    }
   },
+  "capacidades_padrao": ["codigo", "redacao", "calculo", "pesquisa", "raciocinio-longo"],
+  "custo_ordem_padrao": 100,
   "tiers": {
     "simples": "codex/default",
     "media": "codex/default",

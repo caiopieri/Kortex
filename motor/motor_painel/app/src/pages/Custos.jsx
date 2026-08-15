@@ -5,7 +5,6 @@ export default function Custos() {
   const { data, error } = usePoll(getCosts);
   const { data: gatesData } = usePoll(getGates);
   const gates = gatesData || [];
-  const [period, setPeriod] = useState('mes'); // 'hoje' | '7d' | 'mes'
   const [groupBy, setGroupBy] = useState('run'); // 'run' | 'modelo'
   const [sortBy, setSortBy] = useState('cost'); // 'name' | 'cost' | 'tokens' | 'calls'
   const [sortDesc, setSortDesc] = useState(true);
@@ -13,7 +12,6 @@ export default function Custos() {
   // Hover states for tooltips
   const [hoveredCostIndex, setHoveredCostIndex] = useState(null);
   const [hoveredTokenIndex, setHoveredTokenIndex] = useState(null);
-  const [hoveredTrendIndex, setHoveredTrendIndex] = useState(null);
 
   if (error) {
     return (
@@ -44,37 +42,9 @@ export default function Custos() {
   const rawRuns = data.por_run || [];
   const rawModels = data.por_modelo || [];
 
-  // Filter based on period (simulating slices of log data for visual responsiveness)
-  let filteredRuns = [...rawRuns];
-  let filteredModels = [...rawModels];
-
-  const rawRunsCusto = rawRuns.reduce((sum, r) => sum + r.custo_total, 0) || 1;
-
-  if (period === 'hoje') {
-    // 25% of the total dataset represents today
-    const sliceCount = Math.max(1, Math.round(rawRuns.length * 0.25));
-    filteredRuns = rawRuns.slice(-sliceCount);
-    const filteredRunsCusto = filteredRuns.reduce((sum, r) => sum + r.custo_total, 0);
-    const ratio = filteredRunsCusto / rawRunsCusto;
-    filteredModels = rawModels.map(m => ({
-      ...m,
-      custo_total: m.custo_total * ratio,
-      tokens_total: Math.round(m.tokens_total * ratio),
-      n_chamadas: Math.max(1, Math.round(m.n_chamadas * ratio))
-    }));
-  } else if (period === '7d') {
-    // 60% of the total dataset represents 7 days
-    const sliceCount = Math.max(1, Math.round(rawRuns.length * 0.6));
-    filteredRuns = rawRuns.slice(-sliceCount);
-    const filteredRunsCusto = filteredRuns.reduce((sum, r) => sum + r.custo_total, 0);
-    const ratio = filteredRunsCusto / rawRunsCusto;
-    filteredModels = rawModels.map(m => ({
-      ...m,
-      custo_total: m.custo_total * ratio,
-      tokens_total: Math.round(m.tokens_total * ratio),
-      n_chamadas: Math.max(1, Math.round(m.n_chamadas * ratio))
-    }));
-  }
+  // Sessão inteira: eventos não têm timestamp absoluto, então não há recorte temporal honesto
+  const filteredRuns = rawRuns;
+  const filteredModels = rawModels;
 
   // Calculate dynamic totals
   const totalCusto = filteredRuns.reduce((sum, r) => sum + r.custo_total, 0);
@@ -82,41 +52,14 @@ export default function Custos() {
   const totalCalls = filteredRuns.reduce((sum, r) => sum + r.n_chamadas, 0);
   const avgCostPerCall = totalCalls > 0 ? totalCusto / totalCalls : 0;
 
-  const periodLabel = {
-    hoje: 'hoje',
-    '7d': '7 dias',
-    mes: 'mês'
-  }[period];
-
-  // Projection logic
-  const projection = period === 'hoje' ? totalCusto * 30 : period === '7d' ? totalCusto * (30 / 7) : totalCusto * 1.5;
-
   // Find overall top source (model)
   const topModel = filteredModels.reduce((max, m) => m.custo_total > max.custo_total ? m : max, { modelo: 'Nenhum', custo_total: 0 });
   const topModelPct = totalCusto > 0 ? Math.round((topModel.custo_total / totalCusto) * 100) : 0;
 
-  // Trend bars (evolution chart)
-  const trendBarsCount = period === 'hoje' ? 8 : period === '7d' ? 7 : 14;
-  const trendRaw = Array.from({ length: trendBarsCount }, (_, i) => {
-    // Deterministic wave pattern scaled by totalCusto
-    return 3 + Math.round(5 * Math.abs(Math.sin(i * 1.1 + 0.5))) + (i % 3 === 0 ? 2 : 0);
-  });
-  const trendRawSum = trendRaw.reduce((a, b) => a + b, 0) || 1;
-  const trendData = trendRaw.map(v => (v / trendRawSum) * totalCusto);
-  const maxTrendVal = Math.max(...trendData, 0.0001);
-
-  // Anomaly detector
+  // Anomaly detector — heurística local: custo acima de 1.8× a média
   const avgRunCost = filteredRuns.length > 0 ? (totalCusto / filteredRuns.length) : 0;
   const anomaliesList = filteredRuns.map(r => {
-    const isFail = r.id.toLowerCase().includes('fail') || r.id.toLowerCase().includes('err') || r.id.toLowerCase().includes('abort');
     const isHigh = r.custo_total > 1.8 * avgRunCost && r.custo_total > 0.15;
-    if (isFail) {
-      return {
-        run: r.id,
-        motivo: 'Execução abortada ou falha crítica (burst de retries)',
-        custo: r.custo_total
-      };
-    }
     if (isHigh) {
       return {
         run: r.id,
@@ -190,17 +133,13 @@ export default function Custos() {
             </div>
           )}
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <span className={`pill ${period === 'hoje' ? 'on' : ''}`} onClick={() => setPeriod('hoje')}>hoje</span>
-          <span className={`pill ${period === '7d' ? 'on' : ''}`} onClick={() => setPeriod('7d')}>7 dias</span>
-          <span className={`pill ${period === 'mes' ? 'on' : ''}`} onClick={() => setPeriod('mes')}>mês</span>
-        </div>
+        <span className="mono" style={{ fontSize: '10px', color: 'var(--text3)' }}>sessão · log completo</span>
       </div>
 
       {/* KPI Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
         <div className="kpi">
-          <div className="eyebrow">Total · {periodLabel}</div>
+          <div className="eyebrow">Total · sessão</div>
           <div className="kbig">US$ {totalCusto.toFixed(2)}</div>
           <div className="mono" style={{ fontSize: '10px', color: 'var(--text3)', marginTop: '2px' }}>
             {totalTokens.toLocaleString()} tokens
@@ -208,9 +147,9 @@ export default function Custos() {
         </div>
         <div className="kpi">
           <div className="eyebrow">Projeção do mês</div>
-          <div className="kbig">US$ {projection.toFixed(2)}</div>
+          <div className="kbig" style={{ color: 'var(--text3)' }}>—</div>
           <div className="mono" style={{ fontSize: '10px', color: 'var(--text3)', marginTop: '2px' }}>
-            no ritmo atual
+            requer histórico com timestamp
           </div>
         </div>
         <div className="kpi">
@@ -228,39 +167,7 @@ export default function Custos() {
             {anomaliesList.length}
           </div>
           <div className="mono" style={{ fontSize: '10px', color: 'var(--text3)', marginTop: '2px' }}>
-            picos detectados
-          </div>
-        </div>
-      </div>
-
-      {/* Trend Evolution Chart */}
-      <div>
-        <div className="num" style={{ marginBottom: '10px' }}>01 — Tendência · {periodLabel}</div>
-        <div className="card" style={{ padding: '16px' }}>
-          <div className="cbars" style={{ height: '96px' }}>
-            {trendData.map((v, i) => {
-              const pct = (v / maxTrendVal) * 100;
-              return (
-                <div
-                  key={i}
-                  className="cb"
-                  onMouseEnter={() => setHoveredTrendIndex(i)}
-                  onMouseLeave={() => setHoveredTrendIndex(null)}
-                  style={{ height: '100%' }}
-                >
-                  <div className="cbf" style={{ height: `${pct}%`, background: 'var(--accent)', opacity: 0.7 }} />
-                </div>
-              );
-            })}
-          </div>
-          <div style={{ height: '14px', marginTop: '8px', textAlign: 'center' }} className="mono">
-            {hoveredTrendIndex !== null && trendData[hoveredTrendIndex] ? (
-              <span style={{ fontSize: '10px', color: 'var(--text2)' }}>
-                Período {hoveredTrendIndex + 1} · US$ {trendData[hoveredTrendIndex].toFixed(4)}
-              </span>
-            ) : (
-              <span style={{ fontSize: '10px', color: 'var(--text3)' }}>Evolução temporal dos custos (passe o mouse para ver valores)</span>
-            )}
+            heurística local · custo acima de 1.8× a média
           </div>
         </div>
       </div>
@@ -335,7 +242,7 @@ export default function Custos() {
       {/* Main Sortable Table */}
       <div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-          <span className="num">02 — Detalhamento por {groupBy === 'run' ? 'run' : 'modelo de IA'}</span>
+          <span className="num">01 — Detalhamento por {groupBy === 'run' ? 'run' : 'modelo de IA'}</span>
           <div style={{ display: 'flex', gap: '8px' }}>
             <span
               className={`pill ${groupBy === 'run' ? 'on' : ''}`}
@@ -491,11 +398,14 @@ export default function Custos() {
 
       {/* Anomalies Highlight Section */}
       <div>
-        <div className="num" style={{ marginBottom: '10px' }}>03 — Anomalias destacadas</div>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '10px' }}>
+          <span className="num">02 — Anomalias destacadas</span>
+          <span className="mono" style={{ fontSize: '10px', color: 'var(--text3)' }}>heurística local · custo acima de 1.8× a média</span>
+        </div>
         <div className="card" style={{ padding: '4px 15px' }}>
           {anomaliesList.length === 0 ? (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px 0', color: 'var(--text3)' }} className="mono">
-              Nenhuma anomalia crítica de consumo detectada no período.
+              Nenhuma anomalia de consumo detectada na sessão.
             </div>
           ) : (
             anomaliesList.map((a, i) => (

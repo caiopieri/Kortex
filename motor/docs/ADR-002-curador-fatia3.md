@@ -1,7 +1,8 @@
 # ADR-002: Curador Fatia 3 — Sombra, Certificacao e Promocao Gated
 
 ## Status
-Proposto
+Implementado na fronteira H08/H09. Promoção operacional indisponível sem repositório
+autoritativo do deployment.
 
 ## Contexto
 O curador ja observa logs e propoe ranking read-only por slot/modelo:
@@ -34,12 +35,16 @@ Adicionar ao `motor.curador` uma trilha aditiva, deterministica e testavel:
    - Compara titular vs candidato por taxa de aprovacao e custo medio.
    - Promove somente se o candidato tiver qualidade estritamente maior e custo estritamente menor.
    - Rejeita regressao de qualidade mesmo com custo menor.
+   - Recalcula a decisao a partir de evidencia v2 selada; agregados fornecidos pelo chamador
+     nao sao autoridade.
    - Emite `curador.certificou` quando passa e `curador.rejeitou` quando falha.
 
 3. **Promocao gated**
    - A aplicacao da mudanca nao acontece dentro do comparador.
-   - A promocao vira uma run gated do motor: o curador prepara uma intencao de mudanca com evidencia,
-     e outra camada executa/aprova a alteracao de catalogo.
+   - O curador aceita somente `certification_id` recuperado de `RepositorioCertificacoes`;
+     dict, hash ou JSON isolado falham fechado.
+   - A promocao vira uma run gated do motor: o curador prepara uma intencao de mudanca com
+     evidencia autoritativa, e outra camada executa/aprova a alteracao de catalogo.
    - Evento final esperado: `curador.promoveu` apenas depois do gate.
 
 4. **Formato dos casos**
@@ -47,6 +52,8 @@ Adicionar ao `motor.curador` uma trilha aditiva, deterministica e testavel:
      titular (`modelo`, `aprovado`, `custo_usd`).
    - O runner do candidato recebe `(caso, modelo_candidato)` e devolve `aprovado`, `custo_usd`, `saida`
      e `motivo`.
+   - Artefatos da CLI sao diagnosticos/read-only e nao ingressam automaticamente no
+     repositorio autoritativo.
 
 ## Plano de Handoffs
 
@@ -63,7 +70,8 @@ Adicionar ao `motor.curador` uma trilha aditiva, deterministica e testavel:
 
 3. **Fatia 3.3 — Intencao de promocao gated**
    - Adicionar geracao de artefato/intencao de promocao a partir de certificacao aprovada.
-   - Nao escrever catalogo diretamente; emitir evento pendente com evidencia.
+   - Nao escrever catalogo diretamente; exigir certificacao recuperada por ID e emitir
+     evento pendente com evidencia.
 
 4. **Fatia 3.4 — CLI e docs de operacao**
    - Expor caminho read-only para rodar sombra/certificacao em arquivo JSON.
@@ -76,6 +84,8 @@ Adicionar ao `motor.curador` uma trilha aditiva, deterministica e testavel:
 - Custo e qualidade sao dados, nao opiniao.
 - Qualidade regressiva veta promocao, mesmo com economia.
 - Nenhuma promocao sem evento e evidencia serializavel.
+- Nenhuma intencao autoritativa a partir de JSON/CLI; sem repositorio confiavel, promocao e
+  default-deny.
 
 ## Onde isto pode dar errado
 
@@ -84,3 +94,5 @@ Adicionar ao `motor.curador` uma trilha aditiva, deterministica e testavel:
 - **Custo incomparavel:** custo `None` nao deve ser tratado como zero; sem custo comparavel, nao certifica.
 - **Qualidade frouxa:** taxa de aprovacao herdada de validador fraco promove modelo ruim.
 - **Promocao escondida:** aplicar config/catalogo dentro do curador violaria a lei da run gated.
+- **Repositorio cenografico:** um fake ou store mutavel prova protocolo, nao autoridade de
+  producao. O deployment precisa fornecer imutabilidade, autenticidade e controle de acesso.
