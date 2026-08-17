@@ -367,14 +367,23 @@ def main() -> int:
             deps_orcamento = compor(cfg_orcada, workspace_base)
             validar_independencia_orcada(deps_orcamento.rotas_certificadas)
             cliente = deps_orcamento.cliente
-            orcamento_brl = deps_orcamento.orcamentos["BRL"]
+            orcamento_brl = deps_orcamento.orcamentos.get("BRL")
+            if orcamento_brl is None:
+                raise ErroOrcamento("orcamento BRL ausente")
             repositorios_orcamento = {
                 moeda: orcamento.repositorio
                 for moeda, orcamento in deps_orcamento.orcamentos.items()
             }
-            if not _drenar_orcamento_cli(repositorios_orcamento, run_id, log):
-                raise ErroOrcamento("relay monetario pendente")
-            dreno_emergencial_habilitado = True
+            medicao_monetaria_desligada = deps_orcamento.medicao_monetaria_desligada
+            if medicao_monetaria_desligada:
+                log.evento(
+                    "medicao.monetaria_desligada",
+                    motivo="operador declarou sem_contencao_monetaria",
+                )
+            else:
+                if not _drenar_orcamento_cli(repositorios_orcamento, run_id, log):
+                    raise ErroOrcamento("relay monetario pendente")
+                dreno_emergencial_habilitado = True
         except ErroOrcamento as ex:
             print(f"erro: orçamento indisponível: {ex}")
             return 1
@@ -400,7 +409,11 @@ def main() -> int:
                                         max_rodadas_reconciliacao=max_rodadas_reconciliacao,
                                         perfil_execucao=perfil_execucao,
                                         ferramentas_permitidas=ferramentas_permitidas,
-                                        repositorio_orcamento=orcamento_brl.repositorio,
+                                        repositorio_orcamento=(
+                                            None if medicao_monetaria_desligada
+                                            else orcamento_brl.repositorio
+                                        ),
+                                        medicao_monetaria_desligada=medicao_monetaria_desligada,
                                         fabrica_tentativas_orcadas=deps_orcamento.fabrica,
                                         teto_bootstrap=orcamento_brl.teto_bootstrap,
                                         command_runner=command_runner)
@@ -417,7 +430,11 @@ def main() -> int:
                                     max_rodadas_reconciliacao=max_rodadas_reconciliacao,
                                     perfil_execucao=perfil_execucao,
                                     ferramentas_permitidas=ferramentas_permitidas,
-                                    repositorio_orcamento=orcamento_brl.repositorio,
+                                    repositorio_orcamento=(
+                                        None if medicao_monetaria_desligada
+                                        else orcamento_brl.repositorio
+                                    ),
+                                    medicao_monetaria_desligada=medicao_monetaria_desligada,
                                     fabrica_tentativas_orcadas=deps_orcamento.fabrica,
                                     teto_bootstrap=orcamento_brl.teto_bootstrap,
                                     command_runner=command_runner)
@@ -442,7 +459,8 @@ def main() -> int:
 
         try:
             dreno_final_tentado = True
-            if not _drenar_orcamento_cli(repositorios_orcamento, run_id, log):
+            if (not medicao_monetaria_desligada
+                    and not _drenar_orcamento_cli(repositorios_orcamento, run_id, log)):
                 raise ErroOrcamento("relay monetario pendente")
         except Exception as ex:
             print(f"erro: relay monetário indisponível: {ex}")
