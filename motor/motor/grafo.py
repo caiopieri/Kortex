@@ -681,12 +681,12 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         requisitos: RequisitosTentativaCusteada | None = None,
         ciclo: int = 0,
     ) -> ResultadoChamadaOrcada:
-        if fabrica_tentativas_orcadas is None:
-            raise ErroOrcamento("fabrica de adaptadores custeados ausente")
         if type(medicao_monetaria_desligada) is not bool:
             raise ErroOrcamento("medicao monetaria invalida")
         if repositorio_orcamento is None and not medicao_monetaria_desligada:
             raise ErroOrcamento("repositorio de orcamento ausente")
+        if fabrica_tentativas_orcadas is None:
+            raise ErroOrcamento("fabrica de adaptadores custeados ausente")
         if isinstance(run_id, str) and not isinstance(thread_id, str) and isinstance(cliente, ClienteStub):
             thread_id = run_id
         if not isinstance(run_id, str) or not isinstance(thread_id, str):
@@ -721,9 +721,8 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                     )
                     return RespostaTentativaCusteada(texto, route_id, provider_id)
             return ChamadaOrcadaSemResposta()
-        if repositorio_orcamento is None:
-            raise ErroOrcamento("repositorio de orcamento ausente")
-        sessao = repositorio_orcamento.sessao(run_id, thread_id, teto_decimal)
+        repositorio = cast(RepositorioOrcamento, repositorio_orcamento)
+        sessao = repositorio.sessao(run_id, thread_id, teto_decimal)
         bloqueios: list[tuple[str, str]] = []
         modelo_sem_resposta = False
         for indice, item in enumerate(cadeia, start=1):
@@ -747,7 +746,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                 attempt=indice,
             )
             resultado = executar_tentativa_custeada(
-                repositorio_orcamento, sessao, identidade, adaptador,
+                repositorio, sessao, identidade, adaptador,
             )
             match resultado:
                 case TentativaReconciliada(resultado=resultado_reconciliado):

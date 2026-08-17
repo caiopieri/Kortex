@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import pytest
+from langgraph.checkpoint.memory import InMemorySaver
 
 from motor import __main__ as cli
 from motor.composicao_orcamento import (
@@ -159,3 +160,40 @@ def test_N4_desligar_dinheiro_nao_remove_limite_de_tentativas(tmp_path):
         log.fechar()
 
     assert len(chamadas) == 2
+
+
+@pytest.mark.parametrize(
+    ("fabrica", "repositorio", "medicao", "motivo"),
+    [
+        (None, object(), False, "fabrica de adaptadores custeados ausente"),
+        (
+            lambda *_args: [RotaTentativaCusteada("rota", "provedor", object())],
+            None, False, "repositorio de orcamento ausente",
+        ),
+        (lambda *_args: [], None, "sim", "medicao monetaria invalida"),
+        (lambda *_args: [], None, 1, "medicao monetaria invalida"),
+    ],
+    ids=["sem-fabrica", "sem-repositorio", "medicao-string", "medicao-int"],
+)
+def test_guardas_de_orcamento_recusam_antes_de_qualquer_efeito(
+    tmp_path, fabrica, repositorio, medicao, motivo,
+):
+    efeitos: list[str] = []
+    cliente = ClienteStub(lambda papel, _prompt: efeitos.append(papel) or "INDEVIDO")
+    log = LogEventos(tmp_path / "guardas.jsonl")
+    try:
+        grafo = construir_grafo(
+            cliente, log, checkpointer=InMemorySaver(),
+            repositorio_orcamento=repositorio,
+            medicao_monetaria_desligada=medicao,
+            fabrica_tentativas_orcadas=fabrica,
+            teto_bootstrap=TETO_OPERADOR_TESTE,
+        )
+        with pytest.raises(ErroOrcamento, match=motivo):
+            grafo.invoke(
+                {"missao_texto": "nao execute", "run_id": "guard", "thread_id": "guard"},
+                {"configurable": {"thread_id": "guard"}},
+            )
+    finally:
+        log.fechar()
+    assert efeitos == []
