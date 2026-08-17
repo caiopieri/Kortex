@@ -36,7 +36,10 @@
           "nenhum segredo em log, repr ou mensagem de excecao",
           "timeout explicito em toda chamada HTTP",
           "levantar excecao propria em erro HTTP, com o status mas sem o corpo cru",
-          "expor `obter_token()`, `construir_filtros(...)` e `buscar(...)` como API publica testavel sem rede; as chamadas canonicas `construir_filtros(min_price=10, max_price=50, conditions=['NEW'], buying_options=['FIXED_PRICE'])` e `buscar('camera', min_price=10, max_price=50, conditions=['NEW'], buying_options=['FIXED_PRICE'], sort='price', token='fixture-token')` precisam funcionar"
+          "expor `obter_token()`, `construir_filtros(...)` e `buscar(...)` como API publica testavel sem rede; as chamadas canonicas `construir_filtros(min_price=10, max_price=50, conditions=['NEW'], buying_options=['FIXED_PRICE'])` e `buscar('camera', min_price=10, max_price=50, conditions=['NEW'], buying_options=['FIXED_PRICE'], sort='price', token='fixture-token')` precisam funcionar",
+          "`buscar` rejeita `q` ausente ou vazio -- string vazia ou so espacos -- levantando excecao ANTES de qualquer chamada HTTP",
+          "`construir_filtros` une as partes por virgula, sem espaco, na ordem preco, condicao, tipo de anuncio; a chamada canonica acima devolve exatamente `price:[10..50],conditions:{NEW},buyingOptions:{FIXED_PRICE}`",
+          "`buscar` envia o termo em `params['q']` e, quando ha filtro, a string de `construir_filtros` em `params['filter']`, com `params=` passado como argumento nomeado"
         ],
         "formato_de_saida": "APENAS codigo Python puro. Sem cercas de markdown, sem ``` , sem explicacao antes ou depois. O resultado e gravado direto num arquivo .py e importado."
       },
@@ -44,6 +47,8 @@
       "rubrica": [
         "a saida e Python puro, sem cerca de markdown e sem texto explicativo",
         "`obter_token`, `construir_filtros` e `buscar` existem e as chamadas canonicas sao testaveis sem rede",
+        "`buscar` levanta excecao para `q` ausente ou vazio, antes de tocar a rede",
+        "a string de filtro sai exatamente como `price:[10..50],conditions:{NEW},buyingOptions:{FIXED_PRICE}`",
         "toda chamada HTTP tem timeout explicito",
         "nenhuma credencial hardcoded e nenhum segredo em mensagem de erro"
       ],
