@@ -22,6 +22,7 @@ import Curador from './pages/Curador';
 import Conexoes from './pages/Conexoes';
 import Inventario from './pages/Inventario';
 import Grafo3D from './pages/Grafo3D';
+import Canvas from './pages/Canvas';
 
 /* Roteador hash-based — mais leve possível, zero deps */
 function useHashRoute() {
@@ -94,14 +95,20 @@ function App() {
   else if (route === '/curador') Page = <Curador />;
   else if (route === '/conexoes') Page = <Conexoes />;
   else if (route === '/inventario') Page = <Inventario />;
+  else if (route === '/canvas') Page = <Canvas modo={mode} />;
   else Page = <Home />;
 
   return (
-    <div className="mf-root" data-theme={mode === 'claro' ? 'stark' : 'paperclip'}>
+    <div
+      className={route === '/canvas' ? 'mf-root mf-root--fixo' : 'mf-root'}
+      data-theme={mode === 'claro' ? 'stark' : 'paperclip'}
+    >
       <Topbar theme={mode === 'claro' ? 'stark' : 'paperclip'} onToggleTheme={toggleTheme} />
       <div className="mf-body">
         <Sidebar route={route} />
-        <main className="mf-main">{Page}</main>
+        {/* O canvas ocupa a area inteira: sem padding e sem rolagem do
+            container, senao ele briga com a propria navegacao. */}
+        <main className={route === '/canvas' ? 'mf-main mf-main--cheio' : 'mf-main'}>{Page}</main>
       </div>
     </div>
   );
