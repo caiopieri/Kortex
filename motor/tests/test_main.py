@@ -105,6 +105,13 @@ def test_help_imprime_uso_em_vez_de_gastar(capsys, monkeypatch):
         assert "opção desconhecida" not in capsys.readouterr().out
 
 
+def test_help_documenta_flag_sandbox(capsys, monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["motor", "--help"])
+
+    assert main() == 2
+    assert "--sandbox" in capsys.readouterr().out
+
+
 def test_spec_com_modulo_ausente_aborta_antes_da_composicao_de_modelos(
     tmp_path, capsys, monkeypatch
 ):
