@@ -304,6 +304,7 @@ class ClienteOmniRouteCusteado:
         fx: SnapshotFX, pricing: SnapshotPricing, agora: int,
         fx_max_age_s: int, pricing_max_age_s: int,
         margem: Decimal, timeout: int, transporte: TransporteHTTP = _http_real,
+        medicao_monetaria_desligada: bool = False,
     ) -> None:
         if (
             (api_key is not None and (not isinstance(api_key, str) or not api_key))
@@ -331,10 +332,13 @@ class ClienteOmniRouteCusteado:
             raise ErroOrcamento("prompt excede limite conservador")
         if type(agora) is not int:
             raise ErroOrcamento("janela de snapshot invalida")
+        if type(medicao_monetaria_desligada) is not bool:
+            raise ErroOrcamento("medicao monetaria invalida")
+        self._medicao_monetaria_desligada = medicao_monetaria_desligada
         self.fx: SnapshotFX | None = None
         self.pricing: SnapshotPricing | None = None
         self.margem: Decimal | None = None
-        if self.moeda == "BRL":
+        if self.moeda == "BRL" and not medicao_monetaria_desligada:
             if (type(fx_max_age_s) is not int or fx_max_age_s <= 0
                     or type(pricing_max_age_s) is not int or pricing_max_age_s <= 0):
                 raise ErroOrcamento("janela de snapshot invalida")
@@ -353,7 +357,7 @@ class ClienteOmniRouteCusteado:
             _decimal_positivo(fx.cotacao_venda, "cotacaoVenda")
             if self.margem < 1:
                 raise ErroOrcamento("margem subestima custo")
-        else:
+        elif self.moeda == "TOKEN":
             exigir_rotas_gratis_frescas(agora)
         if type(timeout) is not int or timeout <= 0 or not callable(transporte):
             raise ErroOrcamento("transporte invalido")
@@ -371,6 +375,8 @@ class ClienteOmniRouteCusteado:
         return _arredondar_brl(usd * self.fx.cotacao_venda * multiplicador)
 
     def cotar_tentativa(self) -> CotacaoTentativa:
+        if self._medicao_monetaria_desligada:
+            raise ErroOrcamento("medicao monetaria desligada")
         if self.moeda == "TOKEN":
             maximo = Decimal(self.max_input_tokens + self.max_completion_tokens)
             versao = f"{ROTAS_GRATIS_VERSION}@{ROTAS_GRATIS_CAPTURADO_EM}"
@@ -384,7 +390,7 @@ class ClienteOmniRouteCusteado:
         )
         return CotacaoTentativa(maximo, "BRL", versao)
 
-    def tentar_uma_vez(self) -> ResultadoTentativa:
+    def _responder(self) -> tuple[str, int, int, int, str]:
         payload = {
             "model": self.modelo,
             "messages": [{"role": "user", "content": self._prompt}],
@@ -446,12 +452,24 @@ class ClienteOmniRouteCusteado:
             )
             if not isinstance(conteudo, str) or not conteudo or not isinstance(request_id, str):
                 raise ErroOrcamento("resposta OmniRoute incompleta")
-            consumo = (
-                Decimal(entrada + saida) if self.moeda == "TOKEN"
-                else self._brl(entrada, cached, saida, margem=False)
-            )
-            return ResultadoTentativa(conteudo, consumo, self.moeda, request_id)
+            return conteudo, entrada, saida, cached, request_id
         except ErroOrcamento:
             raise
         except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as erro:
             raise ErroOrcamento("resposta OmniRoute invalida") from erro
+
+    def tentar_uma_vez(self) -> ResultadoTentativa:
+        if self._medicao_monetaria_desligada:
+            raise ErroOrcamento("medicao monetaria desligada")
+        conteudo, entrada, saida, cached, request_id = self._responder()
+        consumo = (
+            Decimal(entrada + saida) if self.moeda == "TOKEN"
+            else self._brl(entrada, cached, saida, margem=False)
+        )
+        return ResultadoTentativa(conteudo, consumo, self.moeda, request_id)
+
+    def tentar_uma_vez_sem_medicao(self) -> str:
+        if not self._medicao_monetaria_desligada:
+            raise ErroOrcamento("medicao monetaria nao esta desligada")
+        conteudo, _entrada, _saida, _cached, _request_id = self._responder()
+        return conteudo

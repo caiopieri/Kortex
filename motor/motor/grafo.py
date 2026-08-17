@@ -587,6 +587,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                     ferramentas_permitidas: list[str] | None = None,
                     command_runner: CommandRunner | None = None,
                     repositorio_orcamento: RepositorioOrcamento | None = None,
+                    medicao_monetaria_desligada: bool = False,
                     fabrica_tentativas_orcadas: Callable[
                         [str, str, int, RequisitosTentativaCusteada],
                         list[RotaTentativaCusteada],
@@ -680,7 +681,9 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         requisitos: RequisitosTentativaCusteada | None = None,
         ciclo: int = 0,
     ) -> ResultadoChamadaOrcada:
-        if repositorio_orcamento is None:
+        if type(medicao_monetaria_desligada) is not bool:
+            raise ErroOrcamento("medicao monetaria invalida")
+        if repositorio_orcamento is None and not medicao_monetaria_desligada:
             raise ErroOrcamento("repositorio de orcamento ausente")
         if fabrica_tentativas_orcadas is None:
             raise ErroOrcamento("fabrica de adaptadores custeados ausente")
@@ -692,12 +695,34 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
             teto_decimal = Decimal(str(teto))
         except Exception as erro:
             raise ErroOrcamento("teto de orcamento invalido") from erro
-        sessao = repositorio_orcamento.sessao(run_id, thread_id, teto_decimal)
         cadeia = fabrica_tentativas_orcadas(
             papel, prompt, tentativa, requisitos or RequisitosTentativaCusteada()
         )
         if not isinstance(cadeia, list) or not cadeia:
             raise ErroOrcamento("adaptador custeado ausente")
+        if medicao_monetaria_desligada:
+            for indice, item in enumerate(cadeia, start=1):
+                if not isinstance(item, RotaTentativaCusteada):
+                    raise ErroOrcamento("adaptador custeado invalido")
+                route_id, provider_id, adaptador = item.route_id, item.provider_id, item.adaptador
+                if requisitos is not None and provider_id == requisitos.evitar_provedor:
+                    continue
+                tentar = getattr(adaptador, "tentar_uma_vez_sem_medicao", None)
+                if not callable(tentar):
+                    raise ErroOrcamento("adaptador sem caminho sem medicao")
+                try:
+                    texto = tentar()
+                except Exception:
+                    continue
+                if isinstance(texto, str) and texto:
+                    log.evento(
+                        "modelo.atendeu", papel=papel, fase=fase,
+                        modelo=route_id, provedor=provider_id, tentativa=indice,
+                    )
+                    return RespostaTentativaCusteada(texto, route_id, provider_id)
+            return ChamadaOrcadaSemResposta()
+        repositorio = cast(RepositorioOrcamento, repositorio_orcamento)
+        sessao = repositorio.sessao(run_id, thread_id, teto_decimal)
         bloqueios: list[tuple[str, str]] = []
         modelo_sem_resposta = False
         for indice, item in enumerate(cadeia, start=1):
@@ -721,7 +746,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                 attempt=indice,
             )
             resultado = executar_tentativa_custeada(
-                repositorio_orcamento, sessao, identidade, adaptador,
+                repositorio, sessao, identidade, adaptador,
             )
             match resultado:
                 case TentativaReconciliada(resultado=resultado_reconciliado):

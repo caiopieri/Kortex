@@ -176,6 +176,11 @@ ESQUEMA: dict[str, dict[str, Any]] = {
         "campos": ["papel", "para"],
         "descricao": "Registra fallback para outro cliente de modelo.",
     },
+    "medicao.monetaria_desligada": {
+        "categoria": "orcamento",
+        "campos": ["motivo"],
+        "descricao": "Declara que a run foi autorizada sem medicao monetaria.",
+    },
     "modelo.pin": {
         "categoria": "modelo",
         "campos": ["papel", "tier"],

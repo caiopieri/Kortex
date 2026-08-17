@@ -88,6 +88,7 @@ class DependenciasOrcamento:
         [str, str, int, RequisitosTentativaCusteada], list[RotaTentativaCusteada]
     ]
     rotas_certificadas: tuple[RotaOrcadaCertificada, ...]
+    medicao_monetaria_desligada: bool = False
 
 
 def validar_independencia_orcada(
@@ -406,6 +407,7 @@ def compor_orcamento_multi(
 _ESPERADOS_OMNI = {
     "omniroute", "fx", "fx_max_age_s", "margem", "timeout",
 }
+_CHAVE_SEM_CONTENCAO_MONETARIA = "sem_contencao_monetaria"
 _ESPERADOS_BLOCO_OMNI = {"base_url", "api_key_env", "papeis"}
 _ESPERADOS_BLOCO_OMNI_SEM_CREDENCIAL = {"base_url", "sem_credencial", "papeis"}
 _ESPERADOS_PAPEL_OMNI = {
@@ -442,6 +444,9 @@ def compor_orcamento_omniroute(
     if not isinstance(bloco, dict):
         raise ErroOrcamento("bloco omniroute ausente ou invalido")
 
+    sem_contencao = _CHAVE_SEM_CONTENCAO_MONETARIA in bloco_raiz
+    if sem_contencao and bloco_raiz[_CHAVE_SEM_CONTENCAO_MONETARIA] is not True:
+        raise ErroOrcamento("sem_contencao_monetaria invalido")
     base_url = _texto(bloco, "base_url")
     if set(bloco) == _ESPERADOS_BLOCO_OMNI:
         env: str | None = _texto(bloco, "api_key_env")
@@ -518,7 +523,7 @@ def compor_orcamento_omniroute(
     # aparecia depois de o motor já ter planejado e começado a executar -- e
     # aparecia como "falha externa do executor", três vezes, sem o motivo. A
     # checagem por chamada continua: uma run longa pode vencer no meio dela.
-    if "BRL" in moedas_usadas:
+    if "BRL" in moedas_usadas and not sem_contencao:
         omniroute_orcado.exigir_snapshot_fresco(
             "FX", fx_versao, fx_capturado, fx_max_age, relogio(),
         )
@@ -583,7 +588,7 @@ def compor_orcamento_omniroute(
                 ),
                 agora=relogio(), fx_max_age_s=fx_max_age,
                 pricing_max_age_s=PRICING_MAX_AGE_S, margem=margem,
-                timeout=timeout, **kwargs,
+                timeout=timeout, medicao_monetaria_desligada=sem_contencao, **kwargs,
             ))
         return rotas
 
@@ -604,4 +609,5 @@ def compor_orcamento_omniroute(
         orcamentos=orcamentos,
         fabrica=fabricar,
         rotas_certificadas=certificadas,
+        medicao_monetaria_desligada=sem_contencao,
     )

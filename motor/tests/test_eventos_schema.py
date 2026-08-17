@@ -136,7 +136,7 @@ def test_schema_tem_versao_e_helpers():
 
 def test_schema_cobre_todos_eventos_emitidos_no_codigo():
     emitidos, nao_resolvidos = _tipos_emitidos()
-    assert len(emitidos) == 56
+    assert len(emitidos) == 57
     assert nao_resolvidos == set()
     assert emitidos - tipos() == set()
 
