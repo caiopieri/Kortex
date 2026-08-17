@@ -299,13 +299,16 @@ class ClienteOmniRouteCusteado:
     """Uma chamada, sem retry, com custo derivado somente do usage do provedor."""
 
     def __init__(
-        self, *, api_key: str, base_url: str, modelo: str, prompt: str,
+        self, *, api_key: str | None, base_url: str, modelo: str, prompt: str,
         max_input_tokens: int, max_completion_tokens: int,
         fx: SnapshotFX, pricing: SnapshotPricing, agora: int,
         fx_max_age_s: int, pricing_max_age_s: int,
         margem: Decimal, timeout: int, transporte: TransporteHTTP = _http_real,
     ) -> None:
-        if not isinstance(api_key, str) or not api_key or not isinstance(prompt, str) or not prompt:
+        if (
+            (api_key is not None and (not isinstance(api_key, str) or not api_key))
+            or not isinstance(prompt, str) or not prompt
+        ):
             raise ErroOrcamento("entrada OmniRoute invalida")
         if not isinstance(base_url, str) or not base_url.startswith(("http://", "https://")):
             raise ErroOrcamento("base_url OmniRoute invalida")
@@ -390,10 +393,13 @@ class ClienteOmniRouteCusteado:
             # e o corpo deixa de ser JSON parseavel.
             "stream": False,
         }
+        cabecalhos = {"Content-Type": "application/json"}
+        if self._api_key is not None:
+            cabecalhos["Authorization"] = f"Bearer {self._api_key}"
         status, headers, bruto = self._transporte(
             f"{self._base_url}/chat/completions",
             json.dumps(payload, separators=(",", ":")).encode(),
-            {"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"},
+            cabecalhos,
             self._timeout,
         )
         if status != 200:
