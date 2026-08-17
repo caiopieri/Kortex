@@ -407,6 +407,7 @@ _ESPERADOS_OMNI = {
     "omniroute", "fx", "fx_max_age_s", "margem", "timeout",
 }
 _ESPERADOS_BLOCO_OMNI = {"base_url", "api_key_env", "papeis"}
+_ESPERADOS_BLOCO_OMNI_SEM_CREDENCIAL = {"base_url", "sem_credencial", "papeis"}
 _ESPERADOS_PAPEL_OMNI = {
     "modelo", "provider_id", "max_completion_tokens", "max_input_tokens",
 }
@@ -438,12 +439,23 @@ def compor_orcamento_omniroute(
     if not isinstance(bloco_raiz, dict) or not _ESPERADOS_OMNI <= set(bloco_raiz):
         raise ErroOrcamento("configuracao orcada ausente ou invalida")
     bloco = bloco_raiz["omniroute"]
-    if not isinstance(bloco, dict) or set(bloco) != _ESPERADOS_BLOCO_OMNI:
+    if not isinstance(bloco, dict):
         raise ErroOrcamento("bloco omniroute ausente ou invalido")
 
     base_url = _texto(bloco, "base_url")
-    env = _texto(bloco, "api_key_env")
-    if re.fullmatch(r"[A-Z][A-Z0-9_]{0,63}", env) is None or not os.environ.get(env):
+    if set(bloco) == _ESPERADOS_BLOCO_OMNI:
+        env: str | None = _texto(bloco, "api_key_env")
+    elif set(bloco) == _ESPERADOS_BLOCO_OMNI_SEM_CREDENCIAL:
+        if type(bloco["sem_credencial"]) is not bool or not bloco["sem_credencial"]:
+            raise ErroOrcamento("bloco omniroute ausente ou invalido")
+        env = None
+    else:
+        raise ErroOrcamento("bloco omniroute ausente ou invalido")
+    if (
+        env is not None
+        and (re.fullmatch(r"[A-Z][A-Z0-9_]{0,63}", env) is None
+             or not os.environ.get(env))
+    ):
         raise ErroOrcamento("credencial omniroute ausente")
 
     papeis_bruto = bloco["papeis"]
@@ -550,8 +562,8 @@ def compor_orcamento_omniroute(
         ]
         if not candidatas:
             return []
-        api_key = os.environ.get(env)
-        if not api_key:
+        api_key = os.environ.get(env) if env is not None else None
+        if env is not None and not api_key:
             raise ErroOrcamento("credencial omniroute ausente")
         # Devolve a CADEIA inteira, nao so a preferida: `chamar_orcado` percorre
         # a lista em ordem e cai na proxima quando uma rota falha. Devolver um
