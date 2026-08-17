@@ -8,6 +8,7 @@
   python -m motor ... --escalar                # verifier reprovou → retry sobe um tier
   python -m motor ... --registro "4. Registry/Modelos"  # catálogo via entidades .md
   python -m motor ... --registro Registry --rota construcao  # estratégia explícita do planner
+  python -m motor ... --sandbox "cfg.json"  # backend de comandos em sandbox
   python -m motor ... --workspace runs  # base dos artefatos por execução
 
 A execução de modelo exige composição `orcamento_openai` válida; configurações
