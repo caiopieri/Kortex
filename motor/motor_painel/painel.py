@@ -832,6 +832,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         modelos = os.environ.get("MOTOR_MODELOS")
         if modelos:
             argv.extend(["--modelos", modelos])
+        sandbox = os.environ.get("MOTOR_SANDBOX")
+        if sandbox:
+            argv.extend(["--sandbox", sandbox])
         if opcoes.get("auto") is True:
             argv.append("--auto")
         if opcoes.get("escalar") is True:
