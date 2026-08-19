@@ -1,0 +1,159 @@
+{
+  "versao": "0.1",
+  "padrao": "grafo_dependencias",
+  "missao": {
+    "id": "cli-tarefas",
+    "objetivo": "Produzir um programa de linha de comando completo e funcional, provado por execucao real do programa -- nao apenas por importacao do modulo",
+    "contexto": "Missao pequena de proposito, mas e um software de verdade: tem entrada de usuario, persistencia em disco, subcomandos, saida formatada e codigo de saida. O portao decisivo roda o programa como um usuario rodaria.",
+    "criterios_cobertura": [
+      "o programa roda no sandbox pela linha de comando e sai com exit code 0 no caminho feliz",
+      "id inexistente sai com exit code 1 e mensagem em stderr",
+      "o estado persiste em disco entre invocacoes distintas do programa",
+      "a suite de testes roda no sandbox e sai com exit code 0"
+    ]
+  },
+  "restricoes": {
+    "teto_custo": 120.0,
+    "max_subagentes": 5,
+    "max_tentativas": 3
+  },
+  "subagentes": [
+    {
+      "id": "codificador",
+      "papel": "executor",
+      "objetivo": "Escrever `tarefas.py`: um gerenciador de lista de tarefas em linha de comando, com persistencia em JSON",
+      "entradas": {
+        "api_publica": [
+          "`carregar(caminho)` devolve lista de tarefas; devolve `[]` se o arquivo nao existir",
+          "`salvar(caminho, tarefas)` grava a lista em JSON",
+          "`adicionar(tarefas, titulo)` acrescenta e DEVOLVE a tarefa criada, um dict com as chaves exatas `id`, `titulo` e `feita`; `feita` comeca `False`; o `id` e o maior id existente mais um, comecando em 1",
+          "`concluir(tarefas, id)` marca `feita` como True; levanta `ValueError` se o id nao existir",
+          "`remover(tarefas, id)` remove da lista; levanta `ValueError` se o id nao existir",
+          "`main(argv)` e o ponto de entrada da CLI e DEVOLVE o codigo de saida (int)"
+        ],
+        "contrato_da_cli": [
+          "a flag `--arquivo CAMINHO` escolhe onde persistir e vale para todos os subcomandos",
+          "subcomando `add TITULO` cria a tarefa e sai com codigo 0",
+          "subcomando `list` imprime UMA LINHA POR TAREFA, no formato exato `ID. [ ] TITULO` para pendente e `ID. [x] TITULO` para concluida -- sem indentacao, sem cabecalho, sem numeracao extra",
+          "subcomando `done ID` marca como concluida; subcomando `rm ID` remove",
+          "id inexistente em `done` ou `rm`: mensagem em STDERR e codigo de saida 1 -- nao 0, nao excecao vazando",
+          "o estado tem que persistir em disco: cada invocacao carrega do arquivo e grava de volta",
+          "usar `if __name__ == '__main__': sys.exit(main(sys.argv[1:]))` para o arquivo ser executavel direto"
+        ],
+        "restricoes_tecnicas": [
+          "SOMENTE biblioteca padrao (json, argparse, sys, pathlib). Nada de dependencia externa",
+          "sem acesso a rede",
+          "nenhum caminho hardcoded: o arquivo vem sempre de `--arquivo`"
+        ],
+        "formato_de_saida": "APENAS codigo Python puro. Sem cercas de markdown, sem ``` , sem explicacao antes ou depois. O resultado e gravado direto num arquivo .py, importado E executado pela linha de comando."
+      },
+      "resultado_esperado": "Programa Python puro, importavel e executavel",
+      "rubrica": [
+        "a saida e Python puro, sem cerca de markdown e sem texto explicativo",
+        "as seis funcoes publicas existem com a semantica descrita",
+        "`list` imprime exatamente `ID. [ ] TITULO` / `ID. [x] TITULO`, uma por linha",
+        "id inexistente sai com codigo 1 e escreve em stderr",
+        "o estado sobrevive entre invocacoes separadas do programa",
+        "somente biblioteca padrao"
+      ],
+      "produz_artefatos": [
+        {
+          "nome": "tarefas.py",
+          "tipo": "python"
+        }
+      ]
+    },
+    {
+      "id": "testador",
+      "papel": "executor",
+      "objetivo": "Escrever a suite pytest do programa, cobrindo as funcoes puras e o caminho de erro",
+      "depende_de": [
+        "codificador"
+      ],
+      "entradas": {
+        "modulo_alvo": "o programa esta no MESMO diretorio, no arquivo `codificador__tarefas.py`; importe com `import codificador__tarefas as tarefas`",
+        "restricoes_tecnicas": [
+          "SEM ACESSO A REDE",
+          "use `tmp_path` do pytest para arquivos temporarios; NUNCA escreva em caminho fixo",
+          "cobrir: adicionar/concluir/remover, ida e volta de carregar+salvar, e ao menos dois caminhos de erro com id inexistente",
+          "cobrir tambem o `main(argv)` ao menos uma vez, conferindo o codigo de saida devolvido",
+          "ao menos um teste tem que invocar o programa por `subprocess`, em DOIS processos separados (um grava, outro le), para provar que o estado persiste em disco; chamar `main()` no mesmo processo NAO prova isso"
+        ],
+        "formato_de_saida": "APENAS codigo Python puro de testes pytest. Sem cercas de markdown, sem ``` , sem explicacao."
+      },
+      "resultado_esperado": "Suite pytest pura",
+      "rubrica": [
+        "a saida e Python puro, sem cerca de markdown",
+        "usa `tmp_path`, nao caminho fixo",
+        "cobre as tres operacoes, o round-trip de disco e dois caminhos de erro",
+        "exercita `main(argv)` e confere o codigo de saida",
+        "ha teste que prova persistencia entre dois processos separados via `subprocess`"
+      ],
+      "produz_artefatos": [
+        {
+          "nome": "testes.py",
+          "tipo": "python"
+        }
+      ]
+    },
+    {
+      "id": "contrato-do-modulo",
+      "tipo": "validador",
+      "valida": "codificador",
+      "depende_de": [
+        "codificador"
+      ],
+      "objetivo": "Provar a API publica do modulo, independente da suite gerada na mesma run",
+      "resultado_esperado": "exit code 0",
+      "validador": {
+        "kind": "comando",
+        "config": {
+          "comando": "/usr/local/bin/python3 -c \"import codificador__tarefas as m; assert callable(m.carregar) and callable(m.salvar) and callable(m.adicionar) and callable(m.concluir) and callable(m.remover) and callable(m.main); t = []; a = m.adicionar(t, 'comprar pao'); assert a['id'] == 1 and a['titulo'] == 'comprar pao' and a['feita'] is False; b = m.adicionar(t, 'lavar louca'); assert b['id'] == 2; assert len(t) == 2; m.concluir(t, 1); assert t[0]['feita'] is True; m.remover(t, 2); assert len(t) == 1; erro = 0\ntry:\n    m.concluir(t, 99)\nexcept ValueError:\n    erro += 1\ntry:\n    m.remover(t, 99)\nexcept ValueError:\n    erro += 1\nassert erro == 2, 'id inexistente tem que levantar ValueError'\nassert m.carregar('/tmp/nao-existe-jamais.json') == []\nprint('CONTRATO OK')\"",
+          "timeout": 30
+        }
+      }
+    },
+    {
+      "id": "programa-de-verdade",
+      "tipo": "validador",
+      "valida": "codificador",
+      "depende_de": [
+        "codificador"
+      ],
+      "objetivo": "Rodar o programa pela linha de comando como um usuario rodaria, em invocacoes separadas, e IMPRIMIR A TRANSCRICAO de cada comando com seu codigo de saida -- o veredito precisa deixar evidencia legivel, nao so exit code",
+      "resultado_esperado": "exit code 0",
+      "validador": {
+        "kind": "comando",
+        "config": {
+          "comando": "/usr/local/bin/python3 -c \"import subprocess, sys, json, os; A = 't.json'; os.path.exists(A) and os.remove(A); P = lambda *a: subprocess.run([sys.executable, 'codificador__tarefas.py', '--arquivo', A] + list(a), capture_output=True, text=True); ver = lambda rot, r: print('  $ tarefas ' + rot + '  -> exit ' + str(r.returncode) + ('  stdout=' + repr(r.stdout.strip()) if r.stdout.strip() else '') + ('  stderr=' + repr(r.stderr.strip()) if r.stderr.strip() else '')); print('EVIDENCIA -- invocacoes SEPARADAS do programa, cada uma um processo novo:'); r = P('add', 'comprar pao'); ver('add comprar pao', r); assert r.returncode == 0, r.stderr; r = P('add', 'lavar louca'); ver('add lavar louca', r); assert r.returncode == 0, r.stderr; r = P('list'); ver('list', r); assert r.returncode == 0; assert '1. [ ] comprar pao' in r.stdout, r.stdout; assert '2. [ ] lavar louca' in r.stdout, r.stdout; r = P('done', '1'); ver('done 1', r); assert r.returncode == 0, r.stderr; r = P('list'); ver('list', r); assert '1. [x] comprar pao' in r.stdout, r.stdout; r = P('rm', '2'); ver('rm 2', r); assert r.returncode == 0, r.stderr; r = P('list'); ver('list', r); assert 'lavar louca' not in r.stdout, r.stdout; r = P('done', '99'); ver('done 99 (id inexistente)', r); assert r.returncode == 1, 'id inexistente tem que sair com codigo 1, saiu ' + str(r.returncode); assert r.stderr.strip(), 'erro tem que ir para stderr'; dados = json.load(open(A)); print('  estado persistido em disco entre processos: ' + json.dumps(dados)); assert isinstance(dados, list) and len(dados) == 1 and dados[0]['feita'] is True; print('CLI OK -- 9 invocacoes separadas, exit codes conferidos, persistencia conferida')\"",
+          "timeout": 60
+        }
+      }
+    },
+    {
+      "id": "prova",
+      "tipo": "validador",
+      "valida": "testador",
+      "depende_de": [
+        "testador"
+      ],
+      "objetivo": "Executar a suite pytest dentro do sandbox",
+      "resultado_esperado": "exit code 0",
+      "validador": {
+        "kind": "comando",
+        "config": {
+          "comando": "/usr/local/bin/python3 -m pytest testador__testes.py -q",
+          "timeout": 180,
+          "modulos_python": [
+            "pytest"
+          ]
+        }
+      }
+    }
+  ],
+  "gates": [],
+  "sintese": {
+    "instrucao": "Resuma o que foi construido, cole o veredito dos tres validadores de processo e mostre como usar o programa. Se algum validador reprovou, a primeira linha tem que dizer isso.",
+    "formato": "markdown"
+  }
+}

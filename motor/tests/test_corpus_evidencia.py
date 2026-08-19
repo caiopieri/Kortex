@@ -24,7 +24,7 @@ EXEMPLOS = Path(__file__).parents[1] / "exemplos"
 # Missões cujo entregável é código executável. São as que TÊM que ter portão de
 # processo; missão de texto (pesquisa, RAG, redação) não tem o que executar, e
 # exigir `comando` dela seria teatro — exatamente o que o Kortex diz combater.
-SPECS_DE_CODIGO = ["sandbox-prova-de-vida", "ebay-com-portao-de-processo"]
+SPECS_DE_CODIGO = ["sandbox-prova-de-vida", "ebay-com-portao-de-processo", "cli-tarefas"]
 
 
 def _specs() -> list[tuple[str, dict[str, Any]]]:
