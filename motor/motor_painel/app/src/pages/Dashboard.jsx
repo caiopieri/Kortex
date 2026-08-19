@@ -1,4 +1,5 @@
 import { usePoll, fetchRuns, getCosts, getGates, fetchDados } from '../api.js';
+import { formatarCusto } from '../formatarCusto.js';
 
 export default function Dashboard() {
   const { data: runs, error: errorRuns } = usePoll(fetchRuns);
@@ -221,7 +222,7 @@ export default function Dashboard() {
       id: rid,
       run: rid.length > 20 ? `RUN-…-${rid.slice(-5)} · ${objective}` : `${rid} · ${objective}`,
       shape: `sh ${kind}`,
-      custo: runMetadata?.custo !== undefined ? `US$ ${runMetadata.custo.toFixed(2)}` : 'US$ 0.00',
+      custo: formatarCusto(runMetadata?.custo),
       dur: durationStr,
       ciclos: ciclosStr,
       inicio: minT
@@ -385,4 +386,3 @@ export default function Dashboard() {
     </>
   );
 }
-

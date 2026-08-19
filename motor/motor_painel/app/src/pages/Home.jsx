@@ -1,5 +1,6 @@
 import { usePoll, getCosts, getGates, fetchRuns, postGateDecision, getAgents } from '../api.js';
 import { useState } from 'react';
+import { formatarCusto } from '../formatarCusto.js';
 
 const STYLE_TAG = `
   .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
@@ -284,7 +285,7 @@ export default function Home() {
                     <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 8, paddingTop: 10, marginTop: 8, borderTop: '1px solid var(--border)' }}>
                       <span className={shapeClass}></span>
                       <span className="mono" style={{ fontSize: 10.5, color: 'var(--text2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {run.n_eventos} eventos · US$ {run.custo.toFixed(2)}
+                        {run.n_eventos} eventos · {formatarCusto(run.custo, '—')}
                       </span>
                     </div>
                   </div>
