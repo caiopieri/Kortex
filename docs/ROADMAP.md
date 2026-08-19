@@ -5,36 +5,32 @@ expressed as Now, Next and Later.
 
 ## Current state
 
-- The fixed graph interprets validated `WorkflowSpec` data and supports dependency graphs,
-  adversarial verification and bounded reconciliation.
-- The event ledger has a closed schema, durable append/recovery and read-only projections.
-- The curator runs in shadow mode, recomputes anti-Goodhart evidence and emits gated
-  promotion intent only.
-- Human decisions and monetary reservations have durable SQLite state, crash recovery and
-  idempotency controls.
-- Every reachable graph model effect reserves a conservative amount before transport; unknown
-  cost, stale pricing/FX or missing durable dependencies fail closed.
-- Budget events are relayed to the JSONL ledger with stable `event_id`, ACK-after-append and
-  deduplication across reopen/redelivery in the CLI and `GerenciadorJobs` paths.
-- Executor and verifier require distinct certified provider identities before active CLI/service
-  paths; the planner bootstrap ceiling is mandatory deployment configuration.
-- MCP input and serialized UTF-8 responses are bounded; oversized output fails closed.
-- Command execution is default-deny because no production sandbox backend is certified.
-- The complete status is maintained in
-  `../motor/specs/001-hardening-producao/verification.md`.
+The living answer to "where are we" is **`ESTADO.md`** — it carries the per-front checklists,
+the measured facts behind each tick, and the reading order for whichever front you are about
+to touch. It is updated on every real advance; this file is not.
+
+This document keeps only the **priorities** (Now / Next / Later). When the two disagree about
+what is already built, `ESTADO.md` wins, because it is the one that gets updated.
 
 ## Now
 
-Sequencing note: item 3 is the unblocker. Command execution is the cheapest and most objective
-verifier available in the software vertical, and while it is default-deny the motor cannot run what
-it writes — so delivery guarantees are unverifiable and the experience→knowledge loop does not
-close. Items 1 and 2 are independent and can proceed in parallel; item 4 is continuous.
+Sequencing note (revised): item 3 **was** the unblocker and is now done — the motor runs what
+it writes, and the process gate is certified on a dedicated Linux runner. The bottleneck moved
+up a layer: the engine executes one mission well, and nothing composes missions into stages.
+`ESTADO.md` §G tracks that layer, and §4 states the order the current state suggests — parallel
+missions (blocked on a founder decision) and a typed artifact contract carrying provenance
+across runs, which is what any composition depends on. Item 2 is independent; item 4 is
+continuous.
 
-1. Provide at least two independently identified costed provider routes and a budget/configuration
-   that can satisfy conservative pre-call reservations in a real run.
+1. ~~Provide at least two independently identified costed provider routes and a
+   budget/configuration that can satisfy conservative pre-call reservations in a real run.~~
+   **Done** — see `ESTADO.md` §5 for the routes verified in a real run.
 2. Restore Studio and real experiment entrypoints only after they receive durable run identity,
    budget ledger, monetary sink and certified costed factories.
-3. Implement and certify a sandbox backend against
+3. **Done** — a Docker backend is implemented and certified on a dedicated Linux runner
+   (34 conformance tests; see `ESTADO.md` §B and §5). The note below is kept because its
+   reasoning about egress, output limits and process-tree cleanup still governs any *new*
+   backend. Original item: implement and certify a sandbox backend against
    `../motor/specs/001-hardening-producao/sandbox-conformance.md`. `CommandRunner` is already a
    `Protocol`, so the shortest path may not be a dedicated Linux runner: a cloud backend with
    isolated containers, digest-pinned images and per-second billing is a candidate implementation,

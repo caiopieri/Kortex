@@ -2,6 +2,33 @@
 
 Repository instructions for automated contributors.
 
+## Start here — this project already has an architecture
+
+Kortex is not a blank repository. The architecture, the founding vision and the decisions
+that must not be relitigated are **already written down**. Before proposing anything, know
+what exists.
+
+**Read `docs/ESTADO.md` first.** It is the living document: it says where the build currently
+stands, which fronts are done, which are open, and what to read next for the front you are
+about to touch. It carries partially ticked checklists and the measured facts behind them.
+
+`docs/ESTADO.md` names the reading order. The short version:
+
+1. this file — invariants and contribution rules
+2. `docs/ESTADO.md` — where we stopped
+3. `docs/PARECER-ARQUITETO-visao-vs-sistema.md` — the founding vision, recorded faithfully
+4. `docs/DECISAO-ciclo-de-vida-workflow.md` — canonical on workflows; wins over any other
+   document on that topic
+5. `motor/docs/INVARIANTES.md` — what the engine promises and may not break
+
+**Do not record progress in this file.** `AGENTS.md` holds invariants that rarely change and
+only points at what is updatable. State goes in `docs/ESTADO.md`; priorities go in
+`docs/ROADMAP.md`. When you finish something real — something backed by evidence, not by
+prose — update `docs/ESTADO.md`, not this file.
+
+Older documents may be stale. `docs/ESTADO.md` §2 flags the ones known to lie and in what.
+When you find a new one, flag it there too; do not silently rewrite the old document.
+
 ## Scope
 
 - Read `README.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md` and
