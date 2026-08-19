@@ -39,6 +39,11 @@ do contrato.
 
 ---
 
+> **Complemento (2026-08-19):** o colapso visual de uma fase e o terceiro modo (aplicação)
+> estão em `DECISAO-modos-do-produto-e-colapso.md`. Lá também fica registrado que "Kortex
+> Studio" e "Kortex Enterprise", como o fundador os chama, são **rótulos** para as zonas de
+> rascunho e roteiro definidas nesta seção — não conceitos novos.
+
 ## 3. Duas zonas com regras diferentes
 
 | Zona | Regras | Autoridade |

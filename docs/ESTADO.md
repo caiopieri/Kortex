@@ -10,7 +10,7 @@
 > **Não registre progresso no `AGENTS.md`.** Ele guarda invariantes que quase nunca mudam e
 > só aponta para cá. Documento desatualizado mente — e este mente mais rápido que os outros.
 
-**Última verificação:** 2026-08-19 · `main` = `6b648d3`
+**Última verificação:** 2026-08-19 · `main` = `70ed3ab` (mudanças da issue #5 ainda não commitadas)
 
 ---
 
@@ -34,6 +34,7 @@ medido antes de assumir qualquer coisa.
 | 2 | **este arquivo** | onde paramos. |
 | 3 | `docs/PARECER-ARQUITETO-visao-vs-sistema.md` | a visão fundadora registrada com fidelidade + veredito estrutural. |
 | 4 | `docs/DECISAO-ciclo-de-vida-workflow.md` | **canônico** sobre workflow: template vs missão, catálogo, composição entre casas. Se outro doc conflitar neste tema, este vence. |
+| 4b | `docs/DECISAO-canvas-e-operacao.md` + `docs/DECISAO-modos-do-produto-e-colapso.md` | a superfície: zonas de rascunho e roteiro, andares, andon; colapso como apresentação e o modo aplicação. |
 | 5 | `motor/docs/INVARIANTES.md` | o que o motor promete e não pode quebrar. |
 | 6 | `docs/ROADMAP.md` | prioridades Now/Next/Later. |
 
@@ -108,6 +109,13 @@ menor do que a lista sugere.
 - [x] painel React servido pelo `painel.py`, event-sourced sobre o ledger
 - [x] aba Canvas lendo o ledger real
 - [x] despacho real de missão pela interface, incluindo `--sandbox` (`MOTOR_SANDBOX`)
+- [ ] **canvas de autoria interativo** — decidido desde sempre (`DECISAO-canvas-e-operacao.md`
+      §3: *"o canvas é uma forma de escrever a spec"*), estava atrás do V8 por sequência
+      (*"vem antes de qualquer coisa nova, inclusive de tela"*). **O V8 caiu em 2026-08-18**,
+      então esta pendência deixou de estar bloqueada. Depende do contrato tipado (§G).
+- [ ] colapso visual de fase, com a regra "caixa colapsada nunca é mais verde que o pior nó
+      dentro dela" (`DECISAO-modos-do-produto-e-colapso.md` §2)
+- [ ] modo aplicação: interface própria sobre roteiro certificado (idem §3)
 - [ ] duas telas do mesmo painel desenham grafos diferentes da mesma run (issue #15)
 - [ ] `npm ci` quebrado; builds não são reproduzíveis entre máquinas (issue #16)
 
@@ -134,7 +142,12 @@ menor do que a lista sugere.
       Sem ela a composição vira prosa solta. **É o tijolo que destrava os outros.**
 - [ ] estado de projeto entre missões — hoje cada run é um `runs/<id>` que esquece tudo
 - [ ] quadro/kanban roteando tarefa e feedback do usuário para a etapa certa
-- [ ] **duas missões em paralelo** (issue #5, P0). `log.jsonl` abre sob flock exclusivo.
+- [x] **duas missões em paralelo** (issue #5, P0). A CLI grava cada missão em
+      `runs/<run_id>/log.jsonl` sob flock exclusivo; o painel descobre os arquivos e mantém
+      o log raiz como legado. O cenário offline com duas missões sem `--caixa` conclui ambas
+      e as separa no painel. O mesmo cenário com `--caixa` mediu contenção no `motor.db`
+      compartilhado (`sqlite3.OperationalError: database is locked`), registrada na issue #21;
+      a separação JSONL está fechada, o checkpointer SQLite não está.
       Linha de produção sem concorrência não é linha.
 
 ---
@@ -155,9 +168,15 @@ Antes de mexer em qualquer uma, confirme na §5 se o que você presume ainda é 
 
 Reproduza antes de citar. Todos abaixo foram verificados em 2026-08-19.
 
-- **Suíte:** 1244 passam, 35 pulados, **1 falha (E-02**,
+- **Suíte (baseline antes da issue #5):** 1244 passam, 35 pulados, **1 falha (E-02**,
   `test_corrupcao_no_meio_do_log_deveria_ser_quarentenada`, colisão de contrato conhecida e
   aceita). Rode **uma por vez por checkout** — `log.jsonl` abre sob flock exclusivo.
+- **Issue #5 medida (2026-08-19):** o teste offline causal cobre duas threads e duas
+  `run_id`s. Sem `--caixa`, ambas retornam 0, cada log tem `seq` independente e
+  `/dados/runs/<id>` devolve somente os eventos daquela missão. Com `--caixa`, a corrida
+  também foi executada; uma medição reproduziu `missao-a: sqlite3.OperationalError('database
+  is locked')` e `missao-b: BrokenBarrierError()`. Isso é a dívida #21 do `motor.db`, não
+  uma falha do isolamento JSONL.
 - **Python:** `requires-python = ">=3.10,<3.14"` está **correto e é portador de carga**. Em
   3.14 o `pydantic.v1` (importado por `langchain_core` na cadeia do `langgraph`) perde campos
   silenciosamente — `class M(B1): x:int; M(x=5).x` levanta `AttributeError` (PEP 649 vs.
