@@ -1,6 +1,17 @@
 # Hardening Verification
 
-Status: **not production certified**
+Status: **not production certified** as a whole.
+
+> **Partial update (2026-08-18).** One item of this program no longer holds as written: a
+> Docker sandbox backend **is** certified against `sandbox-conformance.md` on a dedicated
+> Linux runner (34 conformance tests; engine 29.1.3, `os_type linux`, policy
+> `h05b-docker-v1`). Command execution is no longer unavailable for want of a certified
+> backend — it remains default-deny until a runner is explicitly composed, which is the
+> designed behaviour, not a gap.
+>
+> The rest of this document was not re-verified against the current tree. For the current
+> position of the build, read `../../../docs/ESTADO.md`; when the two disagree about what is
+> built, the ESTADO wins, because it is the one that is kept updated.
 
 ## Verified scope
 

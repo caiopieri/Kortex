@@ -24,7 +24,20 @@ está relitigando decisão travada — pare e releia esta seção.
    fala pelo dono. Gate sobe **cru**; classificação e autorização moram no host/porteiro.
 6. **Superfície MCP fina** (despachar/status/responder_gate); jobs duráveis, não-bloqueantes.
 
-## Estado dos vetores (2026-07-03)
+## Estado dos vetores
+
+> **A posição atual NÃO mora aqui.** Ela vive em `../../docs/ESTADO.md` §3 ("A espinha —
+> vetores V1 a V8"), que é atualizado a cada avanço com a evidência por trás de cada item.
+> Se este arquivo e o ESTADO discordarem sobre o que já foi construído, **o ESTADO vence**.
+>
+> Este documento continua sendo o canônico sobre **o que cada vetor É** e sobre a ordem de
+> dependência entre eles (§ "Sequência sugerida"). O que ele não faz é acompanhar progresso.
+>
+> O instantâneo abaixo é de **2026-07-03** e está mantido como registro histórico. Ele já
+> mente em pelo menos um ponto: o **V8 foi certificado em 2026-08-18** — o backend de sandbox
+> que ele descreve como *"o desbloqueador"* deixou de ser pendência.
+
+### Instantâneo histórico (2026-07-03)
 
 - **Fase C COMPLETA** (não estava aqui quando o doc nasceu): prevenção (rota de dependência em ondas) +
   escalada de tier + reconciliação na fonte em loop bounded. Validada em run real. Isso é o
