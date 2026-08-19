@@ -47,6 +47,33 @@ não certificado — isso mudou (§3). Documento antigo não é mentira delibera
 
 ## 3. Checklists por frente
 
+### A espinha — vetores V1 a V8
+
+`motor/docs/EVOLUCAO.md` define os vetores de evolução do motor e uma **sequência por
+dependência, não por importância** (o próprio doc diz isso). O "Estado dos vetores" lá é de
+2026-07-03 e já não vale para o V8. Posição atual:
+
+| vetor | o que é | estado |
+|---|---|---|
+| **V1** | nós validadores determinísticos como primitiva da spec | **feito** |
+| **V2** | contrato de evidência + eventos tipados | **feito** |
+| **V3** | curador opera a biblioteca de gates (a catraca) | **feito** — observa, propõe, roda em sombra e certifica; aplicar continua sendo intenção sujeita a portão humano |
+| **V4** | fronteira fractal: as casas ficam ACIMA do motor | **guarda permanente, não tarefa** — vale em toda decisão ("isso é músculo ou autoridade?") |
+| **V5** | WorkflowSpec v0.2: dependências e handoff entre nós | **parcial** — `grafo_dependencias` roda com handoff via `deps_txt`; falta o **contrato tipado de handoff** e a composição entre casas |
+| **V6** | fábrica de especialistas (curador que cria modelos) | **Later por decisão** — gated por V1 (grader), V3 fatia 3 e livro-razão de custo. Provar UM especialista antes de generalizar |
+| **V7** | ciclo de vida do workflow (catálogo, versão, autoria-como-run, composição) | **decidido, não construído** — falta catálogo versionado, editor visual, marca de run não-certificado e contrato de composição entre casas |
+| **V8** | backends de execução plugáveis e capacidade de computação | **feito em 2026-08-18** — era descrito como *"o desbloqueador"*, aquilo que "vem antes de qualquer coisa nova, inclusive de tela" |
+
+**A fronteira é V5 + V7, e as duas convergem no mesmo tijolo:** o contrato tipado que carrega
+proveniência entre runs. O V5 chama de "formalizar o contrato tipado de handoff"; o V7 chama de
+"contrato de composição entre casas"; o `DECISAO-ciclo-de-vida-workflow.md` §8 chama de trava, e
+diz o que acontece sem ele — *"a composição vira prosa solta e reproduz inconsistência um nível
+acima"*.
+
+**Não é verdade que tudo depois de um ponto esteja faltando.** V1, V2, V3 e V8 estão feitos; V4
+nunca vira tarefa; V6 está deliberadamente adiado. O que falta é um par específico, e ele é
+menor do que a lista sugere.
+
 ### A. Núcleo do motor — a célula
 - [x] `WorkflowSpec` como dado tipado e versionado; grafo fixo interpreta
 - [x] dois padrões de topologia certificados: `fan_out_sintese` e `grafo_dependencias`
