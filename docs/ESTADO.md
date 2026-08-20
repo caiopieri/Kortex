@@ -380,6 +380,34 @@ Reproduza antes de citar. Todos abaixo foram verificados em 2026-08-19.
 
 ---
 
+## 5.1 Decisões pequenas que ficaram travadas em teste
+
+Registrado em 2026-08-19 para não se perderem: são casos em que a correção certa exige
+mudar um teste que fixa contrato, e a autorização é do fundador.
+
+- **`obter_catalogo()` joga fora `padrao` e `quando`.** Os arquivos de
+  `exemplos/registro/*.md` declaram os dois; a função descarta. **`quando` é exatamente
+  o metadado "quando usar" que a §E lista como pendente** para o catálogo de templates.
+  Expor qualquer um quebra `test_get_dados_catalogo`, que fixa
+  `set(item.keys()) == {id, nome, descricao, subagentes, versao}` com igualdade exata.
+  O agente parou corretamente e manteve a chave, mudando só o valor (`versao` virou
+  `None`). Acrescentar chave é mudança de contrato que o teste pega de propósito.
+
+- **Sete páginas fazem poll do `/dados` inteiro a cada 2s** (Curador, Datahouse,
+  MapaGeral, Board, Dashboard, Logs, Grafo3D). É o gargalo que
+  `DECISAO-canvas-e-operacao.md` §6.1 previu — *"o gargalo será a camada de dados, não
+  os pixels"* — e a projeção incremental por `seq` (ROADMAP Now 5) é o endereço.
+
+- **`orfaos_de_artefato` varre `runs/**` a cada chamada**, e o `Datahouse` faz poll de
+  2s. Irrelevante com 29 runs e 158 arquivos; vira `stat` em disco a cada dois segundos
+  com milhares. Não foi cacheado de propósito: cache de contagem de disco mente calado,
+  que é o defeito que a função conserta.
+
+- **A caixa de órfãos é alarme permanente.** São runs de junho que ninguém vai
+  reconstruir. Tela com alarme que nunca some ensina a ignorar alarme. Uma saída seria
+  marcar um corte ("órfãos anteriores a X são dívida conhecida") — não foi feito porque
+  seria decidir o que é aceitável esconder.
+
 ## 6. Como manter este arquivo honesto
 
 - Marque `[x]` só com evidência citável. Sem evidência, é `[ ]`.

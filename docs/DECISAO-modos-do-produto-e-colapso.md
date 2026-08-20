@@ -33,6 +33,51 @@ ideia nova a aprovar — é construção pendente.
 de execução) como *"o desbloqueador"*, que *"vem antes de qualquer coisa nova, **inclusive de
 tela**"*. O V8 foi certificado em 2026-08-18. A tela deixou de estar atrás de dependência.
 
+### 1.1 Zonas, não aplicativos — e nem modo global
+
+Registrado em 2026-08-19, depois de o fundador propor separar em **dois aplicativos**
+(Studio e Enterprise) e de o agente do canvas contrapor com argumento melhor que o meu.
+
+**Dois aplicativos: não.** Os dois falariam com o **mesmo motor** e o **mesmo ledger**,
+então o risco de rodar spec não certificada seria idêntico — *"só que com a sensação de
+estar protegido"*. E duas superfícies que fazem a mesma coisa divergem: a issue #15,
+fechada no mesmo dia, mediu o painel desenhando **8 nós e 0 arestas** enquanto o canvas
+desenhava 5 e 4, sem que ninguém quisesse divergir. Dois apps é essa mesma falha com
+uma fronteira de deploy no meio para ninguém perceber.
+
+**Eu propus "um app, dois modos, com o modo imposto". Também está errado**, e a razão é
+mais forte que a minha proposta:
+
+> **Modo global é estado, e estado pode estar errado.** Se existe "estou em Studio",
+> existe "achei que estava em Enterprise". A pergunta *"em que modo eu estou?"* não
+> deveria ter como ser feita.
+
+**A decisão: o regime vem do objeto, não do aplicativo nem de um modo.**
+
+- Você não "entra no Studio" — você **abre um rascunho**. Rascunho tem afordância de
+  autoria porque é isso que rascunho é.
+- Você não "entra no Enterprise" — você **abre um roteiro certificado**. Ele não tem
+  afordância de autoria em build nenhum, nunca, porque roteiro certificado não se edita:
+  edita-se a próxima versão, que nasce rascunho. Isso já **é** a passagem "explícita e
+  unidirecional" do `DECISAO-canvas-e-operacao.md` §3.
+- Os dois convivem na mesma tela, visualmente inconfundíveis, sem trocar de janela. O
+  operador olha o roteiro rodando e rascunha a hipótese ao lado — que é o gesto real.
+
+**Sobra exatamente uma pergunta global:** *"esta instalação pode ter rascunho?"* — e essa
+é **flag de build**, não estado de runtime: em build sem autoria, os módulos de autoria
+**não são importados**. Não é botão desabilitado nem feature flag; não está no bundle.
+Uma pergunta, uma resposta, sem estado que possa mentir.
+
+O "subir de branch para main" que o fundador descreveu **já tem nome e já tem regra**: é
+a promoção rascunho → roteiro. Não é deploy entre produtos — é gate. Chamar de "dois
+aplicativos" transfere a segurança do gate (que é real) para a separação de janelas (que
+não contém nada).
+
+**Onde isto pode estar errado, registrado pelo próprio autor:** algumas afordâncias são
+genuinamente globais — "criar novo", "importar", "abrir editor". Elas não têm objeto que
+carregue regime e vão acabar num flag de qualquer jeito. Se forem muitas, este desenho
+colapsa de volta em "modo global", com mais passos.
+
 ---
 
 ## 2. Decisão nova — colapso é apresentação, não execução
