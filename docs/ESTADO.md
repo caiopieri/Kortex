@@ -157,6 +157,62 @@ menor do que a lista sugere.
 
 ---
 
+## 3.9 A cadeia do canvas — o que falta para "andar pela fábrica"
+
+O fundador descreveu a superfície que quer: laços pulsando onde o processo roda de
+verdade, clicar num agente e ver o que ele está mexendo, gate mostrando o que segurou,
+cada tool call visível, artefato brilhando ao passar de nó. E deu o critério de completude
+mais útil que este projeto tem: **"eu conseguiria montar um jogo 3D só com essas
+informações"**.
+
+Isso não é figura de linguagem — é teste de aceite. Um jogo **não pode inventar**: renderiza
+o que o estado entrega. Se o fluxo de eventos permite reconstruir a fábrica, o fluxo está
+completo; se não permite, falta evento. É a regra *"a superfície nunca inventa lugar"*
+(`DECISAO-canvas-e-operacao.md` §5) virada em critério mensurável.
+
+O que ele descreveu se separa em três baldes, e a diferença importa:
+
+**A. Já dá com o que o ledger emite** — nó, aresta, artefato passando, gate aprovando ou
+reprovando. Existem `aresta.fluxo`, `validador.rodou`, `portao.aprovado`,
+`artefato.atualizou`. Falta desenho, não dado.
+
+**B. Falta evento, não semântica** — cada tool call, o que o gate segurou, clicar na linha e
+ver o log. Hoje o `motivo` de `validador.rodou` vem **vazio quando aprova** (medido:
+foi preciso reproduzir o portão à mão para ver a evidência), e falha de rota não emite
+evento nenhum (issue #20). Some a coordenada de estação em evento de falha (ROADMAP Now 6)
+e a projeção incremental por `seq` (ROADMAP Now 5, declarada *"precondition for any canvas
+surface"* — o cliente já detecta buraco com `buracosDeSeq`; falta o servidor).
+
+**C. Falta semântica — não existe no modelo.** Dois casos:
+- *"clico no agente e vejo o que ele está mexendo, um chat, e posso interceptar"* — **não há
+  "durante"**. O executor é um `-> str`; ele devolve um bloco e acabou. Sem laço não há o
+  que interceptar. Isto é a decisão de harness
+  (`DECISAO-harness-e-costura-de-execucao.md`).
+- *"um agente do nada perguntando algo a outro"* — **consulta não existe**. Não confundir com
+  **handoff** (artefato atravessando a fronteira, já decidido e tipado): consulta é
+  request/response que **não avança o artefato**, topologia diferente. Aresta de consulta
+  livre transforma o DAG certificado em grafo sem limite — o *"n8n de fios livres"* que
+  `DECISAO-ciclo-de-vida-workflow.md` §10 proíbe. **Proposta a decidir:** consulta vira
+  **capacidade declarada do nó** ("este nó pode consultar a casa X"), cada consulta sendo
+  evento logado, com teto e proveniência. Parece espontânea na tela; é declarada e contida
+  no registro.
+
+**Andar é casa, não container de workflow.** O workflow atravessa andares por desenho — é o
+caso normal. O canvas já tem as duas vistas (`ledger/Grafo.jsx` para a run,
+`andares/VistaAndares.jsx` para a pilha de casas) e **deliberadamente não desenha ligação
+entre andares**, porque o artefato tipado ainda não existe: desenhar antes seria inventar
+relação.
+
+### A ordem que o estado sugere
+
+1. **contrato tipado com proveniência** (V5+V7) — destrava ligação entre andares, composição,
+   orquestrador, modo aplicação, adoção de harness e o desenho da linha no canvas
+2. **executor com laço** atrás da costura de harness — cria o "durante" que o canvas precisa
+3. **os eventos do balde B** — projeção incremental, coordenada de estação, evidência no log
+4. **então** a superfície tem substância para renderizar
+
+Fazer a tela antes seria animar um processo que não emite o que ela precisa.
+
 ## 4. Se você vai desenvolver agora
 
 **A ordem que o estado atual sugere**, não é ordem imposta:
