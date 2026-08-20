@@ -1,7 +1,5 @@
-import json
 import sqlite3
 from decimal import Decimal
-from pathlib import Path
 
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
@@ -11,6 +9,7 @@ from motor.grafo import construir_grafo
 from motor.orcamento import CotacaoTentativa, RepositorioOrcamento, ResultadoTentativa, RotaTentativaCusteada
 from motor.politica import PoliticaGates
 from tests.helpers_grafo import TETO_OPERADOR_TESTE
+from tests.specs import spec_pesquisa_um
 
 
 def test_resume_manual_preserva_veredito_sem_recobrar_evaluator(tmp_path):
@@ -37,10 +36,7 @@ def test_resume_manual_preserva_veredito_sem_recobrar_evaluator(tmp_path):
             f"rota-{papel}", f"provedor-{papel}", Tentativa(papel, textos.get(papel, "saida")),
         )]
 
-    spec = json.loads(
-        (Path(__file__).parent.parent / "exemplos" / "missao-pesquisa.json").read_text()
-    )
-    spec["subagentes"] = spec["subagentes"][:1]
+    spec = spec_pesquisa_um()
     repo = RepositorioOrcamento(tmp_path / "runs")
 
     class Legado:
@@ -98,10 +94,7 @@ def test_duas_reconciliacoes_nao_reusam_identidade_executor_verifier(tmp_path):
             f"rota-{papel}", f"provedor-{papel}", Tentativa(papel, texto),
         )]
 
-    spec = json.loads(
-        (Path(__file__).parent.parent / "exemplos" / "missao-pesquisa.json").read_text()
-    )
-    spec["subagentes"] = spec["subagentes"][:1]
+    spec = spec_pesquisa_um()
     repo = RepositorioOrcamento(tmp_path / "runs-reconciliacao")
 
     class Legado:

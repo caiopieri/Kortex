@@ -1,7 +1,6 @@
 import json
 import sqlite3
 from decimal import Decimal
-from pathlib import Path
 
 import pytest
 
@@ -21,11 +20,10 @@ from motor.orcamento import (
 )
 from motor.politica import PoliticaGates
 from tests.helpers_grafo import TETO_OPERADOR_TESTE
+from tests.specs import spec_pesquisa_um
 
 
-SPEC = json.loads(
-    (Path(__file__).parent.parent / "exemplos" / "missao-pesquisa.json").read_text()
-)
+SPEC = spec_pesquisa_um()
 
 
 class _Tentativa:

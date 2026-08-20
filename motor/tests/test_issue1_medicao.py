@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pytest
 from langgraph.checkpoint.memory import InMemorySaver
@@ -18,6 +17,7 @@ from motor.modelos import ClienteStub
 from motor.orcamento import ErroOrcamento, RequisitosTentativaCusteada, RotaTentativaCusteada
 from motor.politica import PoliticaGates
 from tests.helpers_grafo import TETO_OPERADOR_TESTE
+from tests.specs import spec_pesquisa_um
 
 
 def _cfg() -> dict:
@@ -140,10 +140,7 @@ def test_N4_desligar_dinheiro_nao_remove_limite_de_tentativas(tmp_path):
             return [RotaTentativaCusteada("rota", "provedor", TentativaSemMedicao())]
         return []
 
-    spec = json.loads(
-        (Path(__file__).parent.parent / "exemplos" / "missao-pesquisa.json").read_text()
-    )
-    spec["subagentes"] = [spec["subagentes"][0]]
+    spec = spec_pesquisa_um()
     spec["restricoes"]["max_tentativas"] = 2
     log = LogEventos(tmp_path / "log.jsonl")
     try:

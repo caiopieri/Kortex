@@ -1,6 +1,5 @@
 import json
 from decimal import Decimal
-from pathlib import Path
 
 import motor.grafo as modulo_grafo
 from motor.eventos import LogEventos
@@ -17,11 +16,10 @@ from motor.orcamento import (
 )
 from motor.politica import PoliticaGates
 from tests.helpers_grafo import TETO_OPERADOR_TESTE
+from tests.specs import spec_pesquisa_um
 
 
-SPEC = json.loads(
-    (Path(__file__).parent.parent / "exemplos" / "missao-pesquisa.json").read_text()
-)
+SPEC = spec_pesquisa_um()
 
 
 def _spec_minima() -> dict:

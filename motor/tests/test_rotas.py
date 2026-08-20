@@ -18,6 +18,7 @@ from motor.modelos import ClienteStub
 from motor.politica import PoliticaGates
 from motor.registro import rotas_de_registro
 from tests.helpers_grafo import GerenciadorJobsTeste as GerenciadorJobs
+from tests.specs import spec_pesquisa
 
 
 RAIZ = Path(__file__).parent.parent
@@ -362,7 +363,7 @@ def test_planner_escolhe_rota_do_catalogo(tmp_path):
     json.dumps({"rota": "rota-inventada"}),
 ])
 def test_escolha_invalida_cai_na_rota_default(tmp_path, resposta_seletor):
-    spec = json.loads((RAIZ / "exemplos" / "missao-pesquisa.json").read_text(encoding="utf-8"))
+    spec = spec_pesquisa()
     rotas = rotas_de_registro(RAIZ / "exemplos" / "registro-rotas")
     chamadas_planner = 0
 

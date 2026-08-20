@@ -22,7 +22,7 @@ from tests.helpers_grafo import (
     GerenciadorJobsTeste as GerenciadorJobs,
     composicao_stub,
 )
-from tests.test_grafo import faz_roteador
+from tests.specs import faz_roteador
 
 
 def test_gerenciador_de_env_carrega_modelos(tmp_path, monkeypatch):
