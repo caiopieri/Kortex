@@ -668,8 +668,6 @@ export default function Grafo2D() {
         flex: 'none'
       }}>
         <span className="num" style={{ cursor: 'pointer' }} onClick={() => window.location.hash = '/grafo'}>Grafo 2D</span>
-        <span className="num" style={{ color: 'var(--text3)' }}>|</span>
-        <span className="num" style={{ cursor: 'pointer', color: 'var(--text3)' }} onClick={() => window.location.hash = '/grafo3d'}>Grafo 3D</span>
         <span className="num" style={{ color: 'var(--text3)', marginLeft: 8 }}>· {runsLabel}</span>
         <div style={{ width: 1, height: 16, background: 'var(--border)', margin: '0 2px' }} />
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: "'IBM Plex Mono',monospace", fontSize: 9, letterSpacing: '.5px', textTransform: 'uppercase', color: 'var(--text2)' }}>

@@ -19,7 +19,6 @@ const NAV = [
       { label: 'Dashboard', path: '/dashboard' },
       { label: 'Canvas', path: '/canvas' },
       { label: 'Grafo 2D', path: '/grafo' },
-      { label: 'Grafo 3D', path: '/grafo3d' },
       { label: 'Rotas do registro', path: '/rotas' },
       { label: 'Datahouse', path: '/datahouse' },
       { label: 'Runs & Histórico', path: '/runs' },

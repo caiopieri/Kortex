@@ -21,7 +21,6 @@ import Skills from './pages/Skills';
 import Curador from './pages/Curador';
 import Conexoes from './pages/Conexoes';
 import Inventario from './pages/Inventario';
-import Grafo3D from './pages/Grafo3D';
 import Canvas from './pages/Canvas';
 
 /* Roteador hash-based — mais leve possível, zero deps */
@@ -79,7 +78,9 @@ function App() {
   else if (route.startsWith('/runs')) Page = <Runs route={route} />;
   else if (route === '/caixa') Page = <CaixaFundador />;
   else if (route === '/grafo') Page = <Grafo2D />;
-  else if (route === '/grafo3d') Page = <Grafo3D />;
+  /* `/grafo3d` foi removida: era a terceira renderizacao do mesmo grafo.
+     Quem tinha o link vai para o Canvas, a projecao que sobrou. */
+  else if (route === '/grafo3d') { window.location.hash = '/canvas'; Page = <Canvas modo={mode} />; }
   else if (route === '/custos') Page = <Custos />;
   else if (route === '/agentes') Page = <Agentes />;
   else if (route === '/dashboard') Page = <Dashboard />;
