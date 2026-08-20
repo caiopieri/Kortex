@@ -105,7 +105,14 @@ menor do que a lista sugere.
 - [x] reserva conservadora antes de qualquer efeito; custo desconhecido reprova fechado
 - [x] snapshots de pricing/FX com prazo de validade; vencido bloqueia
 - [x] medição monetária pode ser desligada explicitamente (`sem_contencao_monetaria`)
-- [ ] **moeda de contenção para rota grátis** (issue #7). Rota sem preço declarado reprova
+- [ ] **moeda de contenção para rota grátis** (issue #7). **O `omniroute pricing` NÃO
+      serve como "leitor real"** — levantado em 2026-08-19: ele sincroniza de
+      `BerriAI/litellm` (`model_prices_and_context_window.json`), é opt-in
+      (`PRICING_SYNC_ENABLED` default false), e classifica "grátis" por **tabela** — id
+      terminando em `:free`, preço zero declarado, ou catálogo estático
+      `FREE_MODEL_BUDGETS`. É outra tabela declarada que pode estar velha ou errada,
+      **não é prova de faturamento**. O guarda do motor pede "remeça contra o leitor
+      real"; isto não é o leitor real. Rota sem preço declarado reprova
       fechado, e cadastrar preço zero silenciaria a única contenção que existe. Hoje há
       centenas de rotas grátis disponíveis e invisíveis para o motor.
 - [ ] reserva deixa de usar pior caso de 200k tokens (issue #6)
@@ -252,6 +259,19 @@ Reproduza antes de citar. Todos abaixo foram verificados em 2026-08-19.
   evidência**: outra máquina, outro digest, outro arquivo — nunca repontar o existente.
 - **Modelo listado em `/v1/models` não significa modelo utilizável.** O OmniRoute lista rotas
   sem credencial ativa e só a chamada real revela o 404. Teste a chamada, não o catálogo.
+- **OmniRoute está em configuração padrão**, levantado em 2026-08-19. Os mecanismos de
+  resiliência existem e estão nos defaults: `waitForCooldown` e `comboCooldownWait`
+  ligados, `providerBreaker` com thresholds (OAuth 8/5/60s, API key 12/7/30s),
+  `providerCooldown` **desligado**, e **nenhum combo configurado** — ou seja, **não há
+  cadeia de fallback explícita**, só a mecânica default. `resilience config set` aceita
+  `--threshold`, `--reset-timeout`, `--base-cooldown`; perfis existem e nenhum foi
+  definido. A API administrativa exige chave: `pricing` e `lockouts` responderam **401**
+  (o `OMNIROUTE_API_KEY` não está setado), então ausência de dado ali **não** é ausência
+  de configuração.
+- **`omniroute sync` MOVE CREDENCIAL.** O bundle padrão inclui `providers` e `keys`, e
+  `providerConnections` carrega `accessToken`, `refreshToken` e `apiKey`. Reconciliar Mac
+  (22 conexões) com runner (5) **não é operação benigna de config** — trate como
+  movimentação de segredo.
 - **Snapshot de rotas grátis vencido** (117h contra limite de 24h). O motor recusa com
   *"adiantar só a data não prova gratuidade nem disponibilidade"*. Disponibilidade (HTTP 200)
   **não** é gratuidade — remedir exige olhar consumo no provedor.
