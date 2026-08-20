@@ -46,6 +46,9 @@ export const postGateDecision = (id, decisao) => post(`/gates/${id}`, { decisao 
 export const getMissaoAtiva = () => get('/missoes/ativa');
 export const getConexoes = () => get('/conexoes');
 export const getInventario = () => get('/inventario');
+/* O que existe em disco e o ledger nao explica (issue #22). E a unica
+   consulta do painel que olha o diretorio — e ela conta, nunca reconstroi. */
+export const getOrfaos = () => get('/orfaos');
 
 /* Despacho real do motor — erro devolve a mensagem crua do servidor. */
 export async function postMissao(spec, opcoes) {

@@ -84,7 +84,10 @@ function App() {
   else if (route === '/agentes') Page = <Agentes />;
   else if (route === '/dashboard') Page = <Dashboard />;
   else if (route === '/board') Page = <Board />;
-  else if (route === '/workflows') Page = <CatalogoWorkflows />;
+  /* `/workflows` continua respondendo: a rota foi renomeada porque a tela
+     mostra rotas de modelo, nao workflows (#23), e link velho cairia em
+     Home sem dizer por que. */
+  else if (route === '/rotas' || route === '/workflows') Page = <CatalogoWorkflows />;
   else if (route === '/config') Page = <Configuracoes />;
   else if (route === '/datahouse') Page = <Datahouse />;
   else if (route === '/logs') Page = <Logs />;

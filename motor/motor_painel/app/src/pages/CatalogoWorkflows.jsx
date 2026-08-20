@@ -1,80 +1,111 @@
 import { useState, useMemo } from 'react';
 import { usePoll, getCatalogo } from '../api.js';
+import { linhasDoCatalogo, VERSAO_AUSENTE } from './catalogoRotas.js';
 
+/* Rotas do registro — NÃO é o catálogo de workflows (issue #23).
+ *
+ * A tela se chamava "Catálogo de Workflows" e mostrava outra coisa: o
+ * `/dados/catalogo` lê `exemplos/registro/*.md` e filtra por `tipo: rota`. São
+ * rotas de modelo, e o próprio `docs/ESTADO.md` §E já registra isso — "hoje o
+ * registro cataloga rotas de modelo, não templates".
+ *
+ * O catálogo de templates de workflow versionado com evidência é o V7 e NÃO
+ * EXISTE. A tela diz isso, em vez de deixar o nome sugerir que existe.
+ *
+ * Aqui não há filtro por status. Não porque foi removido para simplificar: o
+ * registro não declara status, e o filtro anterior só casava com os cinco
+ * workflows inventados no fallback.
+ */
 export default function CatalogoWorkflows() {
   const { data: catalogo, error } = usePoll(getCatalogo);
-  const [filter, setFilter] = useState('todos');
   const [selected, setSelected] = useState(null);
 
-  /* Fallback data when API has no catalogo */
-  const items = useMemo(() => {
-    if (catalogo && Array.isArray(catalogo) && catalogo.length > 0) return catalogo;
-    return [
-      { id: 'pesquisa', nome: 'Pesquisa & Síntese', rota: 'pesquisa', descricao: 'Fan-out de pesquisadores + síntese final avaliada', nos: 7, versao: '1.2', tags: ['pesquisa', 'síntese'], criado: '2026-06-28', status: 'certificado' },
-      { id: 'forja', nome: 'Forja · Software', rota: 'forja', descricao: 'Pipeline de código: planejador → executor → verificador → gate', nos: 6, versao: '2.0', tags: ['código', 'software', 'testes'], criado: '2026-06-15', status: 'certificado' },
-      { id: 'construcao', nome: 'Construção · Documentos', rota: 'construção', descricao: 'Geração de documentos longos com revisão e formatação', nos: 4, versao: '1.0', tags: ['documentos', 'redação'], criado: '2026-07-01', status: 'beta' },
-      { id: 'hardware', nome: 'Hardware · Impressão 3D', rota: 'hardware', descricao: 'Pipeline de fatiamento, validação e envio a impressora', nos: 4, versao: '0.9', tags: ['hardware', '3d'], criado: '2026-07-05', status: 'experimental' },
-      { id: 'anuncio', nome: 'Anúncio & Creative', rota: 'criativo', descricao: 'Geração de copy + imagens + variações A/B', nos: 5, versao: '1.1', tags: ['marketing', 'creative'], criado: '2026-06-20', status: 'certificado' },
-    ];
-  }, [catalogo]);
+  const items = useMemo(() => linhasDoCatalogo(catalogo), [catalogo]);
 
-  const filtered = useMemo(() => {
-    if (filter === 'todos') return items;
-    return items.filter(i => i.status === filter);
-  }, [items, filter]);
-
-  if (error) return (
-    <div>
-      <span className="num">Catálogo de Workflows</span>
-      <div className="card" style={{ padding: 16, marginTop: 16, borderColor: 'var(--red)' }}>
-        <span className="mono" style={{ color: 'var(--red)' }}>Erro: {error}</span>
-      </div>
+  const cabecalho = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <span className="title" style={{ fontSize: 20 }}>Rotas do registro</span>
+      <span className="eyebrow" style={{ borderLeft: '1px solid var(--border)', paddingLeft: 12 }}>
+        exemplos/registro · tipo: rota
+      </span>
+      <div style={{ flex: 1 }}></div>
+      <span className="btn btn-primary btn-sm" onClick={() => { window.location.hash = '/nova-missao'; }}>+ Nova missão</span>
     </div>
   );
 
-  const statusColor = (s) => {
-    if (s === 'certificado') return 'var(--green)';
-    if (s === 'beta') return 'var(--blue)';
-    return 'var(--amber)';
-  };
+  if (error) return (
+    <>
+      {cabecalho}
+      <div className="card" style={{ padding: 16, marginTop: 16, borderColor: 'var(--red)' }}>
+        <span className="mono" style={{ color: 'var(--red)' }}>Erro: {error}</span>
+      </div>
+    </>
+  );
 
   const detail = selected ? items.find(i => i.id === selected) : null;
 
   return (
     <>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <span className="title" style={{ fontSize: 20 }}>Catálogo de Workflows</span>
-        <span className="eyebrow" style={{ borderLeft: '1px solid var(--border)', paddingLeft: 12 }}>templates · registry</span>
-        <div style={{ flex: 1 }}></div>
-        <span className="btn btn-primary btn-sm" onClick={() => { window.location.hash = '/nova-missao'; }}>+ Nova missão</span>
+      {cabecalho}
+
+      {/* O que esta tela NÃO é. Fica acima da lista, não em rodapé: o nome
+          antigo prometia catálogo de workflow e alguém vai chegar aqui
+          procurando por ele. */}
+      <div className="card" style={{ padding: '10px 14px', marginTop: 14, borderStyle: 'dashed' }}>
+        <span className="mono" style={{ fontSize: 10.5, color: 'var(--text3)', lineHeight: 1.7 }}>
+          Estas são <b style={{ color: 'var(--text2)' }}>rotas de modelo</b>, não templates de
+          workflow. O catálogo de templates versionado com evidência é o V7 e ainda não existe —
+          nem no motor, nem aqui. Enquanto não existir, esta tela não vai fingir que existe.
+        </span>
       </div>
 
-      {/* Filters */}
-      <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-        {['todos', 'certificado', 'beta', 'experimental'].map(f => (
-          <span key={f} className={`pill${filter === f ? ' on' : ''}`} onClick={() => setFilter(f)}>{f}</span>
-        ))}
-      </div>
+      {items.length === 0 && !catalogo && (
+        <div className="card" style={{ padding: 28, marginTop: 16, textAlign: 'center' }}>
+          <span className="mono" style={{ fontSize: 11.5, color: 'var(--text3)' }}>carregando…</span>
+        </div>
+      )}
 
-      {/* Grid + detail */}
+      {/* Vazio declarado, na forma do Runners.jsx: o painel diz que não tem
+          fonte, em vez de desenhar conteúdo de exemplo. */}
+      {items.length === 0 && catalogo && (
+        <div className="card" style={{ padding: 28, marginTop: 16, textAlign: 'center' }}>
+          <div className="title" style={{ fontSize: 15, color: 'var(--text)' }}>
+            Nenhuma rota no registro
+          </div>
+          <div className="mono" style={{ fontSize: 11.5, color: 'var(--text2)', lineHeight: 1.7, maxWidth: 460, margin: '10px auto 0' }}>
+            O painel lê <span className="mono">exemplos/registro/*.md</span> e mostra as entradas
+            com <span className="mono">tipo: rota</span>. Não há nenhuma legível agora, então não
+            há o que mostrar aqui — e o painel não vai inventar.
+          </div>
+          <div className="mono" style={{ fontSize: 10.5, color: 'var(--text3)', marginTop: 12 }}>
+            As entidades executoras do mesmo registro estão em{' '}
+            <span className="lnk" onClick={() => { window.location.hash = '/inventario'; }}>Inventário</span>.
+          </div>
+        </div>
+      )}
+
       <div style={{ display: 'grid', gridTemplateColumns: detail ? '1fr 1fr' : '1fr', gap: 16, marginTop: 16 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {filtered.map(wf => (
+          {items.map(rota => (
             <div
-              key={wf.id}
+              key={rota.id}
               className="card"
-              style={{ padding: '12px 14px', cursor: 'pointer', borderColor: selected === wf.id ? 'var(--accent)' : undefined }}
-              onClick={() => setSelected(wf.id === selected ? null : wf.id)}
+              style={{ padding: '12px 14px', cursor: 'pointer', borderColor: selected === rota.id ? 'var(--accent)' : undefined }}
+              onClick={() => setSelected(rota.id === selected ? null : rota.id)}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                <span className="title" style={{ fontSize: 14, flex: 1 }}>{wf.nome}</span>
-                <span className="mono" style={{ fontSize: 9, color: statusColor(wf.status), border: '1px solid', borderRadius: 2, padding: '1px 6px' }}>{wf.status}</span>
+                <span className="title" style={{ fontSize: 14, flex: 1 }}>{rota.nome}</span>
+                <span className="mono" style={{ fontSize: 9, color: 'var(--text3)' }}>
+                  {rota.versao ? `v${rota.versao}` : VERSAO_AUSENTE}
+                </span>
               </div>
-              <div className="mono" style={{ fontSize: 11, color: 'var(--text2)', lineHeight: 1.5 }}>{wf.descricao}</div>
+              <div className="mono" style={{ fontSize: 11, color: 'var(--text2)', lineHeight: 1.5 }}>{rota.descricao}</div>
               <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
-                <span className="mono" style={{ fontSize: 10, color: 'var(--text3)' }}>rota: {wf.rota}</span>
-                <span className="mono" style={{ fontSize: 10, color: 'var(--text3)' }}>~{wf.nos} nós</span>
-                <span className="mono" style={{ fontSize: 10, color: 'var(--text3)' }}>v{wf.versao}</span>
+                <span className="mono" style={{ fontSize: 10, color: 'var(--text3)' }}>
+                  {rota.subagentes.length > 0
+                    ? `subagentes: ${rota.subagentes.join(', ')}`
+                    : 'subagentes não declarados no registro'}
+                </span>
               </div>
             </div>
           ))}
@@ -87,33 +118,29 @@ export default function CatalogoWorkflows() {
             <div className="mono" style={{ fontSize: 11, color: 'var(--text2)', lineHeight: 1.6, marginBottom: 12 }}>{detail.descricao}</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span className="mono" style={{ fontSize: 10, color: 'var(--text3)' }}>rota</span>
-                <span className="mono" style={{ fontSize: 10, color: 'var(--text2)' }}>{detail.rota}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span className="mono" style={{ fontSize: 10, color: 'var(--text3)' }}>nós</span>
-                <span className="mono" style={{ fontSize: 10, color: 'var(--text2)' }}>~{detail.nos}</span>
+                <span className="mono" style={{ fontSize: 10, color: 'var(--text3)' }}>id</span>
+                <span className="mono" style={{ fontSize: 10, color: 'var(--text2)' }}>{detail.id}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span className="mono" style={{ fontSize: 10, color: 'var(--text3)' }}>versão</span>
-                <span className="mono" style={{ fontSize: 10, color: 'var(--text2)' }}>v{detail.versao}</span>
+                <span className="mono" style={{ fontSize: 10, color: detail.versao ? 'var(--text2)' : 'var(--text3)' }}>
+                  {detail.versao ? `v${detail.versao}` : VERSAO_AUSENTE}
+                </span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span className="mono" style={{ fontSize: 10, color: 'var(--text3)' }}>criado</span>
-                <span className="mono" style={{ fontSize: 10, color: 'var(--text2)' }}>{detail.criado}</span>
+                <span className="mono" style={{ fontSize: 10, color: 'var(--text3)' }}>subagentes</span>
+                <span className="mono" style={{ fontSize: 10, color: 'var(--text2)' }}>{detail.subagentes.length}</span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span className="mono" style={{ fontSize: 10, color: 'var(--text3)' }}>status</span>
-                <span className="mono" style={{ fontSize: 10, color: statusColor(detail.status) }}>{detail.status}</span>
-              </div>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
-                {(detail.tags || []).map(t => (
-                  <span key={t} className="pill" style={{ fontSize: 9 }}>{t}</span>
-                ))}
-              </div>
+              {detail.subagentes.length > 0 && (
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+                  {detail.subagentes.map(s => (
+                    <span key={s} className="pill" style={{ fontSize: 9 }}>{s}</span>
+                  ))}
+                </div>
+              )}
             </div>
             <div style={{ marginTop: 16 }}>
-              <span className="btn btn-primary btn-sm" onClick={() => { window.location.hash = '/nova-missao'; }}>Disparar com este workflow →</span>
+              <span className="btn btn-primary btn-sm" onClick={() => { window.location.hash = '/nova-missao'; }}>Disparar uma missão →</span>
             </div>
           </div>
         )}
