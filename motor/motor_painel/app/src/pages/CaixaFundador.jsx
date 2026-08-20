@@ -486,7 +486,7 @@ export default function CaixaFundador() {
             </div>
             <div style={{ display: 'flex', gap: 9 }}>
               <span className="btn btn-sm" onClick={() => { window.location.hash = '/'; }}>Ir para a Home</span>
-              <span className="btn btn-sm" onClick={() => { window.location.hash = '/mapa'; }}>Abrir Mapa geral</span>
+              <span className="btn btn-sm" onClick={() => { window.location.hash = '/runs'; }}>Abrir Runs &amp; Histórico</span>
             </div>
           </div>
         ) : (

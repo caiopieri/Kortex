@@ -13,7 +13,6 @@ import CatalogoWorkflows from './pages/CatalogoWorkflows';
 import Configuracoes from './pages/Configuracoes';
 import Datahouse from './pages/Datahouse';
 import Logs from './pages/Logs';
-import MapaGeral from './pages/MapaGeral';
 import NovaMissao from './pages/NovaMissao';
 import Runners from './pages/Runners';
 import Skills from './pages/Skills';
@@ -93,7 +92,9 @@ function App() {
   else if (route === '/config') Page = <Configuracoes />;
   else if (route === '/datahouse') Page = <Datahouse />;
   else if (route === '/logs') Page = <Logs />;
-  else if (route === '/mapa') Page = <MapaGeral />;
+  /* `/mapa` foi removida: inventava "projeto" agrupando runs por `objetivo`,
+     e projeto nao existe no modelo. O resto era Runs + Custos + Agentes. */
+  else if (route === '/mapa') { window.location.hash = '/'; Page = <Home />; }
   else if (route === '/nova-missao') Page = <NovaMissao />;
   else if (route === '/runners') Page = <Runners />;
   else if (route === '/skills') Page = <Skills />;

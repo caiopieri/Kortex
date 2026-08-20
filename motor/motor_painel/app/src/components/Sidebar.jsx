@@ -10,7 +10,6 @@ const NAV = [
       { label: 'Home', path: '/' },
       { label: 'Board de missões', path: '/board' },
       { label: 'Caixa do Fundador', path: '/caixa' },
-      { label: 'Mapa geral', path: '/mapa' },
     ],
   },
   {
