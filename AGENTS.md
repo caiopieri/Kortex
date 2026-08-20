@@ -61,10 +61,11 @@ When you find a new one, flag it there too; do not silently rewrite the old docu
 
 ## Verification
 
-Run the full suite **one at a time per checkout**. `motor/__main__.py` opens the
-repository-root `log.jsonl` under an exclusive `flock`, so two concurrent suites — or two
-agents on the same repository — contaminate each other and produce different failure sets.
-Concurrent measurement is not evidence. Coordinate before running.
+Run the full suite **one at a time per checkout**. Each CLI run now owns
+`<workspace>/<run_id>/log.jsonl` under an exclusive `flock`; the repository-root
+`log.jsonl` is legacy read-only. The persistent SQLite/checkpointer and other shared
+fixtures may still contend when two suites or agents use the same checkout, so concurrent
+measurement is not evidence. Coordinate before running.
 
 Run from `motor/`:
 

@@ -39,9 +39,10 @@ python3 -m motor "Compare três abordagens de parsing de CSV em Python (csv da s
 - **Opcional, sem pausa:** acrescente `--auto` pra correr sem parar no gate (inspeciona depois no log).
 
 ## O que observar (e me trazer)
-O motor escreve eventos em `log.jsonl` na raiz do repo. Depois de cada run:
+O motor escreve eventos em `runs/<run_id>/log.jsonl` (ou no workspace passado por
+`--workspace`). Depois de cada run, aponte o comando para o log daquela run:
 ```bash
-grep "rota.escolhida" log.jsonl     # a linha-chave da calibração
+grep "rota.escolhida" runs/<run_id>/log.jsonl     # a linha-chave da calibração
 ```
 Me traga, pra cada prompt:
 1. **A linha `rota.escolhida`** — tem `rota`, `padrao`, `fallback`. É o sinal central:
@@ -53,7 +54,7 @@ Me traga, pra cada prompt:
    subagente/portão reprovou, **me traga as linhas de `portao.reprovado`, `ferramenta.*`, ou
    `(synthesizer não respondeu)`/`evaluator sem JSON`** — esses são os **padrões de falha reais**
    que vão desenhar a Fase C (o loop de auto-correção).
-3. (Opcional) o `log.jsonl` inteiro dos dois runs, se quiser que eu leia o trace completo — mas
+3. (Opcional) o `log.jsonl` inteiro de cada run, se quiser que eu leia o trace completo — mas
    o `grep` acima + onde travou já basta pra calibração.
 
 ## Por que este run

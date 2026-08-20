@@ -134,6 +134,11 @@ def _drenar_orcamento_cli(
     )
 
 
+def _caminho_log_da_run(workspace_base: str | Path, run_id: str) -> Path:
+    """Retorna o log isolado da run, no mesmo layout do serviço."""
+    return Path(workspace_base) / run_id / "log.jsonl"
+
+
 def construir_cliente(cfg_modelos: dict | None, dir_registro: str | None,
                       log: LogEventos | None = None) -> ClienteModelo:
     """Monta o cliente de modelo para uso programático.
@@ -152,8 +157,8 @@ def construir_cliente(cfg_modelos: dict | None, dir_registro: str | None,
     return ClienteClaudeCLI(log=log)
 
 
-def main() -> int:
-    args = sys.argv[1:]
+def main(argv: list[str] | None = None) -> int:
+    args = list(sys.argv[1:] if argv is None else argv)
     if not args or "--help" in args or "-h" in args:
         print(__doc__)
         return 2
@@ -338,7 +343,7 @@ def main() -> int:
     entrada.update({"run_id": run_id, "thread_id": run_id})
 
     raiz = Path(__file__).parent.parent
-    log = LogEventos(raiz / "log.jsonl")
+    log = LogEventos(_caminho_log_da_run(workspace_base, run_id))
     repositorios_orcamento: dict[Moeda, RepositorioOrcamento] = {}
     dreno_emergencial_habilitado = False
     dreno_final_tentado = False

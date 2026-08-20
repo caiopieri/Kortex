@@ -66,7 +66,7 @@ Abre http://localhost:8378 e recarrega enquanto roda. O que **deve** acontecer:
 3. Cada um passa por `verifier:<id>` (Claude) → aprovado/reprovado (retry ≤ 3).
 4. `global_evaluator` (Claude) → `synthesizer` (Claude) → relatório final no stdout.
 
-No `log.jsonl` (raiz do repo) confirma a separação por papel — procura `executor.chamado`
+No `runs/<run_id>/log.jsonl` confirma a separação por papel — procura `executor.chamado`
 com `papel: pesquisador` (Codex) e os `portao.*` do verifier (Claude).
 
 ## Run 2 — fatia pequena do Logisti (custos por caminhão)
@@ -137,8 +137,8 @@ esgotamento (Corte B) ainda reroteia se o provedor pinado cair. Log: `modelo.pin
 
 São **dois servidores/visões separadas**, podem rodar ao mesmo tempo:
 
-- **Teu painel** (mapa orbital, lê `log.jsonl`): roda uma missão pela CLI
-  (`python3 -m motor ...` — é o que escreve o `log.jsonl`), depois
+- **Teu painel** (mapa orbital, lê os logs por run): roda uma missão pela CLI
+  (`python3 -m motor ...` — escreve `runs/<run_id>/log.jsonl`), depois
   `python3 motor_painel/painel.py` → http://localhost:8378.
 - **LangGraph Studio**: `langgraph dev` → abre no browser; as runs tu inicia
   DENTRO do Studio (painel Interact).
@@ -177,5 +177,5 @@ Um PIN explícito teu no verifier vence o guard (tua decisão consciente).
 git add -A && git commit -m "feat: ClienteCodex (executor) + config tipo:codex + specs do golden run (74/74)"
 ```
 
-(O `log.jsonl` da raiz é o log VIVO — não commitar; a amostra do painel é
+(O `log.jsonl` da raiz é legado, somente leitura — não commitar; a amostra do painel é
 `exemplos/log-amostra.jsonl`.)

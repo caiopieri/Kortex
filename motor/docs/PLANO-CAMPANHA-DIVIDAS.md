@@ -62,9 +62,10 @@ de escolher em silêncio — é o que rende as melhores contribuições dele.
    é mudar a suíte, e não parece que é.
 
 **Regra de medição (custou um dia inteiro para ser descoberta):** rodar a suíte completa
-**UM DE CADA VEZ por checkout**. `motor/__main__.py` abre o `log.jsonl` da raiz sob flock
-exclusivo; duas suítes — ou dois agentes no mesmo repositório — se contaminam e produzem
-conjuntos de falha diferentes. Handshake herdado, literal: *"antes de rodar a suíte
+**UM DE CADA VEZ por checkout**. Cada `main()` abre
+`<workspace>/<run_id>/log.jsonl` sob flock exclusivo; o `log.jsonl` da raiz é legado somente
+leitura. SQLite/checkpointer e fixtures compartilhados ainda podem contaminar duas suítes
+ou dois agentes no mesmo checkout. Handshake herdado, literal: *"antes de rodar a suíte
 completa, me avise e espere. Eu faço o mesmo."* Se o gate der 7 falhas, desconfiar disso
 ANTES de desconfiar de regressão.
 
@@ -459,9 +460,10 @@ porque aqui o sistema parece funcionar.
       até hoje carrega a ressalva de que Docker Desktop no macOS não é o runner que a spec
       exige.** *Bloqueado por:* Fase 0 (VPS ARM na Oracle; cadastro deu problema).
       Runbook pronto em `RUNBOOK-VPS-FASE-0.md`; ARM já foi provado antes de existir VPS.
-- [ ] **Dívida 11 — CLI não roda duas missões.** Correção óbvia (log por run) quebra
-      `motor_painel/painel.py`, que lê `BASE.parent / "log.jsonl"` hardcoded, e a branch
-      atual é a da refatoração do painel. **Decisão do fundador, não refactor local.**
+- [x] **Dívida 11 — CLI não roda duas missões.** Fechada pela separação de
+      `workspace/<run_id>/log.jsonl` e pela descoberta de N logs no painel. O caminho com
+      `--caixa` ainda compartilha `motor.db` e reproduziu `database is locked`; essa contenção
+      fica registrada separadamente na issue #21, sem enfraquecer o flock dos logs.
 - [ ] **Dívida 3 — backend autoritativo do curador.** U3/K4 falham fechado sem
       `RepositorioCertificacoes` real. É infraestrutura, não protocolo.
 - [ ] **Dívida 2 — duas rotas certificadas de verdade** e dimensionar o teto para a reserva

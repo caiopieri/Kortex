@@ -22,8 +22,10 @@ from motor.eventos_schema import valido
 
 PORTA = 8378
 BASE = Path(__file__).parent.resolve()
-# log.jsonl fica na raiz do repo (um nível acima de motor_painel/)
+# log.jsonl na raiz é mantido apenas como legado de leitura (um nível acima de
+# motor_painel/); missões novas ficam em RUNS_PATH/<run_id>/log.jsonl.
 LOG_PATH = BASE.parent / "log.jsonl"
+RUNS_PATH = Path(os.environ.get("MOTOR_WORKSPACE", "runs"))
 DB_PATH = BASE.parent / "motor.db"
 APP_DIST = BASE / "app" / "dist"
 
@@ -214,6 +216,89 @@ def obter_runs(eventos: list[dict]) -> list[dict]:
         })
         
     return runs_metadata
+
+
+def _resumo_run(run_id: str, eventos: list[dict]) -> dict:
+    """Deriva um resumo de um único arquivo, cuja pasta já identifica a run."""
+    resumo = obter_runs(eventos)
+    if resumo:
+        resultado = dict(resumo[0])
+    else:
+        resultado = {
+            "objetivo": None,
+            "estado": "ativa",
+            "inicio": 0.0,
+            "custo": None,
+            "n_eventos": 0,
+        }
+    resultado.update({"id": run_id, "n_eventos": len(eventos)})
+    return resultado
+
+
+def _registros_legado(eventos: list[dict]) -> list[dict]:
+    """Conserva a projeção histórica do arquivo raiz, sem juntar runs."""
+    registros: list[dict] = []
+    for grupo in agrupar_eventos_por_run(eventos):
+        resumo = obter_runs(grupo)
+        if resumo:
+            registros.append({"run": resumo[0], "eventos": grupo})
+    return registros
+
+
+def _runs_do_workspace(runs_path: str | Path, legado: str | Path | None = None) -> list[dict]:
+    """Lê cada ``<workspace>/<run_id>/log.jsonl`` sem juntar sequências distintas."""
+    raiz = Path(runs_path)
+    registros: list[dict] = []
+    if raiz.is_dir() and not raiz.is_symlink():
+        for diretorio in sorted(raiz.iterdir(), key=lambda item: item.name):
+            if (not diretorio.is_dir() or diretorio.is_symlink()
+                    or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", diretorio.name)
+                    or ".." in diretorio.name):
+                continue
+            caminho = diretorio / "log.jsonl"
+            if caminho.is_symlink() or not caminho.is_file():
+                continue
+            try:
+                eventos = parse_eventos(caminho)
+                resumo = _resumo_run(diretorio.name, eventos)
+                registros.append({"run": resumo, "eventos": eventos})
+            except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as erro:
+                registros.append({
+                    "run": {
+                        "id": diretorio.name,
+                        "estado": "log_invalido",
+                        "objetivo": None,
+                        "inicio": 0.0,
+                        "custo": None,
+                        "n_eventos": 0,
+                        "erro": str(erro),
+                    },
+                    "eventos": [],
+                })
+
+    legado_path = Path(legado) if legado is not None else None
+    if legado_path is not None and legado_path.is_file() and not legado_path.is_symlink():
+        try:
+            eventos = parse_eventos(legado_path)
+            ids_workspace = {registro["run"]["id"] for registro in registros}
+            for registro in _registros_legado(eventos):
+                if registro["run"]["id"] in ids_workspace:
+                    registro["run"]["id"] = f"legacy:{registro['run']['id']}"
+                registros.append(registro)
+        except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as erro:
+            registros.append({
+                "run": {
+                    "id": "legacy-root",
+                    "estado": "log_invalido",
+                    "objetivo": None,
+                    "inicio": 0.0,
+                    "custo": None,
+                    "n_eventos": 0,
+                    "erro": str(erro),
+                },
+                "eventos": [],
+            })
+    return registros
 
 
 def obter_gates_pendentes(eventos: list[dict]) -> list[dict]:
@@ -514,6 +599,7 @@ class ReaproveitavelTCPServer(socketserver.TCPServer):
 
 class Handler(http.server.BaseHTTPRequestHandler):
     log_path: Path = LOG_PATH  # substituível em testes
+    runs_path: Path = RUNS_PATH  # substituível em testes
     db_path: Path = DB_PATH    # substituível em testes
     despachos_dir: Path = BASE.parent / "runs" / "despachos"  # substituível em testes
 
@@ -559,37 +645,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._json(dados_painel(self.log_path))
             
         if path == "/dados/runs":
-            eventos = parse_eventos(self.log_path)
-            runs = obter_runs(eventos)
-            return self._json(runs)
+            registros = _runs_do_workspace(self.runs_path, self.log_path)
+            return self._json([registro["run"] for registro in registros])
             
         if path.startswith("/dados/runs/"):
             run_id = path.split("/")[-1]
-            eventos = parse_eventos(self.log_path)
-            runs = obter_runs(eventos)
-            run = next((r for r in runs if r["id"] == run_id), None)
-            if not run:
+            registros = _runs_do_workspace(self.runs_path, self.log_path)
+            registro = next((item for item in registros if item["run"]["id"] == run_id), None)
+            if registro is None:
                 self.send_response(404)
                 self.end_headers()
                 self.wfile.write(b"Run nao encontrada")
                 return
-            
-            # Filtra eventos desta run
-            runs_events = agrupar_eventos_por_run(eventos)
-            run_evs = []
-            for idx, r_evs in enumerate(runs_events, start=1):
-                rid = None
-                for ev in r_evs:
-                    if "missao" in ev:
-                        rid = ev["missao"]
-                    elif "run" in ev:
-                        rid = ev["run"]
-                if not rid:
-                    rid = f"run_{idx}"
-                if rid == run_id:
-                    run_evs = r_evs
-                    break
-                    
+            run = registro["run"]
+            run_evs = registro["eventos"]
             # Coleta gate-related events da run
             gates = [ev for ev in run_evs if ev.get("evento") in ("escalado", "decisao.pendente", "decisao.fundador", "decisao.timeout") or ev.get("evento", "").startswith("portao.")]
             
@@ -919,9 +988,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.wfile.write(b"Endpoint nao encontrado")
 
 
-def serve(porta: int = PORTA, log_path: Path = LOG_PATH, db_path: Path = DB_PATH):
+def serve(porta: int = PORTA, log_path: Path = LOG_PATH, db_path: Path = DB_PATH,
+          runs_path: Path = RUNS_PATH):
     Handler.log_path = log_path
     Handler.db_path = db_path
+    Handler.runs_path = runs_path
     with ReaproveitavelTCPServer(("", porta), Handler) as s:
         print(f"Painel v0.5: http://localhost:{porta}", flush=True)
         s.serve_forever()

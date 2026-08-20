@@ -136,9 +136,10 @@ A fase só fecha com os três:
    Desktop **não é** o runner que a spec exige. Toda evidência de execução produzida até
    hoje tem essa ressalva. A VPS a remove.
 
-Rodar suíte completa **um de cada vez**: `main()` escreve em `log.jsonl` na raiz do repo
-sob flock exclusivo, então duas suítes simultâneas se contaminam e produzem conjuntos de
-falha diferentes. Isso é dívida aberta (ver Fase 2).
+Rodar suíte completa **um de cada vez**: cada `main()` escreve em
+`<workspace>/<run_id>/log.jsonl` sob flock exclusivo e o `log.jsonl` da raiz é legado,
+somente leitura. Ainda há SQLite/checkpointer e fixtures compartilhados que podem
+contender entre suítes, então medição concorrente continua sem valor como evidência.
 
 ---
 
@@ -149,10 +150,10 @@ falha diferentes. Isso é dívida aberta (ver Fase 2).
   GLM, Gemini free e Alibaba não rodam hoje. Cadastrar preço zero seria pior que o
   bloqueio: silencia a única contenção que o motor tem. Rota grátis precisa ser governada
   por **cota e disponibilidade**, não por BRL.
-- **Fase 2 — serviço, não CLI.** Duas missões de CLI não coexistem (flock no `log.jsonl`
-  da raiz). `GerenciadorJobs` já usa log por job e é o entrypoint certo para 24/7. Mover
-  o log da CLI quebra `motor_painel/painel.py`, que lê `BASE.parent / "log.jsonl"`
-  hardcoded — decisão do fundador, e a branch atual é a da refatoração do painel.
+- **Fase 2 — serviço e CLI convergentes.** Cada missão de CLI usa
+  `workspace_base/<run_id>/log.jsonl`, o mesmo layout que `GerenciadorJobs` já usa por job.
+  O painel descobre esses arquivos no workspace; `motor/log.jsonl` permanece como legado
+  somente leitura.
 - **Fase 3 — calibração de provedor por evidência.** Mesma missão em Claude, grátis-bom e
   grátis-fraco, comparada por portão de processo e AST. É o melhor uso do crédito: paralelo,
   faminto de CPU, e o produto é uma tabela permanente.

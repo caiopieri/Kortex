@@ -9,8 +9,8 @@
 
 ## Por quê (amarra à arquitetura)
 
-O painel hoje (`motor/motor_painel/painel.py`, v0.5) só serve um mapa orbital de UM log.jsonl
-fixo — `/` (painel 2D força-dirigida antigo), `/dados` (nós/arestas/eventos derivados do log) e
+O painel começou como um mapa orbital de UM log.jsonl fixo; a issue #5 agora entrega a leitura
+de múltiplos logs por run. `/` (painel 2D força-dirigida antigo), `/dados` (nós/arestas/eventos derivados do log) e
 `/grafo3d` (grafo 3D, ver `motor/handoffs/HANDOFF-CODEX-grafo3d-painel.md`, precedente direto de
 como plugar vista nova sobre `/dados` sem tocar o motor). O brief de design (§8.1, §8.2, §8.3a,
 §8.5) pede uma interface que **audita** essa telemetria em vez de o Caio operar cru: board de
@@ -22,8 +22,9 @@ na única frente que escreve (F3), devolvem uma decisão pelo mesmo caminho que 
 
 ## Achado que muda o desenho (leia antes das frentes)
 
-O painel atual (`motor_painel/painel.py`) é **single-run**: `LOG_PATH = BASE.parent / "log.jsonl"`,
-um arquivo fixo, sem noção de `job_id`. Mas o motor real roda multi-run — cada missão despachada
+O painel atual (`motor_painel/painel.py`) é **multi-run** para o board/endpoints de runs:
+`MOTOR_WORKSPACE/<job_id>/log.jsonl` é a fonte principal e o `LOG_PATH` raiz é legado somente
+leitura. O motor real roda multi-run — cada missão despachada
 por `GerenciadorJobs.iniciar()` grava seu próprio log em `workspace_base/<job_id>/log.jsonl`
 (`motor/motor/servico.py:277`, `_log_path`). Board de missões (F1) e Caixa do Fundador (F3) só
 fazem sentido **multi-run** (mais de uma missão em estágios diferentes ao mesmo tempo). Isso exige
@@ -191,8 +192,9 @@ HTTP nas rotas novas, e checar o corpo/JSON — nunca "abrir no navegador e olha
 **Prova:** que as 4 telas do P0 do brief (§8.1 fila de decisão / §8.3a board / §8.5 grafo / editor
 mínimo) podem ser desenhadas **sem inventar dado** — 100% derivadas de eventos já emitidos pelo
 motor e de mecanismos de escrita já existentes (`responder_gate`, `WorkflowSpec.model_validate`).
-Prova que "board" e "grafo 2D" funcionam sobre múltiplos runs reais, não só o log single-run do
-painel v0.5.
+Prova que "board" e "grafo 2D" funcionam sobre múltiplos runs reais, não só o log legado do
+painel v0.5. A contenção do checkpointer SQLite quando duas missões usam `--caixa` continua
+fora desta entrega e está registrada na issue #21.
 
 **NÃO prova:** não é a interface completa do brief — faltam drawer com chat de nó (MICRO, §7.3),
 timeline com filtro por tipo (§8.5), "Ideias" populado (não há evento de backlog cru no schema),
