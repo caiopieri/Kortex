@@ -10,7 +10,7 @@
 > **Não registre progresso no `AGENTS.md`.** Ele guarda invariantes que quase nunca mudam e
 > só aponta para cá. Documento desatualizado mente — e este mente mais rápido que os outros.
 
-**Última verificação:** 2026-08-19 · `main` = `b2840e2`
+**Última verificação:** 2026-08-20 · `main` = `e2c85e2`
 
 ---
 
@@ -134,7 +134,26 @@ menor do que a lista sugere.
       dentro dela" (`DECISAO-modos-do-produto-e-colapso.md` §2)
 - [ ] modo aplicação: interface própria sobre roteiro certificado (idem §3)
 - [ ] duas telas do mesmo painel desenham grafos diferentes da mesma run (issue #15)
-- [ ] `npm ci` quebrado; builds não são reproduzíveis entre máquinas (issue #16)
+- [x] **o painel não fabrica mais dado** (issue #23, 2026-08-20). `CatalogoWorkflows` devolvia
+      cinco workflows inventados quando o catálogo vinha vazio, **três marcados
+      `certificado`**, com versão, contagem de nós e data. Removido, e a tela renomeada para
+      **Rotas do registro**, que é o que ela sempre mostrou — `exemplos/registro/*.md` com
+      `tipo: rota`, não templates. Irmãos varridos e corrigidos junto: custo fabricado
+      (`"US$ 0.20 – 0.60"`) sob o rótulo *"custo estimado · run"* logo acima da caixa
+      "consome créditos" em `NovaMissao`, e o `~7 nós` da mesma tela — a spec despachada
+      declara **1** subagente em qualquer rota; duas "ideias" semeadas no `Board`; o nó
+      `{id:'planner'}` inventado pelo `Grafo2D` quando o grafo está vazio;
+      `versao: "1.0.0"` preenchida pelo `obter_catalogo()` para arquivos que não declaram
+      versão; e o bucket `'—'` do `Datahouse` que virava *"Runs produtoras: 1"* — o evento
+      `artefato.atualizou` **não carrega run** (medido: os 47 eventos têm só
+      `{t, seq, evento, nome, tipo, subagente, caminho}`)
+- [x] **a superfície declara o que o ledger não explica** (issue #22, 2026-08-20). Novo
+      `/dados/orfaos` conta o que existe em disco e não tem evento, e o `Datahouse` mostra o
+      número. **Não reconstrói**: o órfão aparece como caminho e nada mais — sem run, tipo
+      nem data, porque o diretório sugere os três e nenhum foi registrado
+- [x] `npm ci` **volta a funcionar** (issue #16) — faltavam 23 linhas de `@emnapi/core@1.11.3`
+      no `package-lock.json`; `npm install` as regenerou e o `npm ci` passa. Correção
+      incidental, não pedida: separar do resto se atrapalhar a revisão
 
 ### E. Curador e flywheel
 - [x] observador read-only de perfis de aptidão a partir dos logs
@@ -333,6 +352,23 @@ Reproduza antes de citar. Todos abaixo foram verificados em 2026-08-19.
   `providerConnections` carrega `accessToken`, `refreshToken` e `apiKey`. Reconciliar Mac
   (22 conexões) com runner (5) **não é operação benigna de config** — trate como
   movimentação de segredo.
+- **O ledger não era durável, e o quanto foi medido (2026-08-20, issue #22).** No checkout
+  de produção: **29 workspaces de run em disco, 26 explicados** por log próprio ou por evento;
+  **49 artefatos de produto, 40 com `artefato.atualizou`** — 9 órfãos. Mais 109 arquivos de
+  ferramenta (`__pycache__`, `.pytest_cache`) que **não** são artefato e inflariam o número.
+  Consequência para qualquer análise sobre o corpus: **a distribuição de `tipo` é sobre o que
+  sobrou, não sobre o que houve.** Duas armadilhas de medição que custaram caro e ficam
+  registradas: (a) nem toda pasta sob `runs/` é uma run — `caixa`, `despachos`, `orcamento` e
+  `lift-docs-*` moram lá e contá-las levava de 3 para 8 "runs órfãs"; (b) o `caminho` do evento
+  é **absoluto** e aponta para o checkout onde a run rodou, então comparar por caminho absoluto
+  faz **todo** artefato virar órfão noutra máquina. A identidade estável é
+  `<run_id>/artefatos/<resto>`.
+- **`artefato.atualizou` não carrega run.** Os 47 eventos do ledger de produção têm exatamente
+  `{t, seq, evento, nome, tipo, subagente, caminho}`. Nenhuma tela consegue dizer qual run
+  produziu qual artefato — o `Datahouse` afirmava "Runs produtoras: 1" agregando tudo num
+  bucket `'—'`. Some junto com o `hash`, que é calculado e descartado (§4).
+- **`t` do envelope é relativo, não epoch.** Medido de 0.028 a 5252.231 no log de produção:
+  não dá para datar evento nenhum. Tratar como duração desde o início da run, nunca como hora.
 - **Snapshot de rotas grátis vencido** (117h contra limite de 24h). O motor recusa com
   *"adiantar só a data não prova gratuidade nem disponibilidade"*. Disponibilidade (HTTP 200)
   **não** é gratuidade — remedir exige olhar consumo no provedor.

@@ -72,10 +72,11 @@ export default function Board() {
   const { data: gates, error: e2 } = usePoll(getGates);
   const { data: fullData } = usePoll(fetchDados);
   const { data: missaoAtiva } = usePoll(getMissaoAtiva);
-  const [ideas, setIdeas] = useState([
-    { id: '_i1', title: 'Nota fiscal PDF → JSON', note: 'extrair itens + validar schema · rota forja', ev: 'candidato · sem run', col: 'ideias' },
-    { id: '_i2', title: 'Landing de produto', note: 'rota construção · 1 página estática', ev: 'candidato · sem run', col: 'ideias' },
-  ]);
+  /* Comecava semeado com duas ideias inventadas ("Nota fiscal PDF -> JSON",
+     "Landing de produto"), que pareciam backlog real e nao eram de ninguem
+     (issue #23). Nao ha onde guardar ideia no Kortex: nao existe tabela, nem
+     evento, nem endpoint. Entao a coluna nasce vazia e declara o que ela e. */
+  const [ideas, setIdeas] = useState([]);
 
   const error = e1 || e2;
   const isLoading = !runs || !gates;
@@ -173,7 +174,11 @@ export default function Board() {
                 <BCard key={card.id} card={card} col={col.key} />
               ))}
               {col.empty && (
-                <div className="mono" style={{ fontSize: 10, color: 'var(--text3)', padding: 10, border: '1px dashed var(--border)', borderRadius: 2, textAlign: 'center' }}>vazio</div>
+                <div className="mono" style={{ fontSize: 10, color: 'var(--text3)', padding: 10, border: '1px dashed var(--border)', borderRadius: 2, textAlign: 'center', lineHeight: 1.6 }}>
+                  {col.key === 'ideias'
+                    ? 'sem backlog · o Kortex não guarda ideia em lugar nenhum'
+                    : 'vazio'}
+                </div>
               )}
             </div>
           </div>

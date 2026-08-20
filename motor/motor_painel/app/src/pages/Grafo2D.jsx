@@ -543,8 +543,11 @@ export default function Grafo2D() {
   });
 
   // Derivação do nó atualmente selecionado no Drawer
-  const selectedNodeBruto = nos_brutos.find(n => n.id === selectedNodeId) || nos_brutos[0] || { id: 'planner', tipo: 'executor' };
-  const selectedNodeDetails = derivarDetalhesNo(selectedNodeBruto, eventos);
+  /* Sem no no grafo, o drawer nao inventa um: antes caia num `{id:'planner',
+     tipo:'executor'}` literal e o painel exibia um executor chamado "planner"
+     que nunca existiu no log (issue #23). */
+  const selectedNodeBruto = nos_brutos.find(n => n.id === selectedNodeId) || nos_brutos[0] || null;
+  const selectedNodeDetails = selectedNodeBruto ? derivarDetalhesNo(selectedNodeBruto, eventos) : null;
 
   // Derivação do tipo do evento para filtragem na Timeline
   const getTipoEvento = (ev) => {

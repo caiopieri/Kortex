@@ -476,17 +476,10 @@ def obter_conexoes() -> list[dict]:
 
 
 def obter_catalogo() -> list[dict]:
-    caminhos_busca = [
-        BASE.parent / "Registry",
-        BASE.parent / "registry",
-        BASE.parent / "exemplos" / "registro"
-    ]
-    pasta_reg = None
-    for p in caminhos_busca:
-        if p.exists() and p.is_dir():
-            pasta_reg = p
-            break
-            
+    # Usa `_pasta_registro()` em vez de repetir a busca: a lista local aqui
+    # divergia dela (nao continha "registro"), entao duas funcoes do mesmo
+    # arquivo respondiam diferente para "onde fica o registry".
+    pasta_reg = _pasta_registro()
     if not pasta_reg:
         return []
         
@@ -535,11 +528,116 @@ def obter_catalogo() -> list[dict]:
                 "nome": dados.get("nome", caminho.stem),
                 "descricao": corpo,
                 "subagentes": subagentes,
-                "versao": dados.get("versao", "1.0.0")
+                # `versao` ausente sai None, nao "1.0.0". Os arquivos do
+                # registro nao declaram versao; inventar uma faz a tela afirmar
+                # um fato de versionamento que ninguem escreveu (issue #23).
+                "versao": dados.get("versao") or None,
             })
         except Exception:
             pass
     return catalogo
+
+
+# ---------------------------------------------------------------------------
+# Órfãos — o que existe em disco e o ledger não explica
+# ---------------------------------------------------------------------------
+
+# Debris de ferramenta que cai dentro de artefatos/ e não é produto da fábrica.
+# Contá-los como artefato infla o número e o torna inútil: numa medição real
+# eram 109 arquivos de ferramenta contra 49 de produto. O filtro fica aqui, no
+# claro, e a tela declara que ele existe — em vez de ficar escondido no olho de
+# quem lê o diretório.
+_DEBRIS = ("__pycache__", ".pytest_cache", ".git", ".venv", "node_modules")
+
+
+def _chave_de_artefato(caminho: str | Path) -> tuple[str, str] | None:
+    """Identidade estável de um artefato: ``(run_id, resto)`` relativo a ``artefatos/``.
+
+    NÃO comparar por caminho absoluto. O ``caminho`` gravado no evento é
+    absoluto e aponta para o checkout onde a run rodou; o mesmo repositório
+    clonado noutro lugar faria todo artefato virar órfão de uma vez. A parte
+    estável é o trecho a partir de ``<run_id>/artefatos/``.
+    """
+    partes = Path(caminho).parts
+    if "artefatos" not in partes:
+        return None
+    i = partes.index("artefatos")
+    if i == 0:
+        return None
+    return (partes[i - 1], "/".join(partes[i + 1:]))
+
+
+def orfaos_de_artefato(eventos: list[dict], runs_path: str | Path) -> dict:
+    """Conta o que o disco tem e o ledger não explica. NÃO inventa evento.
+
+    Motivo (issue #22): o ledger não era durável. Numa medição sobre o checkout
+    de produção, 34 runs em disco e o log explicava 26; 49 artefatos de produto
+    e 40 com evento. Uma superfície que lista só o que o ledger explica é
+    silenciosamente incompleta — e "completo sem procedência" seria pior.
+    Então: mostra-se o que o ledger explica, e declara-se o resto **como resto**.
+
+    O órfão sai com o caminho e nada mais. Não recebe run, tipo nem tempo
+    derivados do diretório: existir em disco não é existir no ledger, e inferir
+    o evento a partir do arquivo é exatamente a reconstrução que a regra
+    canônica proíbe.
+    """
+    raiz = Path(runs_path)
+    com_evento = {
+        chave
+        for ev in eventos
+        if ev.get("evento") == "artefato.atualizou" and ev.get("caminho")
+        for chave in [_chave_de_artefato(ev["caminho"])]
+        if chave is not None
+    }
+
+    orfaos: list[str] = []
+    em_disco = 0
+    debris = 0
+    runs_em_disco: set[str] = set()
+    runs_com_log: set[str] = set()
+
+    if raiz.is_dir() and not raiz.is_symlink():
+        for diretorio in sorted(raiz.iterdir(), key=lambda item: item.name):
+            if not diretorio.is_dir() or diretorio.is_symlink():
+                continue
+            tem_log = (diretorio / "log.jsonl").is_file()
+            tem_artefatos = (diretorio / "artefatos").is_dir()
+            # Nem toda pasta sob runs/ e uma run. Medido em producao: `caixa`,
+            # `despachos`, `orcamento` e `lift-docs-*` moram ali e sao outra
+            # coisa. Chama-las de "run orfa" seria inventar run a partir de nome
+            # de diretorio — o espelho exato do defeito que esta funcao existe
+            # para corrigir. Sem log e sem artefatos/, nao ha evidencia de que
+            # foi uma run, entao nao se afirma que foi.
+            if not tem_log and not tem_artefatos:
+                continue
+            runs_em_disco.add(diretorio.name)
+            if tem_log:
+                runs_com_log.add(diretorio.name)
+            for arquivo in sorted(diretorio.glob("artefatos/**/*")):
+                if not arquivo.is_file() or arquivo.is_symlink():
+                    continue
+                if any(parte in _DEBRIS for parte in arquivo.parts):
+                    debris += 1
+                    continue
+                em_disco += 1
+                chave = _chave_de_artefato(arquivo)
+                if chave is not None and chave not in com_evento:
+                    orfaos.append(f"{chave[0]}/artefatos/{chave[1]}")
+
+    runs_explicadas = runs_em_disco & (runs_com_log | {chave[0] for chave in com_evento})
+    return {
+        "artefatos_em_disco": em_disco,
+        "artefatos_com_evento": em_disco - len(orfaos),
+        "artefatos_orfaos": len(orfaos),
+        "arquivos_de_ferramenta_ignorados": debris,
+        "runs_em_disco": len(runs_em_disco),
+        "runs_explicadas": len(runs_explicadas),
+        "runs_orfas": sorted(runs_em_disco - runs_explicadas),
+        # Lista truncada: o número acima é o fato, esta é só a amostra que cabe
+        # na tela. Truncar em silêncio faria a tela mentir por omissão.
+        "amostra": sorted(orfaos)[:50],
+        "amostra_truncada": len(orfaos) > 50,
+    }
 
 
 def _pid_vivo(pid: int) -> bool:
@@ -774,6 +872,23 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path == "/dados/catalogo":
             catalogo = obter_catalogo()
             return self._json(catalogo)
+
+        if path == "/dados/orfaos":
+            # Esta e a rota que reporta ledger incompleto, entao ela precisa
+            # sobreviver a um ledger ilegivel — se ela morresse junto, o caso
+            # pior ficaria invisivel. `_runs_do_workspace` ja tolera log por
+            # log; o legado da raiz e tolerado aqui, e a falha vai declarada.
+            eventos: list[dict] = []
+            legado_ilegivel = None
+            try:
+                eventos = parse_eventos(self.log_path)
+            except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as erro:
+                legado_ilegivel = str(erro)
+            for registro in _runs_do_workspace(self.runs_path):
+                eventos = eventos + registro["eventos"]
+            resumo = orfaos_de_artefato(eventos, self.runs_path)
+            resumo["legado_ilegivel"] = legado_ilegivel
+            return self._json(resumo)
 
         if path == "/dados/inventario":
             return self._json(obter_inventario())
