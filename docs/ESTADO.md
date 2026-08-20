@@ -10,7 +10,7 @@
 > **Não registre progresso no `AGENTS.md`.** Ele guarda invariantes que quase nunca mudam e
 > só aponta para cá. Documento desatualizado mente — e este mente mais rápido que os outros.
 
-**Última verificação:** 2026-08-19 · `main` = `70ed3ab` (mudanças da issue #5 ainda não commitadas)
+**Última verificação:** 2026-08-20 · `main` = `0c843ef` (mudanças da issue #5 ainda não commitadas)
 
 ---
 
@@ -95,6 +95,11 @@ menor do que a lista sugere.
 - [x] missão que produz **um programa**, provado por uso real da CLI e não por import
       (`motor/exemplos/cli-tarefas.json`)
 - [ ] portão que exija piso de cobertura — hoje suíte magra passa igual à robusta
+- [ ] **executor com ferramenta.** O Kortex NÃO é harness: zero `tool_call` no motor, o
+      executor devolve `-> str`. Um subagente não lê arquivo, não roda código, não itera.
+      Decidido alugar o laço e ser dono dos invariantes
+      (`docs/DECISAO-harness-e-costura-de-execucao.md`), com experimento medido em
+      2026-08-19 provando que os três invariantes cabem nos pontos de interceptação do DSH.
 
 ### C. Contenção monetária
 - [x] reserva conservadora antes de qualquer efeito; custo desconhecido reprova fechado
