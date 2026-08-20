@@ -1,19 +1,28 @@
 import { useState, useMemo } from 'react';
 import { postMissao, getMissaoAtiva, usePoll } from '../api';
 
+/* O `n` (7, 6, 4, 4 "nos") saiu daqui: era numero inventado, e inventado ao
+   contrario do fato — a spec montada por esta tela declara UM subagente em
+   qualquer rota. O resumo agora conta a spec de verdade (issue #23). */
 const ROTAS = {
-  pesquisa:    { label: 'pesquisa', n: 7 },
-  forja:       { label: 'forja · software', n: 6 },
-  construcao:  { label: 'construção', n: 4 },
-  hardware:    { label: 'hardware', n: 4 },
+  pesquisa:    { label: 'pesquisa' },
+  forja:       { label: 'forja · software' },
+  construcao:  { label: 'construção' },
+  hardware:    { label: 'hardware' },
 };
 
+/* O campo `custo` ("US$ 0.20 - 0.60" etc) saiu de todos os presets. Ele era
+   string escrita a mao e aparecia sob o rotulo "custo estimado - run",
+   imediatamente acima da caixa "entendo que isto executa o motor e consome
+   creditos". Numero inventado no exato ponto em que o operador autoriza gasto
+   e a pior forma desse defeito, e a spec do painel ja proibia custo simulado.
+   O que a tela pode afirmar e o TETO declarado na spec, que ela mesma monta. */
 const PRESETS = {
-  'free-escalada':    { map: [['planner', 'kimi-k2.6'], ['exec simples', 'llama-3.3-70b'], ['exec media', 'kimi-k2.6'], ['exec complexa', 'codex/gpt-5.4'], ['verifier', 'codex/gpt-5.4']], custo: 'US$ 0.20 – 0.60', nota: 'Free primeiro; sobe de tier só quando reprova.' },
-  codex:              { map: [['todos os papéis', 'codex/gpt-5.4'], ['verifier', 'codex/gpt-5.4']], custo: 'US$ 1.20 – 2.40', nota: 'Confiável e estrito; custo médio.' },
-  claude:             { map: [['executores', 'codex/gpt-5.4'], ['verifier/topo', 'claude']], custo: 'US$ 2.50 – 4.00', nota: 'Topo no verificador.' },
-  construcao:         { map: [['planner', 'kimi-k2.6'], ['redator', 'deepseek-v4'], ['verifier', 'codex/gpt-5.4']], custo: 'US$ 0.40 – 1.00', nota: 'Rota de construção/documentos.' },
-  'pesquisa-sintese': { map: [['pesquisador', 'llama-3.3 → kimi'], ['evaluator', 'codex/gpt-5.4'], ['synthesizer', 'codex/gpt-5.4']], custo: 'US$ 0.30 – 0.80', nota: 'Fan-out de pesquisa com síntese final.' },
+  'free-escalada':    { map: [['planner', 'kimi-k2.6'], ['exec simples', 'llama-3.3-70b'], ['exec media', 'kimi-k2.6'], ['exec complexa', 'codex/gpt-5.4'], ['verifier', 'codex/gpt-5.4']], nota: 'Free primeiro; sobe de tier só quando reprova.' },
+  codex:              { map: [['todos os papéis', 'codex/gpt-5.4'], ['verifier', 'codex/gpt-5.4']], nota: 'Confiável e estrito.' },
+  claude:             { map: [['executores', 'codex/gpt-5.4'], ['verifier/topo', 'claude']], nota: 'Topo no verificador.' },
+  construcao:         { map: [['planner', 'kimi-k2.6'], ['redator', 'deepseek-v4'], ['verifier', 'codex/gpt-5.4']], nota: 'Rota de construção/documentos.' },
+  'pesquisa-sintese': { map: [['pesquisador', 'llama-3.3 → kimi'], ['evaluator', 'codex/gpt-5.4'], ['synthesizer', 'codex/gpt-5.4']], nota: 'Fan-out de pesquisa com síntese final.' },
 };
 
 const PAPEL_POR_ROTA = { pesquisa: 'pesquisador', forja: 'executor', construcao: 'redator', hardware: 'executor' };
@@ -102,14 +111,15 @@ export default function NovaMissao() {
   const resumo = useMemo(() => ({
     rota: R.label,
     preset,
-    custo: P.custo,
     map: P.map.map(m => ({ k: m[0], v: m[1] })),
     modo: modo === 'auto' ? 'auto (--auto, sem parar)' : 'supervisionado',
     escalada: escalada ? 'ligada · sobe tier ao reprovar' : 'desligada',
     recon: reconciliacao ? `ligada · teto ${teto} rodadas` : 'desligada',
     gate: gateCobertura ? 'humano' : 'sem gate',
-    nodes: `~${R.n}`,
-  }), [rota, preset, modo, escalada, reconciliacao, gateCobertura, teto, R, P]);
+    /* Contado da spec que vai ser despachada, nao estimado. */
+    nodes: String(spec.subagentes.length),
+    teto: spec.restricoes.teto_custo,
+  }), [preset, modo, escalada, reconciliacao, gateCobertura, teto, R, P, spec]);
 
   const handleConfirm = async () => {
     if (!aceite || enviando || ativa) return;
@@ -257,12 +267,17 @@ export default function NovaMissao() {
             <div className="nm-rsum"><span className="nm-k">escalada</span><span className="nm-v">{resumo.escalada}</span></div>
             <div className="nm-rsum"><span className="nm-k">reconciliação</span><span className="nm-v">{resumo.recon}</span></div>
             <div className="nm-rsum"><span className="nm-k">gate cobertura</span><span className="nm-v">{resumo.gate}</span></div>
-            <div className="nm-rsum"><span className="nm-k">nós estimados</span><span className="nm-v">{resumo.nodes}</span></div>
+            <div className="nm-rsum"><span className="nm-k">subagentes na spec</span><span className="nm-v">{resumo.nodes}</span></div>
           </div>
           <div style={{ margin: '16px 0 12px', padding: 12, border: '1px solid var(--border)', borderRadius: 2, background: 'var(--surface)' }}>
-            <span className="eyebrow" style={{ fontSize: 9 }}>custo estimado · run</span>
-            <div className="mono" style={{ fontSize: 18, fontWeight: 600, marginTop: 5, color: 'var(--text)' }}>{resumo.custo}</div>
-            <span className="mono" style={{ fontSize: 9.5, color: 'var(--text3)' }}>escolhas custam tempo e dinheiro</span>
+            <span className="eyebrow" style={{ fontSize: 9 }}>teto declarado na spec</span>
+            <div className="mono" style={{ fontSize: 18, fontWeight: 600, marginTop: 5, color: 'var(--text)' }}>
+              US$ {resumo.teto.toFixed(2)}
+            </div>
+            <span className="mono" style={{ fontSize: 9.5, color: 'var(--text3)', lineHeight: 1.5, display: 'block', marginTop: 4 }}>
+              teto, não estimativa · o painel não estima custo. O motor reserva de forma
+              conservadora antes de qualquer efeito e reprova fechado se o custo for desconhecido.
+            </span>
           </div>
           <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 10, cursor: 'pointer' }}>
             <input type="checkbox" checked={aceite} onChange={e => setAceite(e.target.checked)} style={{ marginTop: 2 }} />

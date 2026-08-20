@@ -20,7 +20,7 @@ const NAV = [
       { label: 'Canvas', path: '/canvas' },
       { label: 'Grafo 2D', path: '/grafo' },
       { label: 'Grafo 3D', path: '/grafo3d' },
-      { label: 'Workflows', path: '/workflows' },
+      { label: 'Rotas do registro', path: '/rotas' },
       { label: 'Datahouse', path: '/datahouse' },
       { label: 'Runs & Histórico', path: '/runs' },
     ],
