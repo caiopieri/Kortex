@@ -39,6 +39,9 @@ do contrato.
 
 ---
 
+> **Complemento (2026-08-19):** os cortes aprovados na interface e o desenho da estante
+> de artefatos estão em `DECISAO-interface-cortes-e-estante.md`.
+>
 > **Complemento (2026-08-19):** o colapso visual de uma fase e o terceiro modo (aplicação)
 > estão em `DECISAO-modos-do-produto-e-colapso.md`. Lá também fica registrado que "Kortex
 > Studio" e "Kortex Enterprise", como o fundador os chama, são **rótulos** para as zonas de
