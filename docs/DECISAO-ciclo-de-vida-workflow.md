@@ -82,6 +82,10 @@ A missão **não é obrigada a rodar o template inteiro**:
   **não pode se passar por certificado** — dado não-verificado não vira sinal de treino nem
   evidência de versão.
 
+> **Complemento (2026-08-19):** quando um agente pode falar com outro (consulta declarada,
+> nunca espontânea) e o que acontece com artefato já entregue que precisa de ajuste (linha de
+> recall) estão em `DECISAO-consulta-declarada-e-linha-de-recall.md`.
+
 ## 8. Composição entre casas (voz → software house → volta)
 Compor pedaços de workflows/casas diferentes segue a arquitetura em camadas:
 - O artefato de um run (a "voz") sai como **artefato tipado com proveniência** e entra como
