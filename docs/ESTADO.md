@@ -10,7 +10,7 @@
 > **Não registre progresso no `AGENTS.md`.** Ele guarda invariantes que quase nunca mudam e
 > só aponta para cá. Documento desatualizado mente — e este mente mais rápido que os outros.
 
-**Última verificação:** 2026-08-20 · `main` = `0c843ef` (mudanças da issue #5 ainda não commitadas)
+**Última verificação:** 2026-08-19 · `main` = `b2840e2`
 
 ---
 
@@ -35,6 +35,8 @@ medido antes de assumir qualquer coisa.
 | 3 | `docs/PARECER-ARQUITETO-visao-vs-sistema.md` | a visão fundadora registrada com fidelidade + veredito estrutural. |
 | 4 | `docs/DECISAO-ciclo-de-vida-workflow.md` | **canônico** sobre workflow: template vs missão, catálogo, composição entre casas. Se outro doc conflitar neste tema, este vence. |
 | 4b | `docs/DECISAO-canvas-e-operacao.md` + `docs/DECISAO-modos-do-produto-e-colapso.md` | a superfície: zonas de rascunho e roteiro, andares, andon; colapso como apresentação e o modo aplicação. |
+| 4c | `docs/DECISAO-harness-e-costura-de-execucao.md` | por que o Kortex **não** constrói harness próprio, e onde a costura impõe os invariantes. Com experimento medido. |
+| 4d | `docs/DECISAO-consulta-declarada-e-linha-de-recall.md` | quando um agente pode falar com outro (declarado antes, nunca espontâneo) e o que acontece com artefato já entregue. |
 | 5 | `motor/docs/INVARIANTES.md` | o que o motor promete e não pode quebrar. |
 | 6 | `docs/ROADMAP.md` | prioridades Now/Next/Later. |
 
@@ -224,9 +226,24 @@ Fazer a tela antes seria animar um processo que não emite o que ela precisa.
 
 **A ordem que o estado atual sugere**, não é ordem imposta:
 
-1. **Issue #5** (paralelo) — P0 declarado, trava a software house.
-2. **Artefato tipado com proveniência** (§G) — o tijolo que destrava composição.
-3. **Issue #7** (moeda de contenção grátis) — destrava as rotas que já estão disponíveis.
+**1. Contrato tipado com proveniência (V5+V7).** O tijolo. Apareceu como pré-requisito de
+**sete** coisas distintas em 2026-08-19: ligação entre andares no canvas, composição entre
+casas, orquestrador, modo aplicação, adoção de harness, handoff tipado e a linha de consulta.
+**Antes de construir, meça o tamanho dele** — concentrar sete frentes numa peça não medida é
+risco, não plano.
+
+**2. Os eventos que faltam** — issues #12 e #20, projeção incremental por `seq` (ROADMAP
+Now 5) e coordenada de estação (Now 6). É o balde B da §3.9, destrava a superfície, e são
+baratos e independentes entre si.
+
+**3. Executor com laço**, atrás da costura de harness. Cria o "durante" que o canvas precisa
+e tira o executor do `-> str`. Depende de (1).
+
+**4. Issue #7** — moeda de contenção para rota grátis. **Depende do fundador**: exige
+evidência de faturamento real nas contas dele, e o `omniroute pricing` **não** serve (§5).
+
+Fora de ordem, quando houver tempo: #15, #18, #16, #13, #6, #8 (esta última está enunciada
+ao contrário — ver §5).
 
 Antes de mexer em qualquer uma, confirme na §5 se o que você presume ainda é verdade.
 
