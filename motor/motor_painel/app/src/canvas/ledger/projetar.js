@@ -64,56 +64,24 @@ function resumo(eventos) {
   };
 }
 
-/* Nos declarados pela run. Tres fontes, todas explicitas — nenhum no nasce de
-   ser citado por um evento de falha. */
-function nosDeclarados(eventos) {
-  const nos = new Map();
-  const registrar = (id, papel) => {
-    if (typeof id !== 'string' || id.trim() === '') return;
-    const anterior = nos.get(id);
-    nos.set(id, { id, papel: papel ?? anterior?.papel ?? null, onda: anterior?.onda ?? null });
-  };
-
-  for (const e of eventos) {
-    if (e.evento === 'grafo_dep.iniciado') (e.subagentes ?? []).forEach((id) => registrar(id));
-    if (e.evento === 'onda.iniciada') (e.ids ?? []).forEach((id) => registrar(id));
-    if (e.evento === 'executor.chamado') registrar(e.executor, e.papel ?? 'executor');
-    if (e.evento === 'validador.rodou') registrar(e.id, 'validador');
-  }
-
-  /* Onda = camada topologica DECLARADA por `onda.iniciada`. E a unica coisa
-     parecida com posicao que o ledger emite; o resto do layout (x, y em pixel)
-     e derivado dela e da ordem, e a superficie diz isso em voz alta no rodape.
-     Layout derivado de grafo declarado nao e o mesmo que inventar localizacao
-     de falha — o que o ROADMAP proibe e o segundo. */
-  let camada = 0;
-  for (const e of eventos) {
-    if (e.evento !== 'onda.iniciada') continue;
-    for (const id of e.ids ?? []) {
-      const no = nos.get(id);
-      if (no && no.onda === null) no.onda = camada;
-    }
-    camada += 1;
-  }
-  for (const no of nos.values()) if (no.onda === null) no.onda = camada;
-
-  return nos;
-}
-
 export function projetarRun(run) {
   const eventos = run.eventos;
-  const nos = nosDeclarados(eventos);
+  /* A topologia vem do contrato de /dados. Este módulo só enriquece os nós
+     com estado, falhas e artefatos para a apresentação; não pode reconstruir
+     uma segunda versão de nós ou arestas a partir dos mesmos eventos. */
+  const nos = new Map(
+    (Array.isArray(run.nos) ? run.nos : []).map((no) => [no.id, {
+      ...no,
+      /* `motor` é o nó raiz legado do contrato e não declara onda; isso é
+         apenas um valor de layout, não uma nova decisão topológica. */
+      onda: Number.isInteger(no.onda) ? no.onda : 0,
+    }]),
+  );
   const conjunto = new Set(nos.keys());
 
-  const arestas = [];
-  const vistas = new Set();
-  for (const e of eventos) {
-    if (e.evento !== 'aresta.fluxo') continue;
-    const chave = `${e.de}→${e.para}`;
-    if (vistas.has(chave) || !conjunto.has(e.de) || !conjunto.has(e.para)) continue;
-    vistas.add(chave);
-    arestas.push({ de: e.de, para: e.para });
-  }
+  const arestas = Array.isArray(run.arestas)
+    ? run.arestas.map((aresta) => ({ de: aresta.de, para: aresta.para }))
+    : [];
 
   /* `artefato.atualizou` dispara a cada ESCRITA, entao o mesmo arquivo aparece
      varias vezes numa run que refez o trabalho. E um artefato so, com N
@@ -170,14 +138,12 @@ export function projetarRun(run) {
     if (e.evento === 'validador.rodou' && e.aprovado === true) aprovados.add(e.id);
   }
 
-  const lista = [...nos.values()]
-    .sort((a, b) => a.onda - b.onda || a.id.localeCompare(b.id))
-    .map((no) => ({
-      ...no,
-      estado: localizadas.has(no.id) ? 'falhou' : aprovados.has(no.id) ? 'aprovado' : 'sem-portao',
-      falhas: localizadas.get(no.id) ?? [],
-      artefatos: artefatos.filter((a) => a.no === no.id),
-    }));
+  const lista = [...nos.values()].map((no) => ({
+    ...no,
+    estado: localizadas.has(no.id) ? 'falhou' : aprovados.has(no.id) ? 'aprovado' : 'sem-portao',
+    falhas: localizadas.get(no.id) ?? [],
+    artefatos: artefatos.filter((a) => a.no === no.id),
+  }));
 
   const todasFalhas = [...sistemicas, ...[...localizadas.values()].flat()];
 

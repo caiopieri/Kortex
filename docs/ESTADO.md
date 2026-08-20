@@ -133,7 +133,12 @@ menor do que a lista sugere.
 - [ ] colapso visual de fase, com a regra "caixa colapsada nunca é mais verde que o pior nó
       dentro dela" (`DECISAO-modos-do-produto-e-colapso.md` §2)
 - [ ] modo aplicação: interface própria sobre roteiro certificado (idem §3)
-- [ ] duas telas do mesmo painel desenham grafos diferentes da mesma run (issue #15)
+- [x] duas telas do mesmo painel desenham grafos diferentes da mesma run (issue #15)
+      **Fechado em 2026-08-20:** a projeção canônica de `/dados` agora calcula o grafo
+      por run; o Canvas consome `runs[].nos`/`runs[].arestas` e só enriquece estado,
+      falhas e artefatos. A medição causal encontrou no diamante A→{B,C}→D: o painel
+      antigo produzia 8 nós e 0 arestas de fluxo, enquanto o Canvas produzia 5 nós e
+      4 arestas. O contrato compartilhado elimina a reprojeção independente.
 - [ ] `npm ci` quebrado; builds não são reproduzíveis entre máquinas (issue #16)
 
 ### E. Curador e flywheel
@@ -286,7 +291,7 @@ e tira o executor do `-> str`. Depende de (1).
 **4. Issue #7** — moeda de contenção para rota grátis. **Depende do fundador**: exige
 evidência de faturamento real nas contas dele, e o `omniroute pricing` **não** serve (§5).
 
-Fora de ordem, quando houver tempo: #15, #18, #16, #13, #6, #8 (esta última está enunciada
+Fora de ordem, quando houver tempo: #18, #16, #13, #6, #8 (esta última está enunciada
 ao contrário — ver §5).
 
 Antes de mexer em qualquer uma, confirme na §5 se o que você presume ainda é verdade.

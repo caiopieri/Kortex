@@ -79,13 +79,34 @@ def parse_eventos(log_path: str | Path | None = None) -> list[dict]:
 
 
 def grafo_do_log(eventos: list[dict]) -> tuple[list[dict], list[dict]]:
-    """Infere nós e arestas a partir dos eventos."""
+    """Projeta o grafo canônico do ledger.
+
+    O payload de ``/dados`` é a fonte compartilhada pelas superfícies. Nós só
+    entram quando o ledger os declara (ou quando um evento de execução os
+    nomeia), e arestas de fluxo só entram quando o ledger as emite. Eventos de
+    portão ainda dão a relação visual do portão com seu alvo; a lista é
+    deduplicada porque um retry não cria uma segunda relação topológica.
+    """
     nos_map: dict[str, dict] = {}
     arestas: list[dict] = []
+    arestas_vistas: set[tuple[str, str]] = set()
 
-    def garante_no(nid: str, tipo: str):
+    def garante_no(nid: str, tipo: str, papel: str | None = None) -> None:
+        if not isinstance(nid, str) or not nid.strip():
+            return
         if nid not in nos_map:
             nos_map[nid] = {"id": nid, "tipo": tipo}
+            if nid != "motor":
+                nos_map[nid]["papel"] = papel
+                nos_map[nid]["onda"] = None
+        elif papel and not nos_map[nid].get("papel"):
+            nos_map[nid]["papel"] = papel
+
+    def garante_aresta(de: str, para: str) -> None:
+        chave = (de, para)
+        if de in nos_map and para in nos_map and chave not in arestas_vistas:
+            arestas_vistas.add(chave)
+            arestas.append({"de": de, "para": para})
 
     garante_no("motor", "nucleo")
 
@@ -101,7 +122,21 @@ def grafo_do_log(eventos: list[dict]) -> tuple[list[dict], list[dict]]:
             subs = ev.get("subagentes", [])
             for sid in subs:
                 garante_no(sid, "subagente")
-                arestas.append({"de": "motor", "para": sid})
+                garante_aresta("motor", sid)
+
+        # Grafo de dependências: esta é a declaração moderna da topologia.
+        if tipo_ev == "grafo_dep.iniciado":
+            for sid in ev.get("subagentes", []):
+                garante_no(sid, "subagente")
+                garante_aresta("motor", sid)
+
+        if tipo_ev == "onda.iniciada":
+            for sid in ev.get("ids", []):
+                garante_no(sid, "subagente")
+
+        # Arestas de fluxo são fatos do ledger, não inferência do painel.
+        if tipo_ev == "aresta.fluxo":
+            garante_aresta(ev.get("de", ""), ev.get("para", ""))
 
         # Executores nomeados (planner, synthesizer, global_evaluator, subagente por nome)
         if tipo_ev in ("executor.chamado", "executor.respondeu", "executor.erro"):
@@ -112,7 +147,10 @@ def grafo_do_log(eventos: list[dict]) -> tuple[list[dict], list[dict]]:
                     tipo_exec = "executor"
                 else:
                     tipo_exec = "subagente"
-                garante_no(exec_id, tipo_exec)
+                garante_no(exec_id, tipo_exec, ev.get("papel"))
+
+        if tipo_ev == "validador.rodou":
+            garante_no(ev.get("id", ""), "validador", "validador")
 
         # Portões
         if tipo_ev in ("portao.aprovado", "portao.reprovado"):
@@ -122,9 +160,13 @@ def grafo_do_log(eventos: list[dict]) -> tuple[list[dict], list[dict]]:
                 # aresta do subagente associado (verifier:<id>)
                 if portao.startswith("verifier:"):
                     sid = portao.split(":", 1)[1]
-                    arestas.append({"de": sid, "para": portao})
+                    garante_aresta(sid, portao)
                 elif portao == "cobertura":
-                    arestas.append({"de": "global_evaluator", "para": portao})
+                    garante_no("global_evaluator", "executor")
+                    garante_aresta("global_evaluator", portao)
+                elif portao.startswith("dependencias:"):
+                    sid = portao.split(":", 1)[1]
+                    garante_aresta(sid, portao)
 
         # Decisão do fundador
         if tipo_ev in ("escalado", "decisao.fundador", "decisao.pendente",
@@ -140,14 +182,73 @@ def grafo_do_log(eventos: list[dict]) -> tuple[list[dict], list[dict]]:
         if tipo_ev == "executor.chamado" and ev.get("executor") == "synthesizer":
             garante_no("synthesizer", "executor")
 
-    return list(nos_map.values()), arestas
+    # A onda é a única camada topológica emitida pelo motor. Nós sem onda ficam
+    # depois das ondas declaradas, de forma determinística.
+    camada = 0
+    for ev in eventos:
+        if ev.get("evento") != "onda.iniciada":
+            continue
+        for sid in ev.get("ids", []):
+            if sid in nos_map and sid != "motor" and nos_map[sid].get("onda") is None:
+                nos_map[sid]["onda"] = camada
+        camada += 1
+    for no in nos_map.values():
+        if no["id"] != "motor" and no.get("onda") is None:
+            no["onda"] = camada
+
+    motor = nos_map.pop("motor")
+    nos = [motor] + sorted(nos_map.values(), key=lambda no: (no.get("onda", 0), no["id"]))
+    return nos, arestas
+
+
+def _runs_do_log(eventos: list[dict]) -> list[list[dict]]:
+    """Separa runs pelo evento de abertura, preservando logs legados."""
+    if not eventos:
+        return []
+    runs: list[list[dict]] = []
+    atual: list[dict] = []
+    for evento in eventos:
+        if evento.get("evento") == "run.perfil" and atual:
+            runs.append(atual)
+            atual = []
+        atual.append(evento)
+    if atual:
+        runs.append(atual)
+    return runs
+
+
+def _run_canonica(eventos: list[dict], indice: int) -> dict:
+    nos, arestas = grafo_do_log(eventos)
+    seqs = [ev["seq"] for ev in eventos if isinstance(ev.get("seq"), int)]
+    seq_de = seqs[0] if seqs else None
+    fim = next(
+        (ev for ev in reversed(eventos) if ev.get("evento") in ("tarefa.concluida", "tarefa.abortada")),
+        None,
+    )
+    spec = next((ev for ev in eventos if ev.get("evento") == "spec.recebida"), None)
+    return {
+        "fonte": "cli",
+        "id": f"cli#{seq_de}" if seq_de is not None else f"cli#run_{indice}",
+        "perfil": next((ev.get("perfil") for ev in eventos if ev.get("evento") == "run.perfil"), None),
+        "seqDe": seq_de,
+        "seqAte": seqs[-1] if seqs else None,
+        "missao": spec.get("missao") if spec else None,
+        "desfecho": fim.get("evento") if fim else "aberta",
+        "motivoDoFim": fim.get("motivo") if fim else None,
+        "eventos": eventos,
+        "nos": nos,
+        "arestas": arestas,
+    }
 
 
 def dados_painel(log_path: str | Path | None = None) -> dict:
     """Retorna o payload completo para o frontend."""
     eventos = parse_eventos(log_path)
     nos, arestas = grafo_do_log(eventos)
-    return {"nos": nos, "arestas": arestas, "eventos": eventos}
+    dados = {"nos": nos, "arestas": arestas, "eventos": eventos}
+    if eventos:
+        dados["runs"] = [_run_canonica(run, i) for i, run in enumerate(_runs_do_log(eventos), 1)]
+    return dados
 
 
 def agrupar_eventos_por_run(eventos: list[dict]) -> list[list[dict]]:

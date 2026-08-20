@@ -149,10 +149,9 @@ export function buracosDeSeq(eventos) {
   return buracos;
 }
 
-/* `GET /dados` do painel em execucao devolve {nos, arestas, eventos}. Usamos so
-   `eventos`: `nos`/`arestas` vem do `grafo_do_log` do painel, que e outra
-   projecao, com outras regras — misturar as duas daria uma superficie que
-   discorda de si mesma. A projecao desta pasta e a unica autoridade aqui. */
+/* `GET /dados` do painel em execucao devolve o grafo canonico por run em
+   `runs[].nos`/`runs[].arestas`. A leitura preserva os eventos para timeline e
+   andon, mas a topologia nao e reprojetada no navegador. */
 export async function lerDoPainel(leitor) {
   const resposta = await fetch('/dados', { cache: 'no-store' });
   if (!resposta.ok) {
@@ -174,10 +173,19 @@ export async function lerDoPainel(leitor) {
     .filter((e) => typeof e?.seq === 'number')
     .map((e) => ({ ...e, __fonte: leitor.fonte.id }))
     .sort((a, b) => a.seq - b.seq);
+  const runs = Array.isArray(dados?.runs)
+    ? dados.runs.map((run) => ({
+      ...run,
+      eventos: Array.isArray(run.eventos)
+        ? run.eventos.map((e) => ({ ...e, __fonte: leitor.fonte.id }))
+        : [],
+    }))
+    : null;
 
   return {
     ...leitor,
     eventos,
+    runs,
     /* O painel ja descartou o que nao parseou, entao a superficie NAO sabe
        quantas linhas eram ilegiveis: declarar 0 seria afirmar o que nao se viu.
        `null` e a diferenca entre "nenhuma" e "nao da para saber daqui". */

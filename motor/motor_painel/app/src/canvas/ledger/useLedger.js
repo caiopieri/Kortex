@@ -23,7 +23,13 @@ export function useLedger(adaptador = adaptadorPainel) {
     try {
       const leitura = await adaptador.ler(leitor.current);
       leitor.current = leitura;
-      const runs = segmentarRuns(leitura.eventos).map(projetarRun);
+      /* O adaptador do painel entrega a topologia canônica por run. A
+         segmentação local só permanece para adaptadores crus que não têm o
+         contrato de /dados; eles não podem inventar nós/arestas. */
+      const runsBrutas = Array.isArray(leitura.runs)
+        ? leitura.runs
+        : segmentarRuns(leitura.eventos);
+      const runs = runsBrutas.map(projetarRun);
       setEstado({ fase: 'pronto', leitura, runs, adaptador });
     } catch (erro) {
       /* Falhar em ler nao pode virar tela vazia sem explicacao: a regra do andon
