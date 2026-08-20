@@ -247,7 +247,7 @@ export default function Dashboard() {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <span className="pill" onClick={() => window.location.hash = '/grafo'}>Grafo 2D →</span>
+          <span className="pill" onClick={() => window.location.hash = '/canvas'}>Canvas →</span>
           <span className="pill" onClick={() => window.location.hash = '/datahouse'}>Datahouse →</span>
         </div>
       </div>

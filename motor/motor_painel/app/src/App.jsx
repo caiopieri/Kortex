@@ -5,7 +5,6 @@ import Topbar from './components/Topbar';
 import Home from './pages/Home';
 import Runs from './pages/Runs';
 import CaixaFundador from './pages/CaixaFundador';
-import Grafo2D from './pages/Grafo2D';
 import Custos from './pages/Custos';
 import Dashboard from './pages/Dashboard';
 import Agentes from './pages/Agentes';
@@ -77,7 +76,9 @@ function App() {
   if (route === '/' || route === '') Page = <Home />;
   else if (route.startsWith('/runs')) Page = <Runs route={route} />;
   else if (route === '/caixa') Page = <CaixaFundador />;
-  else if (route === '/grafo') Page = <Grafo2D />;
+  /* `/grafo` foi removida: depois da #15 ela e o Canvas desenham a MESMA
+     projecao canonica de `/dados`, e o Canvas tem o andon. */
+  else if (route === '/grafo') { window.location.hash = '/canvas'; Page = <Canvas modo={mode} />; }
   /* `/grafo3d` foi removida: era a terceira renderizacao do mesmo grafo.
      Quem tinha o link vai para o Canvas, a projecao que sobrou. */
   else if (route === '/grafo3d') { window.location.hash = '/canvas'; Page = <Canvas modo={mode} />; }

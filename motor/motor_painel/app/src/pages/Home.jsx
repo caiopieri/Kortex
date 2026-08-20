@@ -211,7 +211,7 @@ export default function Home() {
           <div>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 }}>
               <span className="num">03 — Mapa geral vivo</span>
-              <span className="lnk" style={{ display: 'flex', alignItems: 'center', gap: 6 }} onClick={() => window.location.hash = '/grafo'}>
+              <span className="lnk" style={{ display: 'flex', alignItems: 'center', gap: 6 }} onClick={() => window.location.hash = '/canvas'}>
                 <span className={liveShape}></span>{liveLabel} · expandir →
               </span>
             </div>

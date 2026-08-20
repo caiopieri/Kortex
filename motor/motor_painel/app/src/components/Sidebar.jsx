@@ -18,7 +18,6 @@ const NAV = [
     items: [
       { label: 'Dashboard', path: '/dashboard' },
       { label: 'Canvas', path: '/canvas' },
-      { label: 'Grafo 2D', path: '/grafo' },
       { label: 'Rotas do registro', path: '/rotas' },
       { label: 'Datahouse', path: '/datahouse' },
       { label: 'Runs & Histórico', path: '/runs' },

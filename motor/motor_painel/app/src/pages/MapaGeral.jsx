@@ -151,7 +151,7 @@ export default function MapaGeral() {
 
           <div className="num" style={{ marginBottom: 10, marginTop: 20 }}>03 — Links rápidos</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <span className="lnk" onClick={() => { window.location.hash = '/grafo'; }}>→ Grafo 2D</span>
+            <span className="lnk" onClick={() => { window.location.hash = '/canvas'; }}>→ Canvas</span>
             <span className="lnk" onClick={() => { window.location.hash = '/board'; }}>→ Board de missões</span>
             <span className="lnk" onClick={() => { window.location.hash = '/datahouse'; }}>→ Datahouse</span>
             <span className="lnk" onClick={() => { window.location.hash = '/caixa'; }}>→ Caixa do Fundador</span>
