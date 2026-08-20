@@ -48,6 +48,23 @@ continuous.
    missing credential, uncovered capability, denied runner) resolve to a fixed pre-flight station. The
    surface must never invent a location. See `DECISAO-canvas-e-operacao.md`.
 
+### Done since this file was last curated (2026-08-19)
+
+- **Parallel missions** (debt 11, and debt 17b with it). Each CLI run owns
+  `<workspace>/<run_id>/log.jsonl`; the exclusive `flock` was **not** weakened — parallelism
+  comes from separate files. See `ESTADO.md` §G.
+- **A harness is rented, not built.** `DECISAO-harness-e-costura-de-execucao.md` records the
+  decision and the measured experiment behind it: the Kortex invariants (budget envelope,
+  command routing, evidence emission) mount on a third-party harness's typed interception
+  points. The engine is not a harness — its executor returns `-> str` with no tool calling.
+- Surface decisions: `DECISAO-modos-do-produto-e-colapso.md` (collapse is presentation, never
+  execution semantics; the application mode) and
+  `DECISAO-consulta-declarada-e-linha-de-recall.md` (an agent talks to another only if
+  declared before production; delivered artifacts are adjusted on a recall line).
+
+The ordered next steps live in `ESTADO.md` §4, which is kept current; the sections below are
+the standing priority frame, not a live checklist.
+
 ## Next
 
 1. Add an authoritative certification repository for curator promotion intent.
