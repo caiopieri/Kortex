@@ -226,6 +226,45 @@ Fazer a tela antes seria animar um processo que não emite o que ela precisa.
 
 **A ordem que o estado atual sugere**, não é ordem imposta:
 
+### O contrato tipado, medido (2026-08-19)
+
+A instrução era medir antes de construir. Medido:
+
+**O que um artefato é hoje:** `{nome, caminho, tipo, hash}` — referência de arquivo mais
+SHA-256 do conteúdo. `tipo` **não é tipo**: a spec usa `list[dict[str, Any]]` e valida
+apenas que a string não é vazia. Sem enum, sem registry, sem schema, sem versão.
+**Proveniência não existe.**
+
+**O achado mais acionável: o `hash` já existe e é jogado fora duas vezes.** Ele é calculado
+em `registrar_artefato`/`referenciar_artefato`, mas **não entra no evento**
+`artefato.atualizou` (que carrega só `nome, tipo, subagente, caminho`) nem sobrevive ao
+`GerenciadorJobs._resultado_concluido`. Identidade de conteúdo já está sendo produzida e
+descartada.
+
+**A armadilha:** o schema de eventos v2 é **fechado** — campo desconhecido falha, campo
+listado é obrigatório salvo se estiver em `CAMPOS_OPCIONAIS`. E `LogEventos` revalida
+todas as linhas ao reabrir. **Campo obrigatório novo faz run antiga deixar de abrir.**
+Proveniência tem que entrar opcional, com distinção explícita entre legado e contrato novo.
+
+**Tamanho:** ~15–20 pontos de contrato (não 2, não 56). Fatia vertical com migração
+compatível e testes: **300–600 linhas**. Atravessando casas e orquestrador: **800–1500**.
+Chega a 2000 só se as sete frentes forem entregues juntas — e aí é escopo de integração,
+não tamanho do artefato.
+
+**O `proveniencia` do curador NÃO serve de base.** É string que identifica origem de caso
+held-out, não linhagem de output. Reusar misturaria identidade de dataset com proveniência
+de artefato.
+
+**A conclusão que contraria o discurso, e é a parte que importa:** *"a peça é menor no
+núcleo e maior na fronteira"*. O risco real não é escrever um `ArtefatoSpec` — é **decidir
+qual identidade atravessa a fronteira e impedir que serviço, canvas, curador e orquestrador
+voltem a reduzir isso a caminho + string**, que é exatamente o que os quatro fazem hoje.
+
+**Consequência para a ordem:** o trabalho difícil é decisão de arquitetura, não implementação.
+Uma primeira fatia barata e independente já existe: **parar de jogar o `hash` fora**.
+
+---
+
 **1. Contrato tipado com proveniência (V5+V7).** O tijolo. Apareceu como pré-requisito de
 **sete** coisas distintas em 2026-08-19: ligação entre andares no canvas, composição entre
 casas, orquestrador, modo aplicação, adoção de harness, handoff tipado e a linha de consulta.
