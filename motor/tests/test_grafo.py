@@ -3,7 +3,6 @@ o gate do fundador (interrupt/resume) e a missão dirigida por spec serializada.
 import json
 import sys
 from decimal import Decimal
-from pathlib import Path
 
 import pytest
 from langgraph.types import Command
@@ -26,10 +25,8 @@ from motor.orcamento import (
     RotaTentativaCusteada,
 )
 from motor.politica import PoliticaGates
+from tests.specs import SPEC, faz_roteador
 
-SPEC = json.loads(
-    (Path(__file__).parent.parent / "exemplos" / "missao-pesquisa.json").read_text(encoding="utf-8")
-)
 for _sub in SPEC["subagentes"]:
     _sub.setdefault("capacidades_requeridas", ["pesquisa"])
 
@@ -63,31 +60,6 @@ def spec_dependencias():
         "gates": [],
         "sintese": {"instrucao": "sintetize", "formato": "markdown"},
     }
-
-
-def faz_roteador(reprovar_beta_uma_vez=False, evaluator_aprova=True):
-    """Stub determinístico por papel; identifica o subagente pelo conteúdo do prompt."""
-    estado = {"beta_reprovado": False}
-
-    def roteador(papel: str, prompt: str):
-        if papel == "planner":
-            return json.dumps(SPEC, ensure_ascii=False)
-        if papel == "pesquisador":
-            return "RESULTADO alfa" if "pesquisa-alfa" in prompt else "RESULTADO beta"
-        if papel == "verifier":
-            if reprovar_beta_uma_vez and "pesquisa-beta" in prompt and not estado["beta_reprovado"]:
-                estado["beta_reprovado"] = True
-                return json.dumps({"aprovado": False, "motivo": "faltou evidência"})
-            return json.dumps({"aprovado": True, "motivo": "ok"})
-        if papel == "evaluator":
-            if evaluator_aprova:
-                return json.dumps({"aprovado": True, "lacunas": []})
-            return json.dumps({"aprovado": False, "lacunas": ["canal beta sem evidência"]})
-        if papel == "synthesizer":
-            return "SÍNTESE FINAL DA MISSÃO"
-        raise AssertionError(f"papel inesperado: {papel}")
-
-    return roteador
 
 
 def roda(tmp_path, roteador, entrada):

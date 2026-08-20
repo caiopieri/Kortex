@@ -28,8 +28,8 @@ from tests.helpers_grafo import construir_grafo_teste as construir_grafo
 from motor.modelos import ClienteStub
 from motor.politica import PoliticaGates
 
-# mesma spec dos testes do grafo (dirigida por dado)
-from tests.test_grafo import SPEC, faz_roteador
+# fixture de teste independente do exemplo de produção
+from tests.specs import SPEC, faz_roteador
 
 
 def eventos_de(path: Path):

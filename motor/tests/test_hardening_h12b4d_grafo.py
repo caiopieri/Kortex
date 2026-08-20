@@ -1,7 +1,6 @@
 import json
 import sqlite3
 from decimal import Decimal
-from pathlib import Path
 
 import pytest
 
@@ -15,11 +14,10 @@ from motor.orcamento import (
     RotaTentativaCusteada,
 )
 from motor.politica import PoliticaGates
+from tests.specs import spec_pesquisa, spec_pesquisa_um
 
 
-BASE_SPEC = json.loads(
-    (Path(__file__).parent.parent / "exemplos" / "missao-pesquisa.json").read_text()
-)
+BASE_SPEC = spec_pesquisa_um()
 
 
 class _Tentativa:
@@ -38,7 +36,8 @@ class _Tentativa:
 
 def _spec(*, quantidade=1, teto=2.0, tentativas=1):
     spec = json.loads(json.dumps(BASE_SPEC))
-    spec["subagentes"] = spec["subagentes"][:quantidade]
+    if quantidade != 1:
+        spec["subagentes"] = spec_pesquisa()["subagentes"][:quantidade]
     spec["restricoes"]["teto_custo"] = teto
     spec["restricoes"]["max_tentativas"] = tentativas
     return spec

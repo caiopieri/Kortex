@@ -19,7 +19,7 @@ from tests.helpers_grafo import (
     GerenciadorJobsTeste as GerenciadorJobs,
     dependencias_servico_stub,
 )
-from tests.test_grafo import SPEC, faz_roteador
+from tests.specs import SPEC, faz_roteador
 
 
 def aguardar_estado(gerenciador: GerenciadorJobs, job_id: str, estado: str, timeout_s: float = 3):

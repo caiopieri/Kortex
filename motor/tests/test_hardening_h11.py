@@ -23,7 +23,7 @@ from motor.modelos import ClienteStub
 from motor.orcamento import ReservaOrcamento
 from tests.audit_corpus import casos, executar_lote, materializar_corpus
 from tests.helpers_grafo import GerenciadorJobsTeste as GerenciadorJobs
-from tests.test_grafo import SPEC, faz_roteador
+from tests.specs import SPEC, faz_roteador
 
 
 # `spawn` reimporta o pacote inteiro no filho; sob carga (varias suites em
