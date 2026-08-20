@@ -85,8 +85,11 @@ menor do que a lista sugere.
       "corrija APENAS o que foi apontado" (`motor/grafo.py:1024`)
 - [x] ledger de eventos com schema fechado, append durável e projeções read-only
 - [x] gate humano fail-closed: com `--auto`, cobertura reprovada **não** é auto-aprovada
-- [ ] evidência do portão fica legível no log (hoje `motivo` fica vazio quando aprova — issue #20)
-- [ ] `executor.erro` com classe estruturada em vez de texto livre (issue #12)
+- [ ] evidência do portão fica legível no log (hoje `motivo` fica vazio quando aprova)
+- [x] falha de rota deixa `modelo.falha` com papel, rota, provedor e classe estruturada
+      (`sem_resposta`, `pre_efeito`, `terminal` ou `sem_rota`) — issues #12/#20
+- [x] `executor.erro` carrega a classe estruturada da tentativa custeada; ausência de rota
+      emite também `registro.sem_executor` sem reutilizar o veredito inválido
 
 ### B. Portão de processo e sandbox
 - [x] `CommandRunner` como `Protocol`; default é **negar** (`DenyCommandRunner`)
@@ -187,8 +190,10 @@ reprovando. Existem `aresta.fluxo`, `validador.rodou`, `portao.aprovado`,
 
 **B. Falta evento, não semântica** — cada tool call, o que o gate segurou, clicar na linha e
 ver o log. Hoje o `motivo` de `validador.rodou` vem **vazio quando aprova** (medido:
-foi preciso reproduzir o portão à mão para ver a evidência), e falha de rota não emite
-evento nenhum (issue #20). Some a coordenada de estação em evento de falha (ROADMAP Now 6)
+foi preciso reproduzir o portão à mão para ver a evidência). Falhas de rota agora emitem
+`modelo.falha` com coordenada e classe; ausência de rota emite `registro.sem_executor` e
+não é confundida com veredito inválido (issues #12/#20, fechado em 2026-08-20). Some a
+coordenada de estação em evento de falha (ROADMAP Now 6)
 e a projeção incremental por `seq` (ROADMAP Now 5, declarada *"precondition for any canvas
 surface"* — o cliente já detecta buraco com `buracosDeSeq`; falta o servidor).
 

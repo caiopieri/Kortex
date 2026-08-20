@@ -101,11 +101,17 @@ class ChamadaOrcadaTerminal:
     status_reserva: StatusTentativaTerminal
 
 
+@dataclass(frozen=True)
+class ChamadaOrcadaSemRota:
+    motivo: str
+
+
 ResultadoChamadaOrcada: TypeAlias = (
     RespostaTentativaCusteada
     | ChamadaOrcadaSemResposta
     | ChamadaOrcadaBloqueada
     | ChamadaOrcadaTerminal
+    | ChamadaOrcadaSemRota
 )
 
 
@@ -664,6 +670,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                 ChamadaOrcadaSemResposta()
                 | ChamadaOrcadaBloqueada()
                 | ChamadaOrcadaTerminal()
+                | ChamadaOrcadaSemRota()
             ):
                 return None
             case _:
@@ -698,8 +705,26 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         cadeia = fabrica_tentativas_orcadas(
             papel, prompt, tentativa, requisitos or RequisitosTentativaCusteada()
         )
-        if not isinstance(cadeia, list) or not cadeia:
+        def registrar_sem_rota(motivo: str) -> ChamadaOrcadaSemRota:
+            log.evento(
+                "registro.sem_executor", papel=papel, capacidades=[], motivo=motivo,
+                classe="sem_rota", fase=fase, tentativa=tentativa,
+            )
+            return ChamadaOrcadaSemRota(motivo)
+
+        def registrar_falha_rota(
+            route_id: str, provider_id: str, classe: str, motivo: str, indice: int,
+        ) -> None:
+            log.evento(
+                "modelo.falha", papel=papel, fase=fase, rota=route_id,
+                provedor=provider_id, classe=classe, motivo=motivo[:400],
+                tentativa=indice,
+            )
+
+        if not isinstance(cadeia, list):
             raise ErroOrcamento("adaptador custeado ausente")
+        if not cadeia:
+            return registrar_sem_rota("nenhuma rota elegível")
         if medicao_monetaria_desligada:
             for indice, item in enumerate(cadeia, start=1):
                 if not isinstance(item, RotaTentativaCusteada):
@@ -725,12 +750,14 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
         sessao = repositorio.sessao(run_id, thread_id, teto_decimal)
         bloqueios: list[tuple[str, str]] = []
         modelo_sem_resposta = False
+        tentativas_utilizaveis = 0
         for indice, item in enumerate(cadeia, start=1):
             if not isinstance(item, RotaTentativaCusteada):
                 raise ErroOrcamento("adaptador custeado invalido")
             route_id, provider_id, adaptador = item.route_id, item.provider_id, item.adaptador
             if requisitos is not None and provider_id == requisitos.evitar_provedor:
                 continue
+            tentativas_utilizaveis += 1
             prompt_id = hashlib.sha256(prompt.encode()).hexdigest()[:16]
             call_base = f"{run_id}:{thread_id}:{fase}:{no_id}:{ciclo}:{tentativa}:{prompt_id}"
             call_id = (
@@ -765,10 +792,19 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                         return RespostaTentativaCusteada(
                             resultado_reconciliado.texto, route_id, provider_id,
                         )
+                    registrar_falha_rota(
+                        route_id, provider_id, "sem_resposta",
+                        "modelo respondeu sem texto", indice,
+                    )
                     modelo_sem_resposta = True
                 case TentativaBloqueadaPreEfeito(motivo=motivo):
+                    registrar_falha_rota(route_id, provider_id, "pre_efeito", motivo, indice)
                     bloqueios.append((route_id, motivo))
                 case TentativaTerminal(motivo=motivo, status_reserva=status_reserva):
+                    registrar_falha_rota(
+                        route_id, provider_id, "terminal",
+                        f"{motivo} ({status_reserva})", indice,
+                    )
                     return ChamadaOrcadaTerminal(motivo, status_reserva)
                 case _:
                     assert_never(resultado)
@@ -779,6 +815,8 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                 f"{route_id}={motivo}" for route_id, motivo in bloqueios
             )
             return ChamadaOrcadaBloqueada(f"bloqueio pré-efeito: {detalhes}")
+        if tentativas_utilizaveis == 0:
+            return registrar_sem_rota("nenhuma rota elegível")
         return ChamadaOrcadaBloqueada("nenhuma rota elegível")
 
     def workspace_de(state: EstadoMotor) -> Path:
@@ -1085,14 +1123,16 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                     feedback = "modelo não respondeu"
                     log.evento(
                         "executor.erro", executor=sub["id"],
-                        motivo=feedback, tentativa=tentativa,
+                        motivo=feedback, classe="sem_resposta", papel=sub["papel"],
+                        fase="executor", tentativa=tentativa,
                     )
                     continue
                 case ChamadaOrcadaBloqueada(motivo=motivo):
                     feedback = "falha externa do executor"
                     log.evento(
                         "executor.erro", executor=sub["id"],
-                        motivo=motivo[:400], tentativa=tentativa,
+                        motivo=motivo[:400], classe="pre_efeito", papel=sub["papel"],
+                        fase="executor", tentativa=tentativa,
                     )
                     continue
                 case ChamadaOrcadaTerminal(motivo=motivo, status_reserva=status_reserva):
@@ -1100,7 +1140,16 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                     log.evento(
                         "executor.erro", executor=sub["id"],
                         motivo=f"{motivo[:360]} ({status_reserva})",
+                        classe="terminal", papel=sub["papel"], fase="executor",
                         tentativa=tentativa,
+                    )
+                    continue
+                case ChamadaOrcadaSemRota(motivo=motivo):
+                    feedback = "nenhuma rota elegível"
+                    log.evento(
+                        "executor.erro", executor=sub["id"], motivo=motivo,
+                        classe="sem_rota", papel=sub["papel"], fase="executor",
+                        rota="nenhuma", provedor="nenhum", tentativa=tentativa,
                     )
                     continue
                 case _:
@@ -1125,18 +1174,28 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                     ),
                     int(payload.get("ciclo_reconciliacao", 0)),
                 )
-                resposta_verifier_orcada = resposta_orcada_ou_none(
-                    resultado_verifier_orcado,
-                )
-                resposta_verifier = (
-                    resposta_verifier_orcada.texto
-                    if resposta_verifier_orcada else None
-                )
+                match resultado_verifier_orcado:
+                    case RespostaTentativaCusteada() as resposta_verifier_orcada:
+                        resposta_verifier = resposta_verifier_orcada.texto
+                    case ChamadaOrcadaSemResposta():
+                        feedback = "verifier sem resposta"
+                        continue
+                    case ChamadaOrcadaBloqueada(motivo=motivo):
+                        feedback = "falha externa do verifier"
+                        continue
+                    case ChamadaOrcadaTerminal(motivo=motivo, status_reserva=status_reserva):
+                        feedback = "falha externa do verifier"
+                        continue
+                    case ChamadaOrcadaSemRota(motivo=motivo):
+                        feedback = "verifier sem rota elegível"
+                        continue
+                    case _:
+                        assert_never(resultado_verifier_orcado)
             except Exception:
                 feedback = "falha externa do verifier"
                 log.evento(
-                    "executor.erro",
-                    executor=sub["id"],
+                    "modelo.falha",
+                    papel="verifier", fase="verifier",
                     motivo=feedback,
                     tentativa=tentativa,
                 )

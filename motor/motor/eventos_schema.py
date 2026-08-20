@@ -113,8 +113,8 @@ ESQUEMA: dict[str, dict[str, Any]] = {
     },
     "executor.erro": {
         "categoria": "ciclo",
-        "campos": ["executor", "motivo", "tentativa"],
-        "descricao": "Registra erro de executor ou planner.",
+        "campos": ["executor", "motivo", "tentativa", "classe", "papel", "fase", "rota", "provedor"],
+        "descricao": "Registra erro de executor ou planner, com classe estruturada quando houver tentativa custeada.",
     },
     "executor.escalado": {
         "categoria": "resiliencia",
@@ -168,8 +168,8 @@ ESQUEMA: dict[str, dict[str, Any]] = {
     },
     "modelo.falha": {
         "categoria": "modelo",
-        "campos": ["papel", "tentativa", "motivo"],
-        "descricao": "Registra falha transitória ou total em cliente de modelo.",
+        "campos": ["papel", "tentativa", "motivo", "classe", "fase", "rota", "provedor"],
+        "descricao": "Registra falha de uma rota de modelo com coordenada e classe estruturada quando disponível.",
     },
     "modelo.fallback": {
         "categoria": "resiliencia",
@@ -273,8 +273,8 @@ ESQUEMA: dict[str, dict[str, Any]] = {
     },
     "registro.sem_executor": {
         "categoria": "modelo",
-        "campos": ["papel", "capacidades"],
-        "descricao": "Registra ausência de executor compatível no registro de capacidades.",
+        "campos": ["papel", "capacidades", "motivo", "classe", "fase", "tentativa"],
+        "descricao": "Registra ausência de executor ou rota utilizável para um papel.",
     },
     "rota.escolhida": {
         "categoria": "missao",
@@ -383,6 +383,7 @@ DICT_OU_NULO = (dict, NoneType)
 INT_OU_NULO = (int, NoneType)
 STR_OU_NULO = (str, NoneType)
 SEQUENCIA_OU_NULO = (SEQUENCIA, NoneType)
+CLASSES_FALHA_ROTA = frozenset({"sem_resposta", "pre_efeito", "terminal", "sem_rota"})
 
 TIPOS_CAMPO: dict[str, Any] = {
     "alvo": str,
@@ -394,6 +395,7 @@ TIPOS_CAMPO: dict[str, Any] = {
     "candidato": str,
     "casos": int,
     "call_id": str,
+    "classe": str,
     "ciclo": INT_OU_NULO,
     "commitados": int,
     "completion_tokens": int,
@@ -493,11 +495,14 @@ CAMPOS_OPCIONAIS: dict[str, set[str]] = {
         "tier",
         "versao_template",
     },
+    "executor.erro": {"classe", "papel", "fase", "rota", "provedor"},
     "ferramenta.executada": {"metricas"},
     "modelo.uso": {"estimado"},
+    "modelo.falha": {"classe", "fase", "rota", "provedor"},
     "portao.aprovado": {"ciclo"},
     "portao.reprovado": {"ciclo", "lacunas", "motivo"},
     "validador.rodou": {"motivo"},
+    "registro.sem_executor": {"motivo", "classe", "fase", "tentativa"},
 }
 
 
@@ -653,6 +658,11 @@ def valido(evento: dict[str, Any]) -> bool:
             if campo not in opcionais:
                 return False
         elif not _tipo_valido(evento[campo], esperado):
+            return False
+
+    if tipo in {"executor.erro", "modelo.falha", "registro.sem_executor"}:
+        classe = evento.get("classe")
+        if classe is not None and classe not in CLASSES_FALHA_ROTA:
             return False
 
     if tipo == "decisao.plano" and not payload & {"decisao", "edicoes"}:
