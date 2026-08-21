@@ -42,7 +42,7 @@ export function artefatosDoLedger(eventos) {
       nome: ev.nome || caminho.split('/').pop(),
       tipo: ev.tipo || null,
       subagente: ev.subagente || null,
-      run: ev.missao || ev.run || null,
+      run: ev.run_id || null,
       t: ev.t ?? null,
       revisoes: (anterior?.revisoes ?? 0) + 1,
     };

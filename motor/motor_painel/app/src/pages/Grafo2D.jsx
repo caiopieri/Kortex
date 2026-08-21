@@ -565,8 +565,7 @@ export default function Grafo2D() {
   });
 
   // O grafo agrega TODAS as runs presentes no log — rótulo honesto com o N real
-  const missoes = new Set();
-  eventos.forEach(e => { if (e.missao) missoes.add(e.missao); if (e.run) missoes.add(e.run); });
+  const missoes = new Set(eventos.map(e => e.run_id || 'legado:sem-proveniencia'));
   const runsLabel = missoes.size > 0 ? `todas as runs · ${missoes.size}` : '—';
 
   const liveShape = mode === 'live' ? 'sh blue pulse' : 'sh idle';

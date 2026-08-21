@@ -34,8 +34,7 @@ export default function Datahouse() {
     return Object.entries(m).sort((a, b) => b[1] - a[1]);
   }, [artefatos]);
 
-  /* `artefato.atualizou` NÃO carrega run: medido no ledger de produção, os 47
-     eventos têm exatamente {t, seq, evento, nome, tipo, subagente, caminho}.
+  /* Eventos novos carregam `run_id`; eventos legados continuam sem proveniência.
      A versão anterior lia `ev.missao || ev.run || '—'`, bucketava tudo no '—' e
      o KPI anunciava "Runs produtoras: 1" — uma run que não existe, fabricada
      por agregação. Aqui as duas coisas ficam separadas: run declarada é

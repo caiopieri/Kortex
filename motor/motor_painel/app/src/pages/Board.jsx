@@ -100,12 +100,12 @@ export default function Board() {
   );
 
   /* Gate IDs for "Precisa de você" column */
-  const gateRunIds = new Set((gates || []).map(g => g.run || g.missao).filter(Boolean));
+  const gateRunIds = new Set((gates || []).map(g => g.run).filter(Boolean));
 
   /* Build run-based cards */
   const runCards = (runs || []).map(r => {
     const col = colFor(r, gateRunIds);
-    const eventos = (fullData?.eventos || []).filter(ev => (ev.missao || ev.run) === r.id);
+    const eventos = (fullData?.eventos || []).filter(ev => (ev.run_id || 'legado:sem-proveniencia') === r.id);
     const lastEv = eventos.length > 0 ? eventos[eventos.length - 1] : null;
     return {
       id: r.id,

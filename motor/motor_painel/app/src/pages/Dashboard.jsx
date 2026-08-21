@@ -68,7 +68,7 @@ export default function Dashboard() {
   const eventos = fullData.eventos || [];
   const runEventsMap = {};
   eventos.forEach(ev => {
-    const rid = ev.missao || ev.run;
+    const rid = ev.run_id || 'legado:sem-proveniencia';
     if (rid) {
       if (!runEventsMap[rid]) runEventsMap[rid] = [];
       runEventsMap[rid].push(ev);
@@ -96,7 +96,7 @@ export default function Dashboard() {
   const chamadosMap = {};
 
   eventos.forEach(ev => {
-    const rid = ev.missao || ev.run;
+    const rid = ev.run_id || 'legado:sem-proveniencia';
     if (!rid) return;
     const exec = ev.executor;
     if (!exec) return;
@@ -137,7 +137,7 @@ export default function Dashboard() {
   const escalatedRuns = new Set();
   eventos.forEach(ev => {
     if (ev.evento === 'escalado') {
-      const rid = ev.missao || ev.run;
+      const rid = ev.run_id || 'legado:sem-proveniencia';
       if (rid) escalatedRuns.add(rid);
     }
   });

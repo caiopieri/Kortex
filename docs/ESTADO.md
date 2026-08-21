@@ -149,9 +149,9 @@ menor do que a lista sugere.
       declara **1** subagente em qualquer rota; duas "ideias" semeadas no `Board`; o nó
       `{id:'planner'}` inventado pelo `Grafo2D` quando o grafo está vazio;
       `versao: "1.0.0"` preenchida pelo `obter_catalogo()` para arquivos que não declaram
-      versão; e o bucket `'—'` do `Datahouse` que virava *"Runs produtoras: 1"* — o evento
-      `artefato.atualizou` **não carrega run** (medido: os 47 eventos têm só
-      `{t, seq, evento, nome, tipo, subagente, caminho}`)
+      versão; e o bucket `'—'` do `Datahouse` que virava *"Runs produtoras: 1"*. O issue #24
+      fechou a proveniência: eventos novos carregam `run_id` no envelope e
+      `artefato.atualizou` carrega `hash`; eventos legados continuam aceitos pelo schema.
 - [x] **a superfície declara o que o ledger não explica** (issue #22, 2026-08-20). Novo
       `/dados/orfaos` conta o que existe em disco e não tem evento, e o `Datahouse` mostra o
       número. **Não reconstrói**: o órfão aparece como caminho e nada mais — sem run, tipo
@@ -218,8 +218,9 @@ foi preciso reproduzir o portão à mão para ver a evidência). Falhas de rota 
 `modelo.falha` com coordenada e classe; ausência de rota emite `registro.sem_executor` e
 não é confundida com veredito inválido (issues #12/#20, fechado em 2026-08-20). Some a
 coordenada de estação em evento de falha (ROADMAP Now 6)
-e a projeção incremental por `seq` (ROADMAP Now 5, declarada *"precondition for any canvas
-surface"* — o cliente já detecta buraco com `buracosDeSeq`; falta o servidor).
+e a projeção incremental por `(fonte, seq)` (ROADMAP Now 5, declarada *"precondition for any
+canvas surface"* — `run_id` resolve identidade, mas não substitui o cursor local; falta o
+servidor detectar todos os buracos).
 
 **C. Falta semântica — não existe no modelo.** Dois casos:
 - *"clico no agente e vejo o que ele está mexendo, um chat, e posso interceptar"* — **não há
@@ -262,13 +263,13 @@ A instrução era medir antes de construir. Medido:
 **O que um artefato é hoje:** `{nome, caminho, tipo, hash}` — referência de arquivo mais
 SHA-256 do conteúdo. `tipo` **não é tipo**: a spec usa `list[dict[str, Any]]` e valida
 apenas que a string não é vazia. Sem enum, sem registry, sem schema, sem versão.
-**Proveniência não existe.**
+**Proveniência de run:** desde os issues #24/#25, eventos novos carregam `run_id` no
+envelope plano; `artefato.atualizou` carrega `hash` como payload opcional pareado com a
+identidade do envelope. O schema mantém eventos legados sem esses campos válidos.
 
-**O achado mais acionável: o `hash` já existe e é jogado fora duas vezes.** Ele é calculado
-em `registrar_artefato`/`referenciar_artefato`, mas **não entra no evento**
-`artefato.atualizou` (que carrega só `nome, tipo, subagente, caminho`) nem sobrevive ao
-`GerenciadorJobs._resultado_concluido`. Identidade de conteúdo já está sendo produzida e
-descartada.
+**O achado dos issues #24/#25:** o `hash` era calculado e jogado fora duas vezes. Agora
+entra em `artefato.atualizou` e o `run_id` entra no envelope; no resumo de serviço, a lista
+legada de artefatos permanece compatível e os hashes ficam em `artefato_hashes` por caminho.
 
 **A armadilha:** o schema de eventos v2 é **fechado** — campo desconhecido falha, campo
 listado é obrigatório salvo se estiver em `CAMPOS_OPCIONAIS`. E `LogEventos` revalida
@@ -368,10 +369,10 @@ Reproduza antes de citar. Todos abaixo foram verificados em 2026-08-19.
   é **absoluto** e aponta para o checkout onde a run rodou, então comparar por caminho absoluto
   faz **todo** artefato virar órfão noutra máquina. A identidade estável é
   `<run_id>/artefatos/<resto>`.
-- **`artefato.atualizou` não carrega run.** Os 47 eventos do ledger de produção têm exatamente
-  `{t, seq, evento, nome, tipo, subagente, caminho}`. Nenhuma tela consegue dizer qual run
-  produziu qual artefato — o `Datahouse` afirmava "Runs produtoras: 1" agregando tudo num
-  bucket `'—'`. Some junto com o `hash`, que é calculado e descartado (§4).
+- **`run_id` no envelope e `artefato.atualizou` legado sem identidade** (issues #24/#25,
+  2026-08-21). Eventos novos carregam `run_id` no envelope e `hash` no payload do artefato,
+  permitindo às superfícies identificar a run produtora sem inferir pelo caminho. Linhas
+  legadas ficam num único balde sem proveniência; o schema continua aceitando-as.
 - **`t` do envelope é relativo, não epoch.** Medido de 0.028 a 5252.231 no log de produção:
   não dá para datar evento nenhum. Tratar como duração desde o início da run, nunca como hora.
 - **Snapshot de rotas grátis vencido** (117h contra limite de 24h). O motor recusa com

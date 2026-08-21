@@ -34,7 +34,7 @@ def test_reprodutor_h06a(_lote_h06a: dict[str, str | None], nodeid: str) -> None
 
 @pytest.mark.parametrize(
     ("reservado", "valor"),
-    [("evento", "forjado"), ("t", -1.0), ("seq", 1)],
+    [("evento", "forjado"), ("t", -1.0), ("seq", 1), ("run_id", "forjado")],
 )
 def test_e1_colisao_com_envelope_falha_antes_do_write(
     tmp_path: Path,
