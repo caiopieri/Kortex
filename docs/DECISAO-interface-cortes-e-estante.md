@@ -50,9 +50,27 @@ seguem. Foi essa forma que substituiu os dados fabricados removidos na issue #23
 Por gravidade, não por tamanho. **Nenhuma informação que o ledger emite se perde** — é
 redundância, não conteúdo.
 
-1. **`Grafo3D`** (512) — terceira renderização do mesmo grafo, sem informação própria.
-   Se 3D importar, é **modo de vista do canvas**, não tela separada — o mesmo argumento
-   usado contra dois aplicativos, aplicado aqui para não ser argumento de conveniência.
+1. **`Grafo3D`** (512) — **não some: vira modo de vista do canvas.** A página e a rota
+   saem; a capacidade fica. Decidido pelo fundador em 2026-08-19, sobre a própria
+   ressalva do autor da proposta.
+
+   **A formulação que vale: uma projeção, N renderizadores.** O defeito da issue #15
+   nunca foi *renderizar* — foi *projetar*. Duas projeções divergem, e divergiram (8
+   nós/0 arestas contra 5/4). **Dois renderizadores sobre uma projeção não têm como
+   divergir**, porque recebem o mesmo dado.
+
+   Isso não abre exceção: `DECISAO-canvas-e-operacao.md` §6.3 já decide que *"o
+   renderizador de massa fica atrás de uma interface fina para que a escolha não seja
+   porta de mão única"*. 3D é escolha de renderizador sobre a projeção canônica, e
+   implementar isso **é** construir aquela interface fina.
+
+   Critério de aceite: 3D e 2D desenham **o mesmo grafo da mesma run**, porque leem a
+   mesma projeção. É o irmão do teste causal da #15.
+
+   **Se o porte custar mais que reescrever depois, a capacidade sai** e a decisão fica
+   registrada — a medição do autor foi que ela é *"a tela mais divertida e a menos
+   informativa"*, e se ela só ficar divertida depois de trabalho grande, isso é
+   informação.
 2. **`Grafo2D`** (840) — depois da #15, é a projeção que o canvas substituiu, e o canvas
    tem o andon que ela não tem. Uma projeção do log, uma só.
 3. **`MapaGeral`** (163) — inventa "projeto" a partir de `objetivo`. Projeto **não
