@@ -2,10 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { applyTheme, getStoredTheme, getStoredMode } from './theme.js';
 import Sidebar from './components/Sidebar';
 import Topbar from './components/Topbar';
-import Home from './pages/Home';
 import Runs from './pages/Runs';
 import CaixaFundador from './pages/CaixaFundador';
-import Grafo2D from './pages/Grafo2D';
 import Custos from './pages/Custos';
 import Dashboard from './pages/Dashboard';
 import Agentes from './pages/Agentes';
@@ -14,14 +12,11 @@ import CatalogoWorkflows from './pages/CatalogoWorkflows';
 import Configuracoes from './pages/Configuracoes';
 import Datahouse from './pages/Datahouse';
 import Logs from './pages/Logs';
-import MapaGeral from './pages/MapaGeral';
 import NovaMissao from './pages/NovaMissao';
 import Runners from './pages/Runners';
-import Skills from './pages/Skills';
 import Curador from './pages/Curador';
 import Conexoes from './pages/Conexoes';
 import Inventario from './pages/Inventario';
-import Grafo3D from './pages/Grafo3D';
 import Canvas from './pages/Canvas';
 
 /* Roteador hash-based — mais leve possível, zero deps */
@@ -75,31 +70,43 @@ function App() {
 
   /* Renderiza página com base na rota */
   let Page;
-  if (route === '/' || route === '') Page = <Home />;
+  /* A raiz passa a ser o Board. A Home foi removida (corte 4/7): ela
+     repetia Custos, Runs e a fila de gates, e a fila de gates ela nao so
+     mostrava como DECIDIA, duplicando a acao da Caixa do Fundador. */
+  if (route === '/' || route === '') Page = <Board />;
   else if (route.startsWith('/runs')) Page = <Runs route={route} />;
   else if (route === '/caixa') Page = <CaixaFundador />;
-  else if (route === '/grafo') Page = <Grafo2D />;
-  else if (route === '/grafo3d') Page = <Grafo3D />;
+  /* `/grafo` foi removida: depois da #15 ela e o Canvas desenham a MESMA
+     projecao canonica de `/dados`, e o Canvas tem o andon. */
+  else if (route === '/grafo') { window.location.hash = '/canvas'; Page = <Canvas modo={mode} />; }
+  /* `/grafo3d` foi removida: era a terceira renderizacao do mesmo grafo.
+     Quem tinha o link vai para o Canvas, a projecao que sobrou. */
+  else if (route === '/grafo3d') { window.location.hash = '/canvas'; Page = <Canvas modo={mode} />; }
   else if (route === '/custos') Page = <Custos />;
   else if (route === '/agentes') Page = <Agentes />;
   else if (route === '/dashboard') Page = <Dashboard />;
   else if (route === '/board') Page = <Board />;
   /* `/workflows` continua respondendo: a rota foi renomeada porque a tela
-     mostra rotas de modelo, nao workflows (#23), e link velho cairia em
-     Home sem dizer por que. */
+     mostra rotas de modelo, nao workflows (#23), e link velho cairia na
+     raiz sem dizer por que. */
   else if (route === '/rotas' || route === '/workflows') Page = <CatalogoWorkflows />;
   else if (route === '/config') Page = <Configuracoes />;
   else if (route === '/datahouse') Page = <Datahouse />;
   else if (route === '/logs') Page = <Logs />;
-  else if (route === '/mapa') Page = <MapaGeral />;
+  /* `/mapa` foi removida: inventava "projeto" agrupando runs por `objetivo`,
+     e projeto nao existe no modelo. O resto era Runs + Custos + Agentes. */
+  else if (route === '/mapa') { window.location.hash = '/board'; Page = <Board />; }
   else if (route === '/nova-missao') Page = <NovaMissao />;
   else if (route === '/runners') Page = <Runners />;
-  else if (route === '/skills') Page = <Skills />;
+  /* `/skills` foi removida: era a transposta do Inventario (papel -> entidades
+     em vez de entidade -> papeis), com os `chamadas` que Agentes ja mostra
+     somados por papel. Nenhum campo proprio; as duas telas ficam. */
+  else if (route === '/skills') { window.location.hash = '/inventario'; Page = <Inventario />; }
   else if (route === '/curador') Page = <Curador />;
   else if (route === '/conexoes') Page = <Conexoes />;
   else if (route === '/inventario') Page = <Inventario />;
   else if (route === '/canvas') Page = <Canvas modo={mode} />;
-  else Page = <Home />;
+  else Page = <Board />;
 
   return (
     <div

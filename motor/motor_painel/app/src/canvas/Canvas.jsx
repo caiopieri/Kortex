@@ -8,6 +8,7 @@ import { PainelNotificacoes } from './notificacoes/PainelNotificacoes.jsx';
 import { derivarNotificacoes } from './notificacoes/derivar.js';
 import { Artefato } from './ledger/Artefato.jsx';
 import { Grafo } from './ledger/Grafo.jsx';
+import { Grafo3D } from './ledger/Grafo3D.jsx';
 import { LARGURA_NO, limitesDoGrafo, posicionarNos } from './ledger/layout.js';
 import { SeloLeitura } from './ledger/SeloLeitura.jsx';
 import { useLedger } from './ledger/useLedger.js';
@@ -54,6 +55,10 @@ export default function Canvas({ modo = 'escuro', adaptador = adaptadorPainel })
   const [menuAberto, setMenuAberto] = useState(false);
   const [vendoMapa, setVendoMapa] = useState(false);
   const [pele, setPele] = useState(peleAtual);
+  /* `DECISAO-canvas-e-operacao.md` §6.3: o renderizador de massa fica atras de
+     uma interface fina para a escolha nao ser porta de mao unica. Isto e a
+     interface fina -- uma projecao (`projetarRun`), N renderizadores. */
+  const [vista, setVista] = useState('2d');
 
   const ledger = useLedger(adaptador);
   const [runAtivaId, setRunAtivaId] = useState(null);
@@ -187,11 +192,19 @@ export default function Canvas({ modo = 'escuro', adaptador = adaptadorPainel })
       data-pele={pele}
     >
       <div className="app">
-        <Superficie vp={vp} deslocar={deslocar} ampliarEm={ampliarEm}>
-          {andarAtivo.id === 'software' && (
-            <Grafo run={runAtiva} artefatoAberto={artefato} aoAbrirArtefato={setArtefato} />
-          )}
-        </Superficie>
+        {/* O 3D substitui a Superficie inteira em vez de morar dentro dela: o
+            pan/zoom do plano e a orbita da camera sao o mesmo gesto do mouse, e
+            empilhar os dois faria um brigar com o outro. Mesma run, mesmos nos,
+            mesmas arestas -- so muda quem desenha. */}
+        {andarAtivo.id === 'software' && vista === '3d' ? (
+          <Grafo3D run={runAtiva} modo={modo} />
+        ) : (
+          <Superficie vp={vp} deslocar={deslocar} ampliarEm={ampliarEm}>
+            {andarAtivo.id === 'software' && (
+              <Grafo run={runAtiva} artefatoAberto={artefato} aoAbrirArtefato={setArtefato} />
+            )}
+          </Superficie>
+        )}
 
         <VistaAndares
           aberto={vendoAndares}
@@ -202,7 +215,13 @@ export default function Canvas({ modo = 'escuro', adaptador = adaptadorPainel })
 
         <Identidade menuAberto={menuAberto} aoAlternarMenu={() => setMenuAberto((v) => !v)} />
         <BarraFerramentas ferramenta={ferramenta} aoTrocar={setFerramenta} />
-        <Aparencia pele={pele} peles={PELES} aoTrocarPele={trocarPele} />
+        <Aparencia
+          pele={pele}
+          peles={PELES}
+          aoTrocarPele={trocarPele}
+          vista={vista}
+          aoTrocarVista={andarAtivo.id === 'software' ? setVista : undefined}
+        />
 
         <Artefato artefato={artefato} aoFechar={() => setArtefato(null)} />
 

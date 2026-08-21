@@ -21,11 +21,9 @@ const ZONAS = [
     ],
   },
   {
-    zona: 'Projeto: Todos',
+    zona: 'Operação',
     itens: [
       { rotulo: 'Dashboard', destino: null },
-      { rotulo: 'Grafo 2D', destino: null },
-      { rotulo: 'Grafo 3D', destino: null },
       { rotulo: 'Workflows', destino: null },
       { rotulo: 'Datahouse', destino: null },
       { rotulo: 'Runs & Histórico', destino: null },
@@ -36,7 +34,6 @@ const ZONAS = [
     itens: [
       { rotulo: 'Agentes', destino: null },
       { rotulo: 'Inventário', destino: null },
-      { rotulo: 'Skills', destino: null },
       { rotulo: 'Curador', destino: null },
       { rotulo: 'Logs', destino: null },
       { rotulo: 'Custos', destino: null },

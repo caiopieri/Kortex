@@ -1,4 +1,10 @@
-/* Topbar 52px — logo, seletor projeto, toggle tema, +missão, sino */
+/* Topbar 52px — logo, toggle claro/escuro, +missão, sino.
+ *
+ * NAO ha mais "seletor projeto". Havia uma pilula "Projeto: Todos" aqui, com
+ * `cursor: default` — parecia filtro, nao filtrava, e nao havia o que filtrar:
+ * projeto nao existe no modelo do Kortex (cada run e um `runs/<id>` que esquece
+ * tudo, §G do ESTADO.md). Foi o mesmo motivo que tirou o MapaGeral no corte 3.
+ */
 
 export default function Topbar({ theme, onToggleTheme }) {
   const label = theme === 'paperclip' ? 'ESCURO' : 'CLARO';
@@ -36,9 +42,6 @@ export default function Topbar({ theme, onToggleTheme }) {
           </g>
         </svg>
       </a>
-      <span className="pill" style={{ marginLeft: 4, cursor: 'default' }}>
-        Projeto: Todos
-      </span>
       <div style={{ flex: 1 }} />
       <button className="pill" onClick={onToggleTheme} title="Alternar tema">
         ◐ {label}

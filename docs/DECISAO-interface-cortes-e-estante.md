@@ -64,8 +64,37 @@ redundância, não conteúdo.
    porta de mão única"*. 3D é escolha de renderizador sobre a projeção canônica, e
    implementar isso **é** construir aquela interface fina.
 
-   Critério de aceite: 3D e 2D desenham **o mesmo grafo da mesma run**, porque leem a
-   mesma projeção. É o irmão do teste causal da #15.
+   **A posição, porém, não pode ser inventada — e isso quase passou.** `canvas/ledger/Grafo.jsx`
+   posiciona nó por **onda declarada** (coluna = onda), e o comentário diz: *"não há
+   coordenada no ledger e a superfície não finge que há"*. Um grafo *force-directed*
+   **inventa posição**: a coordenada vira função da física, não de nada declarado. "3D e
+   2D desenham o mesmo grafo" seria verdade na **topologia** e falso na **posição** — e
+   inventar lugar é a mesma regra que matou o `MapaGeral` no corte 3.
+
+   **Decisão: a onda declarada define o eixo Z; a física só espalha DENTRO da onda.** O
+   eixo que carrega significado continua declarado, e a física fica confinada ao que já
+   era arbitrário (a ordem dentro da onda, que o 2D também arbitra, em linha). Isso torna
+   o 3D **melhor que a tela antiga, não um porte dela**: profundidade de onda legível de
+   relance é leitura que o 2D não dá — e é o que justifica a capacidade existir depois de
+   tudo que foi cortado.
+
+   **A CDN sai.** O `Grafo3D` buscava `three` e `3d-force-graph` no unpkg.com **em tempo
+   de execução** — as únicas dependências do painel fora do `package.json`. **Sem rede, a
+   tela não abre**, e o painel roda na LAN, num runner que existe para funcionar sozinho.
+   Vira `import()` dinâmico com pacotes instalados: chunk sob demanda, bundle base
+   intacto.
+
+   Critérios de aceite: topologia idêntica ao 2D para a mesma run (irmão do teste da #15);
+   **Z derivado da onda declarada** — dois nós de ondas diferentes nunca com o mesmo Z,
+   dois da mesma onda sempre; a segunda projeção de estado do `Grafo3D` **apaga** e passa
+   a ler `no.estado`, `no.falhas` e `run.terminal` do `projetarRun`; e a tela **abre sem
+   rede**.
+
+   **O custo real, medido e honesto:** das 512 linhas, ~230 sobrevivem, e a maioria é
+   boilerplate de three.js que um rewrite produziria igual. O que é caro de redescobrir
+   são três coisas — o merge de nós persistentes (evita jitter), `setPixelRatio(1)` +
+   `shadowMap` desligado, e o recolorir no evento de tema. **O porte economiza um dia,
+   não uma semana.** A decisão, portanto, não é econômica: é de conteúdo.
 
    **Se o porte custar mais que reescrever depois, a capacidade sai** e a decisão fica
    registrada — a medição do autor foi que ela é *"a tela mais divertida e a menos
@@ -75,7 +104,18 @@ redundância, não conteúdo.
    tem o andon que ela não tem. Uma projeção do log, uma só.
 3. **`MapaGeral`** (163) — inventa "projeto" a partir de `objetivo`. Projeto **não
    existe no modelo**: cada run é um `runs/<id>` que esquece tudo (§G do `ESTADO.md`).
-4. **Duas das três** entre `Home`, `Dashboard` e `Board`. O `Board` sobrevive.
+4. **`Home`** (408) — duplicação pura. **Correção de 2026-08-20:** o texto original dizia
+   "duas das três" entre `Home`, `Dashboard` e `Board`; era taquigrafia da proposta e
+   estava errado. A substância é **remover redundância, preservar trabalho próprio** — e
+   `Dashboard` tem cálculo próprio que mais nada faz: **% de 1ª tentativa, latência
+   mediana e p90, escaladas com convergência, saúde de provedor**. O curador **coleta
+   `latencias` e nunca as desenha**; cortar o `Dashboard` apagaria as quatro medidas do
+   painel inteiro. `Board` sobrevive por trabalho próprio (gate humano).
+
+   Achado incidental do corte: a seção "Mapa geral vivo" da `Home` era **SVG hardcoded** —
+   `planner`, `pesquisa-alfa`, `pesquisa-beta`, `global_evaluator` desenhados à mão, com
+   animação de fluxo, sob o rótulo **"tempo real"**. Nenhum vinha do ledger. É o sétimo
+   irmão do defeito da issue #23, agora em SVG.
 5. **`Skills`** (99) — projeção do campo `papel` que o `Inventario` já mostra.
 6. **Três dos quatro temas.** São 4 temas + 2 peles do canvas = **seis linguagens
    visuais** para um produto de um usuário. Cada uma é caminho de código que quebra
