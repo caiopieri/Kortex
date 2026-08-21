@@ -156,6 +156,29 @@ menor do que a lista sugere.
       `/dados/orfaos` conta o que existe em disco e não tem evento, e o `Datahouse` mostra o
       número. **Não reconstrói**: o órfão aparece como caminho e nada mais — sem run, tipo
       nem data, porque o diretório sugere os três e nenhum foi registrado
+- [x] **sete cortes na interface, e o 3D volta como modo de vista** (2026-08-21, merge `db539a1`).
+      Saíram cinco telas e dois controles que afirmavam mais do que o ledger diz: `Grafo3D`
+      antigo, `Grafo2D` (com o `reactflow`), `MapaGeral` (inventava "projeto" a partir de
+      `objetivo`), `Home` (repetia Custos/Runs e **decidia** gates, duplicando a Caixa do
+      Fundador — e trazia um "Mapa geral vivo" que era **SVG desenhado à mão** sob rótulo
+      *"tempo real"*, o sétimo irmão da #23), `Skills` (recombinação mais pobre de Inventário
+      + Agentes), três dos quatro temas, e a pílula *"Projeto: Todos"* com `cursor: default`
+      — forma de filtro, sem filtro atrás.
+      **Medido por mim, não reportado:** bundle 543 kB / 155.89 kB gzip / 76 pacotes →
+      **351.35 kB / 99.99 kB gzip / 26 pacotes**; suíte **1280 passam, 35 pulados, 1 falha
+      (E-02)**; `npm test` 58/58.
+      O 3D voltou com uma regra: **a onda declarada é o eixo Z (`fz` fixo), a física só
+      espalha dentro da onda** — grafo force-directed livre *inventa posição*, que é a mesma
+      falta que matou o `MapaGeral`. Topologia idêntica à do 2D, com teste irmão do #15.
+      A CDN do unpkg saiu: `three` e `3d-force-graph` agora são dependência, em chunk sob
+      demanda de **412.15 kB gzip** que não pesa na abertura.
+      **Achado que nenhum portão pegaria:** duas cópias do `three` (o `3d-force-graph` declara
+      faixa aberta `>=0.118 <1` e resolve para a mais nova) — instalação limpa, build verde,
+      1280 testes verdes, e a tela abrindo **preta**. Só apareceu abrindo a tela. Travado com
+      `resolve.dedupe: ['three']`.
+      **Ressalva registrada:** o `fz` é testado como *contrato* (está setado, constante por
+      onda), não como *resultado* — que o `d3-force-3d` honra `fz` foi verificado por olho.
+      Se a biblioteca trocar de motor de física, o teste segue verde e a tela mente.
 - [x] `npm ci` **volta a funcionar** (issue #16) — faltavam 23 linhas de `@emnapi/core@1.11.3`
       no `package-lock.json`; `npm install` as regenerou e o `npm ci` passa. Correção
       incidental, não pedida: separar do resto se atrapalhar a revisão
@@ -377,6 +400,23 @@ Reproduza antes de citar. Todos abaixo foram verificados em 2026-08-19.
 - **Snapshot de rotas grátis vencido** (117h contra limite de 24h). O motor recusa com
   *"adiantar só a data não prova gratuidade nem disponibilidade"*. Disponibilidade (HTTP 200)
   **não** é gratuidade — remedir exige olhar consumo no provedor.
+- **O painel ainda depende de rede para abrir** (issue #26, medido em 2026-08-21 sobre o
+  `dist/` de `db539a1`). Depois dos cortes, os **únicos** hosts externos que sobraram no
+  bundle são `fonts.googleapis.com` e `fonts.gstatic.com`, em `app/index.html:7-9`. Nenhum
+  host externo de *código*: a CDN do unpkg saiu junto com o `Grafo3D` antigo. A tela abre sem
+  internet (as fontes têm fallback), mas com tipografia diferente e depois do timeout de duas
+  conexões que não respondem — num painel cujo lugar é um runner de LAN. Não é regressão dos
+  cortes: já estava em `eb14268`. **Não confundir** com `motor_painel/grafo3d.html` + rota
+  `/grafo3d`, a superfície legada que serve quando não há `app/dist` e continua com CDN de
+  código — assunto separado, ainda em aberto.
+- **Uma falha intermitente registrada em vez de descartada** (issue #27).
+  `test_caixa.py::test_interrupt_cria_nota_e_decisao_conclui` caiu **uma vez** em 2026-08-21 e
+  não reproduziu: passou isolada 8/8, nas duas execuções completas seguintes do agente, na
+  minha do ramo e na minha da `main` mergeada. Nada no ramo tocava a caixa. Fica aberta porque
+  as duas explicações — ruído de ambiente e corrida sob carga — cabem igualmente, e a segunda
+  é cara se estiver certa. **Armadilha de medição aprendida no mesmo dia:** rodar duas suítes
+  no mesmo checkout produz falha falsa — foi assim que eu vi
+  `test_docker_runner_timeout_remove_arvore_container` cair, e o erro era meu, não do ramo.
 
 ---
 
