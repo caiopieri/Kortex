@@ -194,8 +194,24 @@ menor do que a lista sugere.
 
 ### F. Infra 24/7
 - [x] runner Linux dedicado provisionado e provado (ver §5)
-- [x] painel servido na LAN por systemd
-- [ ] Kortex sobe sozinho no boot — hoje o 24/7 é do hardware, não do serviço
+- [x] **painel servido na LAN por systemd** — verdade desde 2026-08-21, e **antes disso esta
+      linha estava errada**. Medido em 21/08: o painel rodava como processo solto, subido à
+      mão, sem systemd e sem tmux, e os dois env vars (`MOTOR_MODELOS`, `MOTOR_SANDBOX`)
+      existiam **só na memória do processo** — para reiniciar preservando o ambiente foi
+      preciso ler `/proc/<pid>/environ`. O documento afirmava o estado desejado como se fosse
+      o medido, que é exatamente o defeito que os cortes de interface passaram o dia removendo
+      das telas.
+      Corrigido: unit de usuário `kortex-painel.service` com `Restart=on-failure` e
+      `EnvironmentFile=~/painel.env` (fora do repo — caminhos absolutos da máquina, e `origin`
+      é público). Exemplo versionado em `motor/motor_painel/painel.env.exemplo`.
+      **Provado, não suposto:** `kill -9` no processo e o systemd devolveu pid novo em menos de
+      9s, HTTP 200 depois. `loginctl enable-linger cap` → `Linger=yes`, então o serviço não
+      depende de sessão aberta.
+      **Duas armadilhas de operação que custaram tempo e ficam registradas:** `npm` não está no
+      PATH do ssh não-interativo (é preciso `export PATH=$HOME/.nvm/versions/node/v24.19.0/bin:$PATH`
+      antes de `npm run build`), e `systemctl --user` falha em silêncio sem
+      `export XDG_RUNTIME_DIR=/run/user/$(id -u)`.
+- [ ] **o motor** sobe sozinho no boot — o painel sobe; missão em curso não retoma
 - [ ] OmniRoute deixa de ser ponto único de falha
 
 ### G. A fábrica — a camada acima
