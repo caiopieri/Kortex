@@ -5,6 +5,14 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   base: './',
+  /* UMA copia do three, sempre.
+     O `3d-force-graph` declara `three: '>=0.118 <1'` e resolve para a mais nova,
+     enquanto um `three` fixado no topo fica noutra versao. Duas copias
+     coexistem sem conflito de instalacao, o build passa, os testes passam -- e
+     a tela abre PRETA, porque um `Mesh` de uma copia entra no renderer da
+     outra e estoura no laco de animacao (`matrixWorld.determinantAffine is not
+     a function`). Falha que so aparece olhando. */
+  resolve: { dedupe: ['three'] },
   server: {
     proxy: {
       '/dados': {

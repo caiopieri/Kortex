@@ -22,6 +22,10 @@
   --ease: cubic-bezier(0.22, 0.8, 0.24, 1);
   /* Reservado a telemetria. Nenhum controle de UI pode usar. */
   --green: #3dc97e;
+  /* Idem. Era literal dentro da regra de `terminal-ambiguo`; virou token porque
+     o renderizador 3D precisa da cor como VALOR e nao como borda, e duplicar o
+     hexadecimal deixaria as duas superficies divergirem em silencio. */
+  --alerta: #e0553d;
 
   /* --- forma e tipo da pele `origem` --- */
   --fonte-ui: 'Archivo', system-ui, -apple-system, sans-serif;
@@ -1091,7 +1095,7 @@
 /* A cadeia parou e pode ter havido efeito cobrado. Exige run nova, nunca retry. */
 .no-falha[data-forma='terminal-ambiguo'],
 .kxc .estacao-item[data-forma='terminal-ambiguo'] {
-  border-left-color: #e0553d;
+  border-left-color: var(--alerta);
   border-left-width: 3px;
 }
 
@@ -1517,4 +1521,61 @@
   font-weight: 600;
   line-height: 15px;
   text-align: center;
+}
+
+/* --- renderizador 3D do grafo da run --- */
+/* Ocupa o mesmo lugar que a `.superficie`: e o outro renderizador da mesma
+   projecao, nao um painel sobreposto. */
+.kxc .kx3d {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.kxc .kx3d-palco {
+  position: absolute;
+  inset: 0;
+}
+
+.kxc .kx3d-aviso {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+  color: var(--text-soft);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+/* A regua fica FIXA na tela, nao na cena: se orbitasse junto com o grafo, a
+   explicacao do eixo sairia de vista exatamente quando o operador girasse a
+   camera e mais precisasse dela. */
+.kxc .kx3d-regua {
+  position: absolute;
+  left: 24px;
+  /* Abaixo da identidade, NAO no rodape: o selo de leitura ja mora la embaixo e
+     as duas caixas se sobrepunham. */
+  top: 128px;
+  max-width: 340px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--raio-m);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  color: var(--text-faint);
+  font-size: 10.5px;
+  line-height: 1.55;
+  pointer-events: none;
+}
+
+.kxc .kx3d-regua b {
+  color: var(--text-soft);
+  font-weight: 600;
 }

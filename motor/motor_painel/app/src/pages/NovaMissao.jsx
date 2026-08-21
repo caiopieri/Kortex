@@ -146,10 +146,10 @@ export default function NovaMissao() {
           spec: {resultado.spec}<br />log: {resultado.log}
         </div>
         <div className="mono" style={{ fontSize: 11.5, color: 'var(--text3)', maxWidth: 440, lineHeight: 1.6 }}>
-          O motor está rodando como processo real neste pid. Acompanhe o log acima no terminal (<span className="mono" style={{ color: 'var(--text2)' }}>tail -f</span>) ou os nós no Grafo 2D; gates aparecem na Caixa do Fundador.
+          O motor está rodando como processo real neste pid. Acompanhe o log acima no terminal (<span className="mono" style={{ color: 'var(--text2)' }}>tail -f</span>) ou os nós no Canvas; gates aparecem na Caixa do Fundador.
         </div>
         <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 6 }}>
-          <span className="btn btn-primary" onClick={() => { window.location.hash = '/grafo'; }}>Abrir Grafo 2D →</span>
+          <span className="btn btn-primary" onClick={() => { window.location.hash = '/canvas'; }}>Abrir Canvas →</span>
           <span className="btn" onClick={() => setResultado(null)}>Nova missão</span>
         </div>
       </div>

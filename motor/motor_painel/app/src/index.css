@@ -279,7 +279,7 @@ body {
   vertical-align: middle;
 }
 
-/* linha de tabela leve — usada em Dashboard, MapaGeral, Curador, Datahouse */
+/* linha de tabela leve — usada em Dashboard, Curador, Datahouse */
 .trow {
   display: flex;
   align-items: center;

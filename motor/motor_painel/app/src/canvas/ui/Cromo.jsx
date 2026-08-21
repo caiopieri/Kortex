@@ -73,9 +73,29 @@ export function BarraFerramentas({ ferramenta, aoTrocar }) {
 /* Dois eixos independentes, lado a lado: pele (linguagem visual) e tema
    (luminosidade). O seletor de pele existe para a decisao ser tomada olhando,
    nao descrevendo — e sai da tela quando ela for tomada. */
-export function Aparencia({ pele, peles, aoTrocarPele, tema, aoTrocarTema }) {
+export function Aparencia({ pele, peles, aoTrocarPele, tema, aoTrocarTema, vista, aoTrocarVista }) {
   return (
     <div className="canto canto-sd">
+      {/* 2D e 3D nao sao duas telas: sao dois renderizadores da MESMA projecao
+          do ledger. Por isso a alternancia mora aqui, junto com pele e tema --
+          e escolha de apresentacao -- e nao na navegacao. */}
+      {aoTrocarVista && (
+        <div className="capsula capsula-linha">
+          {['2d', '3d'].map((v) => (
+            <button
+              key={v}
+              type="button"
+              className="pele-op"
+              aria-pressed={vista === v}
+              title={v === '2d' ? 'Grafo em 2D' : 'Grafo em 3D · profundidade = onda'}
+              onClick={() => aoTrocarVista(v)}
+            >
+              {v.toUpperCase()}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="capsula capsula-linha">
         {peles.map((p) => (
           <button

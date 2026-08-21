@@ -1,5 +1,8 @@
-/* Sidebar 238px — 4 zonas (Fixas, Projeto, Biblioteca, Sistema)
+/* Sidebar 238px — 4 zonas (Fixas, Operacao, Biblioteca, Sistema)
  * Nav items via hash routing.
+ *
+ * A zona chamava-se "Projeto: Todos". O rotulo prometia um seletor de projeto
+ * que nunca existiu, e "Todos" so faz sentido em oposicao a "um": nao ha o um.
  */
 
 const NAV = [
@@ -7,19 +10,15 @@ const NAV = [
     zone: 'Fixas',
     fixed: true,
     items: [
-      { label: 'Home', path: '/' },
-      { label: 'Board de missões', path: '/board' },
+      { label: 'Board de missões', path: '/' },
       { label: 'Caixa do Fundador', path: '/caixa' },
-      { label: 'Mapa geral', path: '/mapa' },
     ],
   },
   {
-    zone: 'Projeto: Todos',
+    zone: 'Operação',
     items: [
       { label: 'Dashboard', path: '/dashboard' },
       { label: 'Canvas', path: '/canvas' },
-      { label: 'Grafo 2D', path: '/grafo' },
-      { label: 'Grafo 3D', path: '/grafo3d' },
       { label: 'Rotas do registro', path: '/rotas' },
       { label: 'Datahouse', path: '/datahouse' },
       { label: 'Runs & Histórico', path: '/runs' },
@@ -30,7 +29,6 @@ const NAV = [
     items: [
       { label: 'Agentes', path: '/agentes' },
       { label: 'Inventário', path: '/inventario' },
-      { label: 'Skills', path: '/skills' },
       { label: 'Curador', path: '/curador' },
       { label: 'Logs', path: '/logs' },
       { label: 'Custos', path: '/custos' },

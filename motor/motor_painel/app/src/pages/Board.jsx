@@ -51,7 +51,7 @@ function BCard({ card, col }) {
         {col === 'plan' && (
           <>
             <span className="btn btn-sm btn-primary" onClick={() => window.location.hash = '/nova-missao'}>empurrar p/ produção →</span>
-            <span className="lnk" onClick={() => window.location.hash = '/grafo'}>abrir editor do grafo</span>
+            <span className="lnk" onClick={() => window.location.hash = '/canvas'}>abrir no Canvas</span>
           </>
         )}
         {col === 'precisa' && <span className="lnk amber" onClick={() => window.location.hash = '/caixa'}>→ abrir na Caixa do Fundador</span>}
