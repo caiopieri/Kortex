@@ -788,7 +788,15 @@ def atualizar_nota_caixa(gate_id: str, decisao: str) -> bool:
 # ---------------------------------------------------------------------------
 
 HTML_PATH = BASE / "painel.html"
-GRAFO3D_HTML_PATH = BASE / "grafo3d.html"
+
+# Rotas que EXISTIRAM e nao existem mais. A mensagem diz para onde a capacidade
+# foi, porque 404 mudo faz o operador achar que o painel esta quebrado.
+ROTAS_REMOVIDAS = {
+    "/grafo3d": (
+        b"rota removida: o grafo 3D agora e um modo de vista do canvas, "
+        b"sobre a mesma projecao do ledger que o 2D"
+    ),
+}
 
 
 class ReaproveitavelTCPServer(socketserver.TCPServer):
@@ -1005,13 +1013,30 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path == "/dados" or path.startswith("/dados/"):
             return self._erro(404, b"rota de dados desconhecida")
 
-        # 2. Servir a interface (React app ou painel.html original de fallback)
-        if path == "/grafo3d":
-            return self._html(GRAFO3D_HTML_PATH.read_bytes())
-            
+        # 2. Rotas REMOVIDAS respondem 404 explicito.
+        #
+        # `/grafo3d` servia uma superficie com projecao PROPRIA de estado -- mais
+        # fraca que a do canvas, sem falha nenhuma no modelo, derivando "ativo" de
+        # o no ter aparecido nos ultimos 24 eventos do arquivo, e lendo o agregado
+        # de todas as runs em vez do grafo de uma. Medida na rota viva do runner
+        # com a run ja encerrada (`tarefa.concluida`): cabecalho "AO VIVO", quatro
+        # nos na cor cuja legenda e "PRECISA DE VOCE", particulas animando sob o
+        # rotulo "fluxo so onde ha run ativo". Buscava `three` no unpkg.com, entao
+        # nao abria sem internet publica.
+        #
+        # O 404 e EXPLICITO de proposito. Sem ele a rota cairia no fallback abaixo
+        # e responderia 200 com a pagina de "painel nao construido" -- que manda
+        # rodar `npm run build`, conselho que nunca traria esta rota de volta. E
+        # sem uma regra nomeada nao ha o que testar: rota removida sem teste de
+        # remocao ressuscita num merge e nada falha.
+        if path in ROTAS_REMOVIDAS:
+            return self._erro(404, ROTAS_REMOVIDAS[path])
+
+        # 3. Servir a interface React. Sem `app/dist`, a `painel.html` DECLARA que
+        # o painel nao foi construido -- ela nao e mais uma segunda interface.
         if not APP_DIST.exists():
             return self._html(HTML_PATH.read_bytes())
-            
+
         rel_path = path.lstrip("/")
         if not rel_path:
             rel_path = "index.html"

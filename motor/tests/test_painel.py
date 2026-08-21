@@ -252,7 +252,28 @@ def _http_get(path: str, log_path: Path) -> tuple[int, str, str]:
             thread.join(timeout=3)
 
 
-def test_rota_grafo3d_responde_html_com_forcegraph(tmp_path, monkeypatch):
+def test_rota_grafo3d_nao_existe_mais(tmp_path, monkeypatch):
+    """O NEGATIVO do corte: `/grafo3d` tem de responder 404, e nao HTML.
+
+    A rota servia `grafo3d.html`, uma superfície com projeção PRÓPRIA de estado
+    -- mais fraca que a do canvas, porque não conhecia falha nenhuma
+    (`executor.erro`/`modelo.falha` não apareciam nela) e derivava "ativo" de o
+    nó ter aparecido nos últimos 24 eventos do arquivo. Ela lia `payload.nos`,
+    o agregado de TODAS as runs, então desenhava uma topologia que não é de
+    nenhuma run. E buscava `three` e `3d-force-graph` no unpkg.com, então não
+    abria sem internet pública.
+
+    O teste anterior (`..._responde_html_com_forcegraph`) saiu com ela.
+
+    Este existe porque rota removida sem teste de remoção volta por acidente no
+    próximo merge e ninguém percebe: nada falha quando uma rota RESSUSCITA.
+
+    O 404 precisa ser de uma regra NOMEADA (`ROTAS_REMOVIDAS`), não do roteador.
+    Sem build, o fallback devolve a página de "painel não construído" para
+    qualquer caminho, então `/grafo3d` responderia 200 mandando rodar
+    `npm run build` — conselho que nunca traria esta rota de volta. Apagar a
+    entrada de `ROTAS_REMOVIDAS` derruba este teste.
+    """
     monkeypatch.setattr(painel, "APP_DIST", tmp_path / "nao_existe")
     log = tmp_path / "log.jsonl"
     log.write_text(
@@ -260,15 +281,50 @@ def test_rota_grafo3d_responde_html_com_forcegraph(tmp_path, monkeypatch):
         encoding="utf-8",
     )
 
-    status, content_type, body = _http_get("/grafo3d", log)
+    try:
+        status, _content_type, body = _http_get("/grafo3d", log)
+    except urllib.error.HTTPError as e:
+        assert e.code == 404
+        corpo = e.read().decode("utf-8")
+        assert "ForceGraph3D" not in corpo
+        assert "unpkg.com" not in corpo
+        # 404 mudo faria o operador achar que o painel quebrou.
+        assert "canvas" in corpo
+    else:
+        pytest.fail(f"esperado 404 em /grafo3d, veio {status}: {body[:120]}")
 
-    assert status == 200
-    assert "text/html" in content_type
-    assert "ForceGraph3D" in body
-    assert "fetch(\"/dados\"" in body
+
+def test_nenhuma_superficie_servida_busca_codigo_na_internet(tmp_path, monkeypatch):
+    """O painel roda em runner de LAN: superfície que precisa da internet pública
+    para abrir é defeito, não detalhe de empacotamento."""
+    monkeypatch.setattr(painel, "APP_DIST", tmp_path / "nao_existe")
+    log = tmp_path / "log.jsonl"
+    log.write_text(
+        json.dumps({"t": 0.0, "evento": "spec.recebida", "missao": "x"}) + "\n",
+        encoding="utf-8",
+    )
+
+    _status, _content_type, body = _http_get("/", log)
+
+    for host in ("unpkg.com", "cdn.jsdelivr.net", "cdnjs.cloudflare.com"):
+        assert host not in body
 
 
-def test_rotas_dados_e_painel_2d_intactas(tmp_path, monkeypatch):
+def test_rotas_dados_e_fallback_declarado(tmp_path, monkeypatch):
+    """O roteador básico, e o que o fallback virou.
+
+    A asserção anterior era `"Meta-fábrica v0.5" in body_home` -- o título da
+    `painel.html` velha, que era uma SEGUNDA interface completa (mapa SVG e
+    ticker próprios) servida sempre que `app/dist` faltasse. Ela mentia em três
+    pontos medidos: custo `R$ 0,00` fixo no código numa pílula rotulada "custo",
+    "ao vivo" setado uma vez e nunca revertido, e `catch (_) {}` engolindo falha
+    de `/dados` -- painel morto seguia exibindo o último estado.
+
+    Agora ela declara a própria ausência, então o teste prova a DECLARAÇÃO em
+    vez de um título. Se alguém devolver uma segunda interface ali, cai.
+
+    As três asserções de `/dados` seguem intactas: é o único teste do roteador.
+    """
     monkeypatch.setattr(painel, "APP_DIST", tmp_path / "nao_existe")
     log = tmp_path / "log.jsonl"
     log.write_text(
@@ -285,7 +341,8 @@ def test_rotas_dados_e_painel_2d_intactas(tmp_path, monkeypatch):
     assert payload["nos"]
     assert status_home == 200
     assert "text/html" in content_type_home
-    assert "Meta-fábrica v0.5" in body_home
+    assert "não foi construído" in body_home
+    assert "npm run build" in body_home
 
 
 # ---------------------------------------------------------------------------

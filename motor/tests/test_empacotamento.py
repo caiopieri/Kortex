@@ -7,7 +7,6 @@ ARTEFATOS_SDIST = {
     "tests/helpers_grafo.py",
     "tests/runner_fake.py",
     "tools/validar_manifest_reprodutores.py",
-    "motor_painel/grafo3d.html",
     "motor_painel/painel.html",
     "specs/001-hardening-producao/invariant-matrix.jsonl",
     "specs/001-hardening-producao/reproducer-manifest.jsonl",
