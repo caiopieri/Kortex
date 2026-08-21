@@ -39,9 +39,7 @@ def carregar_runs(caminhos: list[str | Path], incluir_rascunho: bool = False) ->
     runs: list[dict[str, Any]] = []
     malformadas = 0
     for arquivo in _expandir(caminhos):
-        eventos: list[dict[str, Any]] = []
-        indice = 1
-        ultimo_t: float | None = None
+        grupos: dict[str, list[dict[str, Any]]] = {}
         with arquivo.open(encoding="utf-8") as f:
             for linha in f:
                 linha = linha.strip()
@@ -55,14 +53,18 @@ def carregar_runs(caminhos: list[str | Path], incluir_rascunho: bool = False) ->
                 if not isinstance(ev, dict):
                     malformadas += 1
                     continue
-                t = _num(ev.get("t"))
-                if eventos and t is not None and ultimo_t is not None and t < ultimo_t:
-                    _adicionar_run(runs, arquivo, indice, eventos, incluir_rascunho)
-                    eventos, indice = [], indice + 1
-                eventos.append(ev)
-                ultimo_t = t if t is not None else ultimo_t
-        if eventos:
-            _adicionar_run(runs, arquivo, indice, eventos, incluir_rascunho)
+                run_id = ev.get("run_id")
+                chave = run_id if isinstance(run_id, str) and run_id else "__legado__"
+                grupos.setdefault(chave, []).append(ev)
+        for indice, (chave, eventos) in enumerate(grupos.items(), start=1):
+            _adicionar_run(
+                runs,
+                arquivo,
+                indice,
+                eventos,
+                incluir_rascunho,
+                None if chave == "__legado__" else chave,
+            )
     return runs, malformadas
 
 
@@ -1621,12 +1623,13 @@ def _adicionar_run(
     indice: int,
     eventos: list[dict[str, Any]],
     incluir_rascunho: bool,
+    run_id: str | None = None,
 ) -> None:
     eventos = _resolver_modelo_roteado(eventos)
     perfil = _perfil_run(eventos)
     if perfil == "rascunho" and not incluir_rascunho:
         return
-    runs.append(_run(arquivo, indice, eventos, perfil))
+    runs.append(_run(arquivo, indice, eventos, perfil, run_id))
 
 
 def _resolver_modelo_roteado(eventos: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -1659,11 +1662,18 @@ def _resolver_modelo_roteado(eventos: list[dict[str, Any]]) -> list[dict[str, An
     return resolvidos
 
 
-def _run(arquivo: Path, indice: int, eventos: list[dict[str, Any]], perfil: str) -> dict[str, Any]:
+def _run(
+    arquivo: Path,
+    indice: int,
+    eventos: list[dict[str, Any]],
+    perfil: str,
+    run_id: str | None = None,
+) -> dict[str, Any]:
     return {
-        "id": arquivo.name if indice == 1 else f"{arquivo.name}#{indice}",
+        "id": run_id or arquivo.name,
         "fonte": str(arquivo),
         "perfil": perfil,
+        "proveniencia": "declarada" if run_id else "ausente",
         "eventos": eventos,
     }
 

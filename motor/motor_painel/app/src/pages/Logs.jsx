@@ -78,7 +78,7 @@ export default function Logs() {
   /* projetos únicos */
   const projetos = useMemo(() => {
     const s = new Set();
-    eventos.forEach(ev => { const p = ev.missao || ev.run; if (p) s.add(p); });
+    eventos.forEach(ev => { s.add(ev.run_id || 'legado:sem-proveniencia'); });
     return ['todos', ...Array.from(s)];
   }, [eventos]);
 
@@ -87,7 +87,7 @@ export default function Logs() {
     const q = query.trim().toLowerCase();
     return eventos
       .map(ev => {
-        const proj = ev.missao || ev.run || '—';
+        const proj = ev.run_id || 'legado:sem-proveniencia';
         const det = [ev.executor, ev.tier, ev.portao, ev.tentativa ? `tent.${ev.tentativa}` : null, ev.provedor].filter(Boolean).join(' · ');
         return {
           t: fmtTime(ev.t),

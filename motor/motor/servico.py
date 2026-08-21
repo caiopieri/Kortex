@@ -374,6 +374,7 @@ class GerenciadorJobs:
                 repositorio_orcamento=orcamento_brl.repositorio,
                 fabrica_tentativas_orcadas=self._fabrica_tentativas_orcadas,
                 teto_bootstrap=orcamento_brl.teto_bootstrap,
+                run_id=job_id,
             )
             snapshot = grafo.get_state(self._config(job_id))
             return self._gates(getattr(snapshot, "interrupts", ()))
@@ -479,6 +480,9 @@ class GerenciadorJobs:
 
         try:
             log = self._log_do_job(job_id)
+            vincular_run_id = getattr(log, "vincular_run_id", None)
+            if callable(vincular_run_id):
+                vincular_run_id(job_id)
             orcamento_brl = self._orcamento_brl_validado()
             grafo = construir_grafo(
                 cliente,
@@ -492,6 +496,7 @@ class GerenciadorJobs:
                 repositorio_orcamento=orcamento_brl.repositorio,
                 fabrica_tentativas_orcadas=self._fabrica_tentativas_orcadas,
                 teto_bootstrap=orcamento_brl.teto_bootstrap,
+                run_id=job_id,
             )
             if claim is None:
                 resultado = grafo.invoke(entrada, self._config(job_id))
@@ -634,7 +639,9 @@ class GerenciadorJobs:
             orcamento.repositorio.possui_ledger(job_id)
             for orcamento in self._orcamentos.values()
         ):
-            log_relay = self.log or LogEventos(self._caminho_log(job_id), truncar=False)
+            log_relay = self.log or LogEventos(
+                self._caminho_log(job_id), truncar=False, run_id=job_id
+            )
             try:
                 if not self._drenar_orcamento(job_id, log_relay):
                     return {"estado": "em_execucao"}
@@ -655,6 +662,7 @@ class GerenciadorJobs:
             repositorio_orcamento=orcamento_brl.repositorio,
             fabrica_tentativas_orcadas=self._fabrica_tentativas_orcadas,
             teto_bootstrap=orcamento_brl.teto_bootstrap,
+            run_id=job_id,
         )
         try:
             snapshot = grafo.get_state(self._config(job_id))
@@ -711,16 +719,21 @@ class GerenciadorJobs:
 
     def _resultado_concluido(self, job_id: str, resultado: dict[str, Any]) -> dict:
         artefatos = []
+        artefato_hashes: dict[str, str] = {}
         metricas = {}
         for item in resultado.get("resultados", []):
             sid = item.get("id")
             for artefato in item.get("artefatos", []):
+                caminho = artefato.get("caminho", "")
+                digest = artefato.get("hash")
                 artefatos.append({
                     "nome": artefato.get("nome", ""),
                     "tipo": artefato.get("tipo", ""),
-                    "caminho": artefato.get("caminho", ""),
+                    "caminho": caminho,
                     "subagente": sid,
                 })
+                if isinstance(caminho, str) and isinstance(digest, str):
+                    artefato_hashes[caminho] = digest
             if sid and item.get("metricas"):
                 metricas[sid] = item["metricas"]
         run_id = resultado.get("run_id") or job_id
@@ -732,6 +745,8 @@ class GerenciadorJobs:
         }
         if metricas:
             saida["metricas"] = metricas
+        if artefato_hashes:
+            saida["artefato_hashes"] = artefato_hashes
         return saida
 
     def _log_do_job(self, job_id: str, truncar: bool = True) -> LogEventos:
@@ -739,7 +754,7 @@ class GerenciadorJobs:
             return self.log
         if not truncar:
             return cast(LogEventos, _LogConsulta(self._caminho_log(job_id)))
-        return LogEventos(self._caminho_log(job_id), truncar=truncar)
+        return LogEventos(self._caminho_log(job_id), truncar=truncar, run_id=job_id)
 
     def _caminho_log(self, job_id: str) -> Path:
         if self.log is not None:

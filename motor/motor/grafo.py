@@ -598,7 +598,8 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                         [str, str, int, RequisitosTentativaCusteada],
                         list[RotaTentativaCusteada],
                     ] | None = None,
-                    teto_bootstrap: Decimal = Decimal("2.0")):
+                    teto_bootstrap: Decimal = Decimal("2.0"),
+                    run_id: str | None = None):
     """Compila o grafo. `cliente` e `log` são injetados — o grafo não conhece backends.
     `politica` decide quais gates pausam (manual) ou resolvem sozinhos (auto-mode);
     ausente = tudo manual (comportamento default).
@@ -646,8 +647,30 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
             if identidade.is_file() and os.access(identidade, os.X_OK):
                 executaveis_permitidos.add(identidade)
 
+    run_id_cache = run_id if run_id is not None else getattr(log, "run_id", None)
+    if run_id_cache is not None and not isinstance(run_id_cache, str):
+        raise ValueError("run_id invalido")
+    if run_id is not None:
+        vincular = getattr(log, "vincular_run_id", None)
+        if callable(vincular):
+            vincular(run_id)
+
     def run_id_de(state: EstadoMotor) -> str:
-        return state.get("run_id") or f"{datetime.now():%Y%m%d-%H%M%S}-{uuid4().hex[:6]}"
+        nonlocal run_id_cache
+        declarado = state.get("run_id")
+        if declarado is not None and not isinstance(declarado, str):
+            raise ValueError("run_id invalido")
+        escolhido = declarado or run_id_cache
+        if escolhido is None:
+            escolhido = f"{datetime.now():%Y%m%d-%H%M%S}-{uuid4().hex[:6]}"
+        if run_id_cache is None:
+            run_id_cache = escolhido
+        elif escolhido != run_id_cache:
+            raise ValueError("run_id divergente no grafo")
+        vincular = getattr(log, "vincular_run_id", None)
+        if callable(vincular) and getattr(log, "run_id", None) is None:
+            vincular(run_id_cache)
+        return run_id_cache
 
     def chamar_planner_orcado(
         state: EstadoMotor, run_id: str, prompt: str, tentativa: int,
@@ -1234,6 +1257,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                         tipo=ref["tipo"],
                         subagente=sub["id"],
                         caminho=ref["caminho"],
+                        hash=ref["hash"],
                     )
                     resultado["artefatos"] = [ref]
                 return {"resultados": [resultado]}
@@ -1439,6 +1463,7 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                     tipo=artefato["tipo"],
                     subagente=sub["id"],
                     caminho=artefato["caminho"],
+                    hash=artefato["hash"],
                 )
         dados_evento = {"ferramenta": nome_ferramenta, "subagente": sub["id"], "aprovado": aprovado}
         if metricas:

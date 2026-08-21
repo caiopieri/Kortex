@@ -344,6 +344,9 @@ def main(argv: list[str] | None = None) -> int:
 
     raiz = Path(__file__).parent.parent
     log = LogEventos(_caminho_log_da_run(workspace_base, run_id))
+    vincular_run_id = getattr(log, "vincular_run_id", None)
+    if callable(vincular_run_id):
+        vincular_run_id(run_id)
     repositorios_orcamento: dict[Moeda, RepositorioOrcamento] = {}
     dreno_emergencial_habilitado = False
     dreno_final_tentado = False
@@ -421,7 +424,8 @@ def main(argv: list[str] | None = None) -> int:
                                         medicao_monetaria_desligada=medicao_monetaria_desligada,
                                         fabrica_tentativas_orcadas=deps_orcamento.fabrica,
                                         teto_bootstrap=orcamento_brl.teto_bootstrap,
-                                        command_runner=command_runner)
+                                        command_runner=command_runner,
+                                        run_id=run_id)
                 caixa = CaixaFundador(dir_caixa, log)
                 resultado = rodar_com_caixa(grafo, entrada, config, caixa, log)
             finally:
@@ -442,7 +446,8 @@ def main(argv: list[str] | None = None) -> int:
                                     medicao_monetaria_desligada=medicao_monetaria_desligada,
                                     fabrica_tentativas_orcadas=deps_orcamento.fabrica,
                                     teto_bootstrap=orcamento_brl.teto_bootstrap,
-                                    command_runner=command_runner)
+                                    command_runner=command_runner,
+                                    run_id=run_id)
             resultado = grafo.invoke(entrada, config)
             while "__interrupt__" in resultado:  # gate do fundador
                 pedido = resultado["__interrupt__"][0].value

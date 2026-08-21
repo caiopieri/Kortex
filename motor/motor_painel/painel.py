@@ -201,20 +201,39 @@ def grafo_do_log(eventos: list[dict]) -> tuple[list[dict], list[dict]]:
     return nos, arestas
 
 
-def _runs_do_log(eventos: list[dict]) -> list[list[dict]]:
-    """Separa runs pelo evento de abertura, preservando logs legados."""
-    if not eventos:
-        return []
-    runs: list[list[dict]] = []
-    atual: list[dict] = []
+RUN_LEGADO_SEM_PROVENIENCIA = "legado:sem-proveniencia"
+
+
+def _identidade_run(evento: dict) -> str | None:
+    run_id = evento.get("run_id")
+    return run_id if isinstance(run_id, str) and run_id else None
+
+
+def agrupar_eventos_por_run(eventos: list[dict]) -> list[list[dict]]:
+    """Agrupa por ``run_id`` declarado; legado fica num único balde.
+
+    ``seq`` e ``t`` são locais ao arquivo e não são identidade. Uma linha sem
+    ``run_id`` é deliberadamente não atribuível: ela não é repartida por janela,
+    caminho ou missão inferida.
+    """
+    grupos: dict[str, list[dict]] = {}
     for evento in eventos:
-        if evento.get("evento") == "run.perfil" and atual:
-            runs.append(atual)
-            atual = []
-        atual.append(evento)
-    if atual:
-        runs.append(atual)
-    return runs
+        identidade = _identidade_run(evento) or RUN_LEGADO_SEM_PROVENIENCIA
+        grupos.setdefault(identidade, []).append(evento)
+    return list(grupos.values())
+
+
+def _runs_do_log(eventos: list[dict]) -> list[list[dict]]:
+    """Separa runs pela identidade do envelope, preservando logs legados."""
+    return agrupar_eventos_por_run(eventos)
+
+
+def _id_do_grupo(eventos: list[dict]) -> str:
+    for evento in eventos:
+        run_id = _identidade_run(evento)
+        if run_id:
+            return run_id
+    return RUN_LEGADO_SEM_PROVENIENCIA
 
 
 def _run_canonica(eventos: list[dict], indice: int) -> dict:
@@ -228,7 +247,7 @@ def _run_canonica(eventos: list[dict], indice: int) -> dict:
     spec = next((ev for ev in eventos if ev.get("evento") == "spec.recebida"), None)
     return {
         "fonte": "cli",
-        "id": f"cli#{seq_de}" if seq_de is not None else f"cli#run_{indice}",
+        "id": _id_do_grupo(eventos),
         "perfil": next((ev.get("perfil") for ev in eventos if ev.get("evento") == "run.perfil"), None),
         "seqDe": seq_de,
         "seqAte": seqs[-1] if seqs else None,
@@ -251,45 +270,18 @@ def dados_painel(log_path: str | Path | None = None) -> dict:
     return dados
 
 
-def agrupar_eventos_por_run(eventos: list[dict]) -> list[list[dict]]:
-    """Agrupa a lista de eventos sequenciais em blocos por run.
-    Cada vez que o timestamp `t` diminui, identificamos o início de uma nova run.
-    """
-    if not eventos:
-        return []
-    runs_events = []
-    current_run_events: list[dict] = []
-    ultimo_t = None
-    for ev in eventos:
-        t = ev.get("t")
-        if current_run_events and t is not None and ultimo_t is not None and t < ultimo_t:
-            runs_events.append(current_run_events)
-            current_run_events = []
-        current_run_events.append(ev)
-        if t is not None:
-            ultimo_t = t
-    if current_run_events:
-        runs_events.append(current_run_events)
-    return runs_events
-
-
 def obter_runs(eventos: list[dict]) -> list[dict]:
     runs_events = agrupar_eventos_por_run(eventos)
     runs_metadata = []
     for idx, run_evs in enumerate(runs_events, start=1):
-        # Tenta extrair id da run
-        run_id = None
+        run_id = _id_do_grupo(run_evs)
         objetivo = None
+        missao = None
         for ev in run_evs:
-            if "missao" in ev:
-                run_id = ev["missao"]
-            elif "run" in ev:
-                run_id = ev["run"]
             if "objetivo" in ev:
                 objetivo = ev["objetivo"]
-                
-        if not run_id:
-            run_id = f"run_{idx}"
+            if missao is None and "missao" in ev:
+                missao = ev["missao"]
             
         # Determina o estado
         estado = "ativa"
@@ -309,6 +301,7 @@ def obter_runs(eventos: list[dict]) -> list[dict]:
         
         runs_metadata.append({
             "id": run_id,
+            "missao": missao,
             "objetivo": objetivo,
             "estado": estado,
             "inicio": inicio,
@@ -320,7 +313,7 @@ def obter_runs(eventos: list[dict]) -> list[dict]:
 
 
 def _resumo_run(run_id: str, eventos: list[dict]) -> dict:
-    """Deriva um resumo de um único arquivo, cuja pasta já identifica a run."""
+    """Deriva um resumo sem substituir identidade declarada pela pasta."""
     resumo = obter_runs(eventos)
     if resumo:
         resultado = dict(resumo[0])
@@ -332,17 +325,30 @@ def _resumo_run(run_id: str, eventos: list[dict]) -> dict:
             "custo": None,
             "n_eventos": 0,
         }
-    resultado.update({"id": run_id, "n_eventos": len(eventos)})
+    declarado = _id_do_grupo(eventos)
+    if declarado != RUN_LEGADO_SEM_PROVENIENCIA and declarado != run_id:
+        resultado.update({
+            "id": declarado,
+            "estado": "log_invalido",
+            "erro": f"run_id {declarado!r} diverge do diretorio {run_id!r}",
+        })
+    else:
+        resultado["id"] = run_id if declarado == RUN_LEGADO_SEM_PROVENIENCIA else declarado
+    resultado["n_eventos"] = len(eventos)
     return resultado
 
 
 def _registros_legado(eventos: list[dict]) -> list[dict]:
-    """Conserva a projeção histórica do arquivo raiz, sem juntar runs."""
+    """Mantém legado num balde e preserva identidades declaradas."""
     registros: list[dict] = []
     for grupo in agrupar_eventos_por_run(eventos):
         resumo = obter_runs(grupo)
-        if resumo:
-            registros.append({"run": resumo[0], "eventos": grupo})
+        if not resumo:
+            continue
+        run = resumo[0]
+        if run["id"] == RUN_LEGADO_SEM_PROVENIENCIA:
+            run = {**run, "proveniencia": "ausente"}
+        registros.append({"run": run, "eventos": grupo})
     return registros
 
 
@@ -408,14 +414,7 @@ def obter_gates_pendentes(eventos: list[dict]) -> list[dict]:
     gates_pendentes: list[dict] = []
     
     for idx, run_evs in enumerate(runs_events, start=1):
-        run_id = None
-        for ev in run_evs:
-            if "missao" in ev:
-                run_id = ev["missao"]
-            elif "run" in ev:
-                run_id = ev["run"]
-        if not run_id:
-            run_id = f"run_{idx}"
+        run_id = _id_do_grupo(run_evs)
             
         active_gates = {}
         for i, ev in enumerate(run_evs):
@@ -920,15 +919,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             por_run = []
             por_modelo = {}
             
-            for idx, r_evs in enumerate(runs_events, start=1):
-                rid = None
-                for ev in r_evs:
-                    if "missao" in ev:
-                        rid = ev["missao"]
-                    elif "run" in ev:
-                        rid = ev["run"]
-                if not rid:
-                    rid = f"run_{idx}"
+            for r_evs in runs_events:
+                rid = _id_do_grupo(r_evs)
                     
                 r_tokens = 0
                 r_chamadas = 0

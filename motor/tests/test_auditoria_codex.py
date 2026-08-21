@@ -219,7 +219,7 @@ def test_e1_schema_rejeita_evento_sem_payload_obrigatorio():
     assert valido({"evento": "executor.chamado"}) is False
 
 
-@pytest.mark.parametrize("campo", ["evento", "t", "seq", "event_id"])
+@pytest.mark.parametrize("campo", ["evento", "t", "seq", "event_id", "run_id"])
 def test_e1_envelope_reserva_tipo_e_timestamp(tmp_path, campo):
     """O envelope é do log, não do chamador.
 

@@ -686,24 +686,6 @@ def test_eventos_orfaos_caem_em_desconhecido_sem_papel_fantasma(tmp_path):
     assert perfil["por_modelo"]["desconhecido"]["respostas"] == 1
 
 
-def test_carregar_runs_separa_jsonl_concatenado_quando_t_reinicia(tmp_path):
-    log = _jsonl(
-        tmp_path,
-        "concat.jsonl",
-        [
-            {"t": 10.0, "evento": "executor.chamado", "executor": "a"},
-            {"t": 11.0, "evento": "executor.respondeu", "executor": "a"},
-            {"t": 0.1, "evento": "executor.chamado", "executor": "b"},
-        ],
-    )
-
-    runs, malformadas = carregar_runs([log])
-
-    assert malformadas == 0
-    assert [run["id"] for run in runs] == ["concat.jsonl", "concat.jsonl#2"]
-    assert [len(run["eventos"]) for run in runs] == [2, 1]
-
-
 def test_markdown_e_cli_json(tmp_path):
     log = _jsonl(tmp_path, "run.jsonl", _eventos_observador())
     saida_json = tmp_path / "perfil.json"

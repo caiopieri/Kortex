@@ -302,9 +302,14 @@ def test_get_dados_runs():
     assert isinstance(payload, list)
     assert len(payload) >= 1
     ids = [r["id"] for r in payload]
-    assert "pesquisa-receita-exemplo" in ids
-    run = next(r for r in payload if r["id"] == "pesquisa-receita-exemplo")
-    assert set(run.keys()) == {"id", "objetivo", "estado", "inicio", "custo", "n_eventos"}
+    assert "legado:sem-proveniencia" in ids
+    run = next(r for r in payload if r["id"] == "legado:sem-proveniencia")
+    assert set(run.keys()) == {
+        "id", "missao", "objetivo", "estado", "inicio", "custo", "n_eventos",
+        "proveniencia",
+    }
+    assert run["missao"] == "pesquisa-receita-exemplo"
+    assert run["proveniencia"] == "ausente"
     assert run["estado"] == "concluida"
 
 
@@ -312,14 +317,16 @@ def test_get_dados_runs_id_existente():
     if not LOG_AMOSTRA.exists():
         pytest.skip("amostra não encontrada — rode scripts/gerar_log_amostra.py")
     status, content_type, body = _http_get(
-        "/dados/runs/pesquisa-receita-exemplo", LOG_AMOSTRA
+        "/dados/runs/legado:sem-proveniencia", LOG_AMOSTRA
     )
     payload = json.loads(body)
     assert status == 200
     assert "application/json" in content_type
     for chave in ("run", "eventos", "artefatos", "gates"):
         assert chave in payload, f"chave ausente em /dados/runs/<id>: {chave}"
-    assert payload["run"]["id"] == "pesquisa-receita-exemplo"
+    assert payload["run"]["id"] == "legado:sem-proveniencia"
+    assert payload["run"]["missao"] == "pesquisa-receita-exemplo"
+    assert payload["run"]["proveniencia"] == "ausente"
     assert isinstance(payload["eventos"], list) and len(payload["eventos"]) > 0
 
 

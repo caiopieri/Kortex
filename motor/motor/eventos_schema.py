@@ -12,7 +12,7 @@ SCHEMA_VERSAO = 2
 EVENTOS_MONETARIOS = frozenset({
     "custo.reservado", "custo.reconciliado", "custo.bloqueado", "custo.contrato_violado",
 })
-_CAMPOS_ORCAMENTO = ["run_id", "thread_id", "call_id", "rota", "tentativa", "moeda", "teto", "gasto", "reservado", "event_id"]
+_CAMPOS_ORCAMENTO = ["thread_id", "call_id", "rota", "tentativa", "moeda", "teto", "gasto", "reservado", "event_id"]
 _MAX_DECIMAL_CHARS = 128
 _PRECISAO_DECIMAL = 2 * _MAX_DECIMAL_CHARS + 1
 _DECIMAL_TEXTO = re.compile(r"(?:0|[1-9][0-9]*)(?:\.[0-9]+)?\Z")
@@ -26,7 +26,7 @@ ESQUEMA: dict[str, dict[str, Any]] = {
     },
     "artefato.atualizou": {
         "categoria": "artefato",
-        "campos": ["nome", "tipo", "subagente", "caminho"],
+        "campos": ["nome", "tipo", "subagente", "caminho", "hash"],
         "descricao": "Sinaliza criação ou atualização de artefato por subagente.",
     },
     "custo.tick": {
@@ -413,6 +413,7 @@ TIPOS_CAMPO: dict[str, Any] = {
     "ferramentas": SEQUENCIA,
     "fonte": str,
     "gasto": str,
+    "hash": str,
     "id": str,
     "ids": SEQUENCIA,
     "k": int,
@@ -503,7 +504,12 @@ CAMPOS_OPCIONAIS: dict[str, set[str]] = {
     "portao.reprovado": {"ciclo", "lacunas", "motivo"},
     "validador.rodou": {"motivo"},
     "registro.sem_executor": {"motivo", "classe", "fase", "tentativa"},
+    "artefato.atualizou": {"hash"},
 }
+
+# O envelope é plano no wire format. ``run_id`` é identidade da execução, não
+# payload de cada tipo; a ausência dele só é aceita para linhas legadas.
+CAMPOS_ENVELOPE = frozenset({"evento", "t", "seq", "run_id"})
 
 
 def _tipo_esperado(tipo_evento: str, campo: str) -> Any:
@@ -553,7 +559,10 @@ def _dominio_monetario_valido(tipo: str, evento: dict[str, Any]) -> bool:
     if tipo not in EVENTOS_MONETARIOS:
         return True
 
-    ids = ("run_id", "thread_id", "call_id", "rota")
+    run_id = evento.get("run_id")
+    if not _identificador_valido(run_id):
+        return False
+    ids = ("thread_id", "call_id", "rota")
     if not all(_identificador_valido(evento[campo]) for campo in ids):
         return False
     if "event_id" in evento and re.fullmatch(r"[0-9a-f]{64}", evento["event_id"]) is None:
@@ -645,7 +654,10 @@ def valido(evento: dict[str, Any]) -> bool:
         return False
 
     campos = set(ESQUEMA[tipo]["campos"])
-    payload = set(evento) - {"evento", "t", "seq"}
+    if "run_id" in evento and not _identificador_valido(evento["run_id"]):
+        return False
+
+    payload = set(evento) - CAMPOS_ENVELOPE
     if not payload <= campos:
         return False
 
@@ -663,6 +675,16 @@ def valido(evento: dict[str, Any]) -> bool:
     if tipo in {"executor.erro", "modelo.falha", "registro.sem_executor"}:
         classe = evento.get("classe")
         if classe is not None and classe not in CLASSES_FALHA_ROTA:
+            return False
+
+    if tipo == "artefato.atualizou":
+        presentes = {campo for campo in ("run_id", "hash") if campo in evento}
+        if presentes not in (set(), {"run_id", "hash"}):
+            return False
+        if presentes and (
+            not _identificador_valido(evento["run_id"])
+            or re.fullmatch(r"[0-9a-f]{64}", evento["hash"]) is None
+        ):
             return False
 
     if tipo == "decisao.plano" and not payload & {"decisao", "edicoes"}:

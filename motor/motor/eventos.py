@@ -15,7 +15,7 @@ import time
 from pathlib import Path
 from typing import Any, BinaryIO, NoReturn
 
-from motor.eventos_schema import valido
+from motor.eventos_schema import EVENTOS_MONETARIOS, _identificador_valido, valido
 
 
 class WriterEventosOcupado(RuntimeError):
@@ -101,8 +101,13 @@ def _travar_writer(arquivo: BinaryIO) -> None:
 class LogEventos:
     """Writer exclusivo; checks pre-write pressupõem um diretorio pai confiavel."""
 
-    def __init__(self, path: str | Path, truncar: bool = False):
+    def __init__(self, path: str | Path, truncar: bool = False,
+                 run_id: str | None = None):
         self.path = Path(path)
+        if run_id is not None and not _identificador_valido(run_id):
+            raise ValueError("run_id invalido")
+        self.run_id = run_id
+        self._run_ids_persistidos: set[str | None] = set()
         self._mutex = threading.Lock()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock_path = self.path.with_name(f".{self.path.name}.lock")
@@ -142,6 +147,10 @@ class LogEventos:
 
         self._proximo_seq = ultimo_seq + 1
         self._ultimo_t = ultimo_t
+        if self.run_id is None:
+            declarados = {item for item in self._run_ids_persistidos if item is not None}
+            if len(declarados) == 1 and declarados == self._run_ids_persistidos:
+                self.run_id = next(iter(declarados))
         self._eventos_externos = eventos_externos
         self._base_t = ultimo_t
         self._inicio_monotonico = time.monotonic()
@@ -171,6 +180,9 @@ class LogEventos:
                 raise ValueError("log v1 e somente leitura")
             if not valido(evento):
                 raise ValueError(f"linha {numero_linha} fora do schema v2")
+            self._run_ids_persistidos.add(evento.get("run_id"))
+            if self.run_id is not None and evento.get("run_id") != self.run_id:
+                raise ValueError(f"linha {numero_linha} pertence a outra run")
             if evento["seq"] != ultimo_seq + 1:
                 raise ValueError(f"sequencia invalida na linha {numero_linha}")
             event_id = evento.get("event_id")
@@ -237,7 +249,12 @@ class LogEventos:
         self._validar_identidade_aberta(self.path, self._f, "log")
 
     def evento(self, tipo_evento: str, **dados: Any) -> None:
-        if {"evento", "t", "seq", "event_id"} & dados.keys():
+        if "run_id" in dados and tipo_evento in EVENTOS_MONETARIOS:
+            run_id = dados.pop("run_id")
+            if not isinstance(run_id, str):
+                raise ValueError("run_id invalido")
+            self.vincular_run_id(run_id)
+        if {"evento", "t", "seq", "event_id", "run_id"} & dados.keys():
             raise ValueError("campo reservado no payload de evento")
         with self._mutex:
             self._escrever(tipo_evento, dados)
@@ -248,17 +265,26 @@ class LogEventos:
         """Persiste uma entrega do relay uma vez por ``event_id`` durável."""
         if type(payload) is not dict or {"evento", "t", "seq", "event_id"} & payload.keys():
             raise ValueError("payload externo invalido")
-        dados = {**payload, "event_id": event_id}
-        if not valido({"t": 0.0, "seq": 1, "evento": tipo_evento, **dados}):
+        payload_run_id = payload.get("run_id")
+        if not isinstance(payload_run_id, str):
+            raise ValueError("payload externo sem run_id")
+        dados = {chave: valor for chave, valor in payload.items() if chave != "run_id"}
+        dados["event_id"] = event_id
+        if not valido({
+            "t": 0.0, "seq": 1, "evento": tipo_evento,
+            "run_id": payload_run_id, **dados,
+        }):
             raise ValueError("evento fora do schema")
         with self._mutex:
-            candidato = {"evento": tipo_evento, **dados}
+            candidato = {"evento": tipo_evento, "run_id": payload_run_id, **dados}
             impressao = self._impressao_idempotente(candidato)
             anterior = self._eventos_externos.get(event_id)
             if anterior is not None:
                 if anterior != impressao:
                     raise ValueError("redelivery divergente")
+                self._vincular_run_id_unlocked(payload_run_id)
                 return
+            self._vincular_run_id_unlocked(payload_run_id)
             self._escrever(tipo_evento, dados)
             self._eventos_externos[event_id] = impressao
 
@@ -272,6 +298,8 @@ class LogEventos:
         seq = self._proximo_seq
         instante = self._tempo_atual()
         e = {"t": instante, "seq": seq, "evento": tipo_evento, **dados}
+        if self.run_id is not None:
+            e["run_id"] = self.run_id
         if not valido(e):
             raise ValueError("evento fora do schema")
 
@@ -286,6 +314,27 @@ class LogEventos:
             raise
         self._proximo_seq = seq + 1
         self._ultimo_t = instante
+
+    def vincular_run_id(self, run_id: str) -> None:
+        """Vincula o writer a uma execução antes da primeira emissão.
+
+        Um logger já usado sem identidade é legado e não pode ser reclassificado
+        retroativamente como uma run nova. Um logger já vinculado também não pode
+        ser reutilizado por outra execução.
+        """
+        if not _identificador_valido(run_id):
+            raise ValueError("run_id invalido")
+        with self._mutex:
+            self._vincular_run_id_unlocked(run_id)
+
+    def _vincular_run_id_unlocked(self, run_id: str) -> None:
+        if self.run_id is not None:
+            if self.run_id != run_id:
+                raise ValueError("logger vinculado a outra run")
+            return
+        if self._proximo_seq != 1 and self._run_ids_persistidos != {run_id}:
+            raise ValueError("logger legado nao pode receber run_id")
+        self.run_id = run_id
 
     def _fechar_descritores(self) -> BaseException | None:
         erro: BaseException | None = None

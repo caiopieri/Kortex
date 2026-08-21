@@ -1,18 +1,9 @@
 /* Projecao do ledger em runs, e de cada run no que a superficie desenha.
  *
- * IDENTIDADE E O PAR (fonte, seq), NUNCA `seq` SOZINHO. Sao dois arquivos de
- * log (divida 17(b)) e cada um tem sua sequencia comecando do 1: `seq` sozinho
- * colide as duas. Por isso a segmentacao roda POR FONTE e o id da run e
- * `<fonte>#<seqDe>`.
- *
- * MEDIDO no log real (1453 eventos, 2026-08-14): dos 765 eventos ESTRUTURAIS
- * (onda.*, executor.*, portao.*, artefato.atualizou, aresta.fluxo,
- * validador.rodou, tarefa.*), ZERO carregam `run_id`. So os 290 eventos
- * `custo.*` carregam. Entao nao da para agrupar run por campo: a run e a JANELA
- * de seq entre um `run.perfil` e o proximo, dentro da mesma fonte. Isso e
- * derivacao por ordem, e quebra se duas runs escreverem intercaladas no mesmo
- * arquivo. Esta no README como a terceira precondicao, que ainda nao virou
- * issue — `run_id` nos eventos estruturais tornaria a derivacao desnecessaria.
+ * `run_id` no envelope e a identidade declarada da execucao. `seq` continua
+ * sendo apenas cursor local da fonte: o consumidor incremental deve usar
+ * (fonte, seq), nunca seq sozinho. Linhas legadas sem run_id ficam num unico
+ * balde por fonte, sem repartir o passado por ordem ou timestamp.
  */
 
 import { ehFalha, localizar } from './andon.js';
@@ -21,34 +12,34 @@ const ABRE = 'run.perfil';
 const FECHA = new Set(['tarefa.concluida', 'tarefa.abortada']);
 
 export function segmentarRuns(eventos) {
-  const porFonte = new Map();
+  const porIdentidade = new Map();
   for (const evento of eventos) {
     const fonte = evento.__fonte ?? 'cli';
-    const lista = porFonte.get(fonte) ?? [];
-    lista.push(evento);
-    porFonte.set(fonte, lista);
+    const runId = typeof evento.run_id === 'string' && evento.run_id
+      ? evento.run_id
+      : null;
+    const chave = runId ? `run:${runId}` : `legado:${fonte}`;
+    const grupo = porIdentidade.get(chave) ?? {
+      fonte,
+      id: runId ?? `legado:${fonte}`,
+      eventos: [],
+    };
+    if (grupo.fonte !== fonte) grupo.fonte = 'multiplas-fontes';
+    grupo.eventos.push(evento);
+    porIdentidade.set(chave, grupo);
   }
 
   const runs = [];
-  for (const [fonte, doArquivo] of porFonte) {
-    let atual = null;
-    for (const evento of doArquivo) {
-      if (evento.evento === ABRE) {
-        if (atual) runs.push(atual);
-        atual = {
-          fonte,
-          id: `${fonte}#${evento.seq}`,
-          perfil: evento.perfil ?? null,
-          seqDe: evento.seq,
-          seqAte: evento.seq,
-          eventos: [],
-        };
-      }
-      if (!atual) continue;
-      atual.eventos.push(evento);
-      atual.seqAte = evento.seq;
-    }
-    if (atual) runs.push(atual);
+  for (const grupo of porIdentidade.values()) {
+    const seqs = grupo.eventos
+      .map((evento) => evento.seq)
+      .filter((seq) => Number.isInteger(seq));
+    runs.push({
+      ...grupo,
+      perfil: grupo.eventos.find((evento) => evento.evento === ABRE)?.perfil ?? null,
+      seqDe: seqs.length ? Math.min(...seqs) : null,
+      seqAte: seqs.length ? Math.max(...seqs) : null,
+    });
   }
 
   return runs.map((run) => ({ ...run, ...resumo(run.eventos) }));
