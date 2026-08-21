@@ -26,7 +26,6 @@ const NAV = [
     items: [
       { label: 'Agentes', path: '/agentes' },
       { label: 'Inventário', path: '/inventario' },
-      { label: 'Skills', path: '/skills' },
       { label: 'Curador', path: '/curador' },
       { label: 'Logs', path: '/logs' },
       { label: 'Custos', path: '/custos' },

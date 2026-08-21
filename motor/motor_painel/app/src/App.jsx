@@ -14,7 +14,6 @@ import Datahouse from './pages/Datahouse';
 import Logs from './pages/Logs';
 import NovaMissao from './pages/NovaMissao';
 import Runners from './pages/Runners';
-import Skills from './pages/Skills';
 import Curador from './pages/Curador';
 import Conexoes from './pages/Conexoes';
 import Inventario from './pages/Inventario';
@@ -99,7 +98,10 @@ function App() {
   else if (route === '/mapa') { window.location.hash = '/board'; Page = <Board />; }
   else if (route === '/nova-missao') Page = <NovaMissao />;
   else if (route === '/runners') Page = <Runners />;
-  else if (route === '/skills') Page = <Skills />;
+  /* `/skills` foi removida: era a transposta do Inventario (papel -> entidades
+     em vez de entidade -> papeis), com os `chamadas` que Agentes ja mostra
+     somados por papel. Nenhum campo proprio; as duas telas ficam. */
+  else if (route === '/skills') { window.location.hash = '/inventario'; Page = <Inventario />; }
   else if (route === '/curador') Page = <Curador />;
   else if (route === '/conexoes') Page = <Conexoes />;
   else if (route === '/inventario') Page = <Inventario />;
