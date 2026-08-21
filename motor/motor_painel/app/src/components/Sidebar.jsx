@@ -1,5 +1,8 @@
-/* Sidebar 238px — 4 zonas (Fixas, Projeto, Biblioteca, Sistema)
+/* Sidebar 238px — 4 zonas (Fixas, Operacao, Biblioteca, Sistema)
  * Nav items via hash routing.
+ *
+ * A zona chamava-se "Projeto: Todos". O rotulo prometia um seletor de projeto
+ * que nunca existiu, e "Todos" so faz sentido em oposicao a "um": nao ha o um.
  */
 
 const NAV = [
@@ -12,7 +15,7 @@ const NAV = [
     ],
   },
   {
-    zone: 'Projeto: Todos',
+    zone: 'Operação',
     items: [
       { label: 'Dashboard', path: '/dashboard' },
       { label: 'Canvas', path: '/canvas' },

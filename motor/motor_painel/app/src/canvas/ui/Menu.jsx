@@ -21,7 +21,7 @@ const ZONAS = [
     ],
   },
   {
-    zona: 'Projeto: Todos',
+    zona: 'Operação',
     itens: [
       { rotulo: 'Dashboard', destino: null },
       { rotulo: 'Workflows', destino: null },
