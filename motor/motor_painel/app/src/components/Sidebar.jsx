@@ -7,8 +7,7 @@ const NAV = [
     zone: 'Fixas',
     fixed: true,
     items: [
-      { label: 'Home', path: '/' },
-      { label: 'Board de missões', path: '/board' },
+      { label: 'Board de missões', path: '/' },
       { label: 'Caixa do Fundador', path: '/caixa' },
     ],
   },

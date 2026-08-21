@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { applyTheme, getStoredTheme, getStoredMode } from './theme.js';
 import Sidebar from './components/Sidebar';
 import Topbar from './components/Topbar';
-import Home from './pages/Home';
 import Runs from './pages/Runs';
 import CaixaFundador from './pages/CaixaFundador';
 import Custos from './pages/Custos';
@@ -72,7 +71,10 @@ function App() {
 
   /* Renderiza página com base na rota */
   let Page;
-  if (route === '/' || route === '') Page = <Home />;
+  /* A raiz passa a ser o Board. A Home foi removida (corte 4/7): ela
+     repetia Custos, Runs e a fila de gates, e a fila de gates ela nao so
+     mostrava como DECIDIA, duplicando a acao da Caixa do Fundador. */
+  if (route === '/' || route === '') Page = <Board />;
   else if (route.startsWith('/runs')) Page = <Runs route={route} />;
   else if (route === '/caixa') Page = <CaixaFundador />;
   /* `/grafo` foi removida: depois da #15 ela e o Canvas desenham a MESMA
@@ -86,15 +88,15 @@ function App() {
   else if (route === '/dashboard') Page = <Dashboard />;
   else if (route === '/board') Page = <Board />;
   /* `/workflows` continua respondendo: a rota foi renomeada porque a tela
-     mostra rotas de modelo, nao workflows (#23), e link velho cairia em
-     Home sem dizer por que. */
+     mostra rotas de modelo, nao workflows (#23), e link velho cairia na
+     raiz sem dizer por que. */
   else if (route === '/rotas' || route === '/workflows') Page = <CatalogoWorkflows />;
   else if (route === '/config') Page = <Configuracoes />;
   else if (route === '/datahouse') Page = <Datahouse />;
   else if (route === '/logs') Page = <Logs />;
   /* `/mapa` foi removida: inventava "projeto" agrupando runs por `objetivo`,
      e projeto nao existe no modelo. O resto era Runs + Custos + Agentes. */
-  else if (route === '/mapa') { window.location.hash = '/'; Page = <Home />; }
+  else if (route === '/mapa') { window.location.hash = '/board'; Page = <Board />; }
   else if (route === '/nova-missao') Page = <NovaMissao />;
   else if (route === '/runners') Page = <Runners />;
   else if (route === '/skills') Page = <Skills />;
@@ -102,7 +104,7 @@ function App() {
   else if (route === '/conexoes') Page = <Conexoes />;
   else if (route === '/inventario') Page = <Inventario />;
   else if (route === '/canvas') Page = <Canvas modo={mode} />;
-  else Page = <Home />;
+  else Page = <Board />;
 
   return (
     <div

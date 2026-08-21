@@ -485,7 +485,7 @@ export default function CaixaFundador() {
               A fila está vazia. Quando um gate humano, o Curador ou o Orquestrador precisarem de uma decisão, a pendência aparece aqui e o sino acende. Você pode seguir observando os runs.
             </div>
             <div style={{ display: 'flex', gap: 9 }}>
-              <span className="btn btn-sm" onClick={() => { window.location.hash = '/'; }}>Ir para a Home</span>
+              <span className="btn btn-sm" onClick={() => { window.location.hash = '/'; }}>Ir para o Board</span>
               <span className="btn btn-sm" onClick={() => { window.location.hash = '/runs'; }}>Abrir Runs &amp; Histórico</span>
             </div>
           </div>
