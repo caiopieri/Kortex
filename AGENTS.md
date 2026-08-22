@@ -77,6 +77,22 @@ python -m bandit -r motor -q --severity-level high --confidence-level high
 python -m compileall -q motor tests
 ```
 
+### When you change what a field means, follow it to its consumers
+
+A field that changes shape — new value, new `null`, new absence — is not done until you
+have looked at every place that reads it. Grep the name across both languages. This is not
+about crashes; it is about **a consumer silently converting your honesty back into a claim**.
+
+Real case, 2026-08-22 (issue #29): the backend correctly stopped reporting `estado: "ativa"`
+for a run it could not describe, and returned `null` instead. A board column did
+`if (estado === 'ativa') return 'prod'; return 'plan';` — so the run went from lying
+*"running"* to lying *"planned"*. The Python diff was right and the system got no more
+honest. The second lie is harder to spot, because "plan" looks harmless.
+
+A default branch that swallows `null` is where this hides. Make the unknown case explicit,
+and prefer declaring it over hiding the row: **disappearing from the screen is another way
+of not declaring.**
+
 ## Repository hygiene
 
 - Commit product specifications, architecture decisions, public runbooks and reproducible
