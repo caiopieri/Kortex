@@ -418,6 +418,21 @@ Reproduza antes de citar. Todos abaixo foram verificados em 2026-08-19.
 - **Snapshot de rotas grátis vencido** (117h contra limite de 24h). O motor recusa com
   *"adiantar só a data não prova gratuidade nem disponibilidade"*. Disponibilidade (HTTP 200)
   **não** é gratuidade — remedir exige olhar consumo no provedor.
+- **A #24 destravou o contrato, não o corpus** (medido 2026-08-22, checkout de produção).
+  Dos 47 eventos `artefato.atualizou`, **0 carregam `hash`** e **0 carregam `run_id`** — 47 de
+  47 são legado, porque **nenhuma run executou desde o merge**. O contrato está bem feito e
+  foi conferido no código, não só no log: os dois emissores passam `hash=`, e o schema exige
+  **tudo-ou-nada** (`run_id` e `hash` juntos, com `hash` casando `[0-9a-f]{64}`) — não há
+  meio-estado possível. O que falta é run.
+  **A armadilha de medição que isso cria, e que já enganaria alguém:** o ledger tem **290
+  eventos com `run_id`** e nenhum prova nada sobre a #24 — são todos `custo.*`
+  (`custo.reservado` 144, `custo.reconciliado` 143, `custo.bloqueado` 3), proveniência
+  monetária anterior. Dos 1194 estruturais, zero. Contar `run_id` sem separar por tipo de
+  evento conclui o oposto da verdade.
+  Consequência prática para a estante: o campo *"na run"* **continua impossível**, e
+  *"revisões: N"* **já era possível** antes da #24, por caminho — 7 de 40 caminhos escritos
+  mais de uma vez. Mas por caminho conta **escrita**, não mudança: duas escritas idênticas
+  contam 2, então 7 é teto, e as revisões reais podem ser 0. É isso que o hash conserta.
 - **O painel ainda depende de rede para abrir** (issue #26, medido em 2026-08-21 sobre o
   `dist/` de `db539a1`). Depois dos cortes, os **únicos** hosts externos que sobraram no
   bundle são `fonts.googleapis.com` e `fonts.gstatic.com`, em `app/index.html:7-9`. Nenhum

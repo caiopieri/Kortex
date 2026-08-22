@@ -100,7 +100,33 @@ alguém decidiu, em vez de ela ter simplesmente sumido.
 
 ---
 
-## 6. O runner está em manutenção
+## 6. Rodar UMA missão — a ação de maior alavanca da lista
+
+**O que trava.** Nenhuma run executou desde que a issue #24 mergeou. Medido no checkout de
+produção: dos 47 eventos `artefato.atualizou`, **0 carregam `hash`** e **0 carregam
+`run_id`** — 47 de 47 são legado.
+
+**Por que precisa de você.** Rodar missão gasta crédito, e o teto é seu. Nenhum agente roda
+por conta própria.
+
+**Por que vale mais que parece.** A #24 destravou o **contrato**, não o **corpus**. Uma única
+run muda quatro números de uma vez: nascem os primeiros `artefato.atualizou` com `run_id` e
+`hash`, o campo *"na run"* da estante deixa de ser impossível, e *"revisões"* passa a poder
+ser contado por conteúdo em vez de por caminho — hoje conta **escrita**, então duas escritas
+idênticas contam 2.
+
+**A armadilha que essa ausência já quase causou, e fica registrada:** o ledger tem 290
+eventos com `run_id` e **nenhum deles prova que a #24 pegou** — são todos `custo.*`,
+proveniência monetária que já existia antes. Dos 1194 estruturais, zero. Quem contasse
+`run_id` sem separar por tipo de evento concluiria o oposto da verdade.
+
+**Se ficar parado:** a estante é construída contra um corpus que não exercita o contrato que
+acabou de entrar. Não é bloqueio — o desenho aprovado torna a ausência **visível** na tela,
+com o número, e o aviso some sozinho quando a primeira run rodar. Mas é construir no escuro.
+
+---
+
+## 7. O runner está em manutenção
 
 Não é pendência de decisão, é estado. `192.168.15.50` saiu do ar em 2026-08-22 para
 manutenção. Consequências enquanto isso:
