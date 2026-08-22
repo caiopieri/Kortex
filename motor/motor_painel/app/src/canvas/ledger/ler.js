@@ -51,6 +51,21 @@ export function criarLeitor(fonte = FONTES[0]) {
 export async function lerIncremental(leitor) {
   const url = `${leitor.fonte.url}?desde_byte=${leitor.deslocamento}`;
   const resposta = await fetch(url, { cache: 'no-store' });
+
+  /* Um offset no meio de uma linha é um erro permanente da requisição, não uma
+     indisponibilidade transitória. O endpoint devolve o limite anterior para
+     que o leitor atual (que não guarda byte por evento) possa se recuperar sem
+     repetir o mesmo 416 para sempre: reinicia do zero, preserva a evidência do
+     reinício e refaz a dobra completa. */
+  if (resposta.status === 416) {
+    const corrigido = Number(resposta.headers.get('x-ledger-offset-corrigido'));
+    if (Number.isInteger(corrigido) && corrigido >= 0 && corrigido < leitor.deslocamento) {
+      return lerIncremental({
+        ...criarLeitor(leitor.fonte),
+        reinicios: leitor.reinicios + 1,
+      });
+    }
+  }
   if (!resposta.ok) {
     throw new Error(`ledger indisponivel (${resposta.status}) em ${leitor.fonte.rotulo}`);
   }

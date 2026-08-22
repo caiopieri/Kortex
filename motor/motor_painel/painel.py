@@ -10,7 +10,7 @@ import subprocess
 import sys
 import http.server
 import socketserver
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 from pathlib import Path
 import re
 import time
@@ -850,6 +850,35 @@ def atualizar_nota_caixa(gate_id: str, decisao: str) -> bool:
 
 HTML_PATH = BASE / "painel.html"
 
+_RUN_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
+
+
+def _desde_byte(query: str) -> int:
+    """Valida o deslocamento externo sem aceitar uma leitura ambígua."""
+    valores = parse_qs(query, keep_blank_values=True).get("desde_byte", [])
+    if len(valores) > 1 or (valores and not re.fullmatch(r"[0-9]+", valores[0])):
+        raise ValueError("desde_byte deve ser um inteiro nao-negativo")
+    return int(valores[0]) if valores else 0
+
+
+def _ler_snapshot_fd(fd: int) -> tuple[bytes, int]:
+    """Lê no máximo o tamanho observado no mesmo fd somente-leitura."""
+    tamanho_observado = os.fstat(fd).st_size
+    if hasattr(os, "pread"):
+        dados = os.pread(fd, tamanho_observado, 0)
+    else:  # pragma: no cover - fallback para plataformas sem pread
+        os.lseek(fd, 0, os.SEEK_SET)
+        dados = os.read(fd, tamanho_observado)
+    # Um truncamento concorrente pode devolver menos bytes que o fstat inicial.
+    # O header acompanha o corpo efetivamente capturado, nunca promete bytes que
+    # não foram lidos; crescimento fica para a próxima requisição.
+    return dados, len(dados)
+
+
+def _offset_alinhado(dados: bytes, offset: int) -> bool:
+    """Offsets válidos começam no início ou logo após uma linha completa."""
+    return offset == 0 or offset == len(dados) or dados[offset - 1:offset] == b"\n"
+
 # Rotas que EXISTIRAM e nao existem mais. A mensagem diz para onde a capacidade
 # foi, porque 404 mudo faz o operador achar que o painel esta quebrado.
 ROTAS_REMOVIDAS = {
@@ -904,6 +933,104 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _responder_ledger(
+        self,
+        status: int,
+        body: bytes,
+        tamanho: int,
+        *,
+        offset_corrigido: int | None = None,
+    ):
+        self.send_response(status)
+        self.send_header("Content-Type", "application/x-ndjson")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("X-Ledger-Tamanho", str(tamanho))
+        if offset_corrigido is not None:
+            self.send_header("X-Ledger-Offset-Corrigido", str(offset_corrigido))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _caminho_ledger_run(self, trecho: str) -> Path:
+        """Resolve um run_id sem permitir caminho ou symlink fora do workspace."""
+        run_id = unquote(trecho)
+        if (
+            not _RUN_ID_RE.fullmatch(run_id)
+            or Path(run_id).is_absolute()
+            or "/" in run_id
+            or "\\" in run_id
+        ):
+            raise ValueError("run_id invalido")
+        raiz = self.runs_path.resolve()
+        diretorio = _resolver_caminho("run_id", None, valor=run_id, raiz=raiz)
+        caminho = (diretorio / "log.jsonl").resolve()
+        if not caminho.is_relative_to(raiz):
+            raise ValueError("run_id fora do workspace")
+        return caminho
+
+    def _servir_ledger(self, caminho: Path, *, raiz: bool, desde: int):
+        """Transporta bytes de um ledger sem parsear, reparar ou escrever."""
+        try:
+            flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
+            # A raiz é um caminho de configuração confiável; para logs por run,
+            # O_NOFOLLOW fecha a última janela de troca de symlink após resolve().
+            if not raiz:
+                flags |= getattr(os, "O_NOFOLLOW", 0)
+            fd = os.open(caminho, flags)
+        except FileNotFoundError:
+            if raiz and _valor_env("MOTOR_LOG") is None:
+                return self._responder_ledger(200, b"", 0)
+            return self._erro(503 if raiz else 404, b"ledger nao disponivel")
+        except (OSError, ValueError):
+            if raiz and _valor_env("MOTOR_LOG") is None:
+                return self._responder_ledger(200, b"", 0)
+            return self._erro(503 if raiz else 404, b"ledger nao disponivel")
+
+        try:
+            try:
+                dados, tamanho = _ler_snapshot_fd(fd)
+            except OSError:
+                if raiz and _valor_env("MOTOR_LOG") is None:
+                    return self._responder_ledger(200, b"", 0)
+                return self._erro(503 if raiz else 404, b"ledger nao disponivel")
+        finally:
+            os.close(fd)
+
+        if raiz and tamanho == 0 and _valor_env("MOTOR_LOG") is not None:
+            return self._erro(503, b"ledger configurado indisponivel: ledger vazio")
+        if desde > tamanho:
+            return self._responder_ledger(200, b"", tamanho)
+        if not _offset_alinhado(dados, desde):
+            anterior = dados.rfind(b"\n", 0, desde) + 1
+            return self._responder_ledger(
+                416,
+                b"desde_byte nao esta no inicio de uma linha completa",
+                tamanho,
+                offset_corrigido=anterior,
+            )
+        return self._responder_ledger(200, dados[desde:], tamanho)
+
+    def _get_ledger(self, path: str):
+        try:
+            desde = _desde_byte(urlparse(self.path).query)
+        except ValueError as erro:
+            return self._erro(400, str(erro).encode("utf-8"))
+
+        if path == "/ledger/log.jsonl":
+            return self._servir_ledger(self.log_path, raiz=True, desde=desde)
+
+        prefixo = "/ledger/runs/"
+        sufixo = "/log.jsonl"
+        if path.startswith(prefixo) and path.endswith(sufixo):
+            trecho = path[len(prefixo):-len(sufixo)]
+            try:
+                caminho = self._caminho_ledger_run(trecho)
+            except ValueError as erro:
+                return self._erro(400, str(erro).encode("utf-8"))
+            return self._servir_ledger(caminho, raiz=False, desde=desde)
+        if path.startswith(prefixo):
+            return self._erro(400, b"run_id invalido")
+        return self._erro(404, b"ledger nao encontrado")
+
     def _falha_ledger_configurado(self) -> bool:
         # O arquivo legado é opcional no caminho normal: missões novas escrevem
         # em runs/<run_id>/log.jsonl. O modo estrito só vale quando o operador
@@ -929,6 +1056,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = urlparse(self.path).path
+
+        if path == "/ledger/log.jsonl" or path.startswith("/ledger/runs/"):
+            return self._get_ledger(path)
 
         if (
             path in {"/dados", "/dados/gates", "/dados/agentes", "/dados/custos"}
