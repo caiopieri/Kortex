@@ -28,7 +28,11 @@
   --alerta: #e0553d;
 
   /* --- forma e tipo da pele `origem` --- */
-  --fonte-ui: 'Archivo', system-ui, -apple-system, sans-serif;
+  /* Era `'Archivo', system-ui, …` e o `Archivo` nunca foi carregado em lugar
+     nenhum: esta pele renderizava em fonte de sistema e ninguém notou. Declarar
+     uma fonte que não existe é a irmã tipográfica de `estado: 'ativa'` num log
+     vazio — a folha promete o que não entrega. Agora declara o que usa. */
+  --fonte-ui: system-ui, -apple-system, sans-serif;
   --raio-g: 16px;
   --raio-capsula: 14px;
   --raio-m: 10px;

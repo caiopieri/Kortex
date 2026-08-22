@@ -294,9 +294,32 @@ def test_rota_grafo3d_nao_existe_mais(tmp_path, monkeypatch):
         pytest.fail(f"esperado 404 em /grafo3d, veio {status}: {body[:120]}")
 
 
-def test_nenhuma_superficie_servida_busca_codigo_na_internet(tmp_path, monkeypatch):
+# Hosts de onde o painel já buscou coisa, ou de onde alguém buscaria por hábito.
+# Não é lista de bloqueio de segurança: é a lista do que faz a tela depender da
+# internet pública para abrir.
+HOSTS_EXTERNOS = (
+    "unpkg.com",
+    "cdn.jsdelivr.net",
+    "cdnjs.cloudflare.com",
+    "fonts.googleapis.com",
+    "fonts.gstatic.com",
+    "use.typekit.net",
+)
+
+
+def test_nenhuma_superficie_servida_busca_nada_na_internet(tmp_path, monkeypatch):
     """O painel roda em runner de LAN: superfície que precisa da internet pública
-    para abrir é defeito, não detalhe de empacotamento."""
+    para abrir é defeito, não detalhe de empacotamento.
+
+    Cobre CÓDIGO e FONTE. A primeira versão deste teste cobria só código, de
+    propósito, para não decidir de passagem o que era decisão de outra pessoa
+    (issue #26 — três famílias do Google Fonts no `index.html`). A decisão foi
+    tomada: a mono virou arquivo local, as duas sans caíram para `system-ui`.
+    Então o teste fecha.
+
+    Fonte remota é pior que biblioteca remota num ponto: a folha de estilo é
+    BLOQUEANTE. Sem rede, a tela não renderiza errado — ela espera.
+    """
     monkeypatch.setattr(painel, "APP_DIST", tmp_path / "nao_existe")
     log = tmp_path / "log.jsonl"
     log.write_text(
@@ -306,8 +329,24 @@ def test_nenhuma_superficie_servida_busca_codigo_na_internet(tmp_path, monkeypat
 
     _status, _content_type, body = _http_get("/", log)
 
-    for host in ("unpkg.com", "cdn.jsdelivr.net", "cdnjs.cloudflare.com"):
-        assert host not in body
+    for host in HOSTS_EXTERNOS:
+        assert host not in body, f"a página de fallback busca {host}"
+
+
+def test_o_index_do_app_nao_busca_nada_na_internet() -> None:
+    """O `index.html` do app é a casca de TODA tela construída.
+
+    O teste acima cobre o fallback sem build, que é o que um checkout novo serve.
+    Este cobre a fonte do painel de verdade — e é ele que teria pego os três
+    `<link>` do Google Fonts que ficaram lá desde sempre.
+    """
+    index = Path(painel.BASE) / "app" / "index.html"
+    assert index.is_file(), "o index.html do app sumiu do lugar"
+    html = index.read_text(encoding="utf-8")
+
+    for host in HOSTS_EXTERNOS:
+        assert host not in html, f"o index.html do app busca {host}"
+    assert "http://" not in html and "https://" not in html
 
 
 def test_rotas_dados_e_fallback_declarado(tmp_path, monkeypatch):
