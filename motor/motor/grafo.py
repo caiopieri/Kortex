@@ -437,13 +437,25 @@ def carimbar_evidencia(texto: str, state: Mapping[str, Any]) -> str:
     # Sem artefato produzido não há nome real a consultar, e aí o declarado é o
     # que existe — é o caso de artefato prometido e não entregue, e nomeá-lo pela
     # promessa está certo.
-    real_por_declarado: dict[str, str] = {}
+    #
+    # A CHAVE É (subagente, nome declarado), NUNCA o nome sozinho.
+    #
+    # Nome declarado não é único entre subagentes: dois podem declarar `saida.py`,
+    # e é EXATAMENTE para essa colisão que o prefixo de subagente existe. Um mapa
+    # chaveado só pelo nome faz o último vencer, e aí `alpha` sai rotulado com
+    # `beta__saida.py` — um arquivo que existe e pertence a outro.
+    #
+    # Isso é pior que o defeito original. Nomear arquivo inexistente falha alto:
+    # quem tenta abrir descobre na hora. Nomear o arquivo de outro subagente é
+    # plausível — o arquivo está lá, abre, e a atribuição errada passa.
+    real_por_produtor: dict[tuple[str, str], str] = {}
     for r in state.get("resultados") or []:
         if not isinstance(r, dict):
             continue
+        produtor = str(r.get("id", ""))
         for ref in r.get("artefatos") or []:
             if isinstance(ref, dict) and ref.get("nome") and ref.get("caminho"):
-                real_por_declarado[str(ref["nome"])] = Path(str(ref["caminho"])).name
+                real_por_produtor[(produtor, str(ref["nome"]))] = Path(str(ref["caminho"])).name
 
     for item in cobertura["artefatos"]:
         if item["prova"] != "execucao":
@@ -453,7 +465,9 @@ def carimbar_evidencia(texto: str, state: Mapping[str, Any]) -> str:
                 rotulo = "verificado só por opinião de modelo"
             else:
                 rotulo = "checado só na forma, não no comportamento"
-            nomes = [real_por_declarado.get(n, n) for n in item["artefatos"]]
+            nomes = [
+                real_por_produtor.get((str(item["id"]), n), n) for n in item["artefatos"]
+            ]
             linhas.append(f"- {item['id']} ({', '.join(nomes)}): {rotulo}")
     return texto + "\n\n---\n\n" + "\n".join(linhas)
 

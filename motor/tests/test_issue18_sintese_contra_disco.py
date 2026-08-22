@@ -269,3 +269,93 @@ def test_o_nome_e_derivado_da_escrita_e_nao_recriado_por_regra():
     )
     assert ref["caminho"] == "artefatos/xx-saida.py"
     assert ref["nome_declarado_na_spec"] == "saida.py"
+
+
+# ---------------------------------------------------------------------------
+# A colisão que o prefixo existe para evitar — e que a primeira versão desta
+# correção reintroduziu no rodapé.
+# ---------------------------------------------------------------------------
+
+
+def _produtor(pid: str, nome: str) -> dict:
+    return {
+        "id": pid, "papel": "executor", "objetivo": "o", "entradas": {},
+        "resultado_esperado": "r", "rubrica": ["x"],
+        "produz_artefatos": [{"nome": nome, "tipo": "python"}],
+    }
+
+
+def test_dois_subagentes_com_o_mesmo_nome_declarado_nao_se_misturam():
+    """DOIS subagentes declarando `saida.py`. Com um só, o bug não aparece.
+
+    A primeira versão desta correção mapeava nome declarado -> arquivo real com
+    um dicionário chaveado SÓ pelo nome, montado sobre todos os resultados. Dois
+    subagentes declarando o mesmo nome colidiam e o último vencia:
+
+        - alpha (beta__saida.py): verificado só por opinião de modelo
+        - beta  (beta__saida.py): verificado só por opinião de modelo
+
+    `alpha` saía rotulado com um arquivo que `alpha` não produziu, e
+    `alpha__saida.py` não aparecia em lugar nenhum.
+
+    Isso é PIOR que o defeito original da #18. Nomear arquivo inexistente falha
+    alto — quem tenta abrir descobre na hora. Nomear o arquivo de outro subagente
+    é plausível: o arquivo está lá, abre, e a atribuição errada passa.
+
+    E a ironia aponta o lugar certo: a colisão de nome declarado é EXATAMENTE
+    aquilo para que o prefixo de subagente existe.
+    """
+    from motor.grafo import carimbar_evidencia
+
+    spec = {"subagentes": [_produtor("alpha", "saida.py"), _produtor("beta", "saida.py")]}
+    resultados = [
+        {"id": "alpha", "aprovado": True, "artefatos": [
+            {"nome": "saida.py", "caminho": "/ws/r1/artefatos/alpha__saida.py"}]},
+        {"id": "beta", "aprovado": True, "artefatos": [
+            {"nome": "saida.py", "caminho": "/ws/r1/artefatos/beta__saida.py"}]},
+    ]
+
+    texto = carimbar_evidencia("R", {"spec": spec, "resultados": resultados})
+
+    assert "- alpha (alpha__saida.py)" in texto, texto
+    assert "- beta (beta__saida.py)" in texto, texto
+    # O sintoma exato do bug, travado nominalmente: nenhum subagente pode
+    # aparecer rotulado com o arquivo do outro.
+    assert "- alpha (beta__saida.py)" not in texto
+    assert "- beta (alpha__saida.py)" not in texto
+
+
+def test_a_traducao_para_a_sintese_nao_junta_resultados():
+    """`artefatos_como_o_disco` não tem a mesma exposição, e é estrutural.
+
+    A pergunta não é "e se dois declararem o mesmo nome" — é ONDE existe uma
+    junção. O rodapé precisa REJUNTAR duas estruturas separadas (a lista de
+    cobertura, derivada da spec, e os resultados, derivados da run), e junção
+    precisa de chave; foi na chave que o bug morou.
+
+    Esta função não junta nada: cada artefato de saída vem de exatamente um
+    artefato de entrada, transformado no lugar, dentro do seu próprio resultado.
+    Não há dicionário intermediário, então não há o que colidir.
+
+    O teste existe para que isso continue verdadeiro — se alguém otimizar isto
+    para um mapa por nome, cai aqui.
+    """
+    from motor.grafo import artefatos_como_o_disco
+
+    resultados = [
+        {"id": "alpha", "aprovado": True, "artefatos": [
+            {"nome": "saida.py", "caminho": "/ws/r1/artefatos/alpha__saida.py"}]},
+        {"id": "beta", "aprovado": True, "artefatos": [
+            {"nome": "saida.py", "caminho": "/ws/r1/artefatos/beta__saida.py"}]},
+    ]
+
+    saida = artefatos_como_o_disco(resultados, "/ws/r1")
+
+    por_id = {r["id"]: r["artefatos"][0] for r in saida}
+    assert por_id["alpha"]["arquivo"] == "alpha__saida.py"
+    assert por_id["beta"]["arquivo"] == "beta__saida.py"
+    assert por_id["alpha"]["caminho"] == "artefatos/alpha__saida.py"
+    assert por_id["beta"]["caminho"] == "artefatos/beta__saida.py"
+    # E os dois mantêm o mesmo nome declarado, que é o dado de origem da colisão.
+    assert por_id["alpha"]["nome_declarado_na_spec"] == "saida.py"
+    assert por_id["beta"]["nome_declarado_na_spec"] == "saida.py"
