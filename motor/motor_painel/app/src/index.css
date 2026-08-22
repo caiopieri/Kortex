@@ -3,6 +3,43 @@
  * Layout: topbar 52px + sidebar 238px + main.
  */
 
+/* A ÚNICA fonte carregada, e ela é LOCAL (issue #26).
+ *
+ * O painel puxava três famílias e dez pesos do Google Fonts. A folha de estilo
+ * remota é bloqueante: sem internet, a tela ficava esperando duas conexões que
+ * não respondiam — num painel cujo lugar é um runner de LAN, que existe para
+ * funcionar sozinho.
+ *
+ * As duas sans saíram e caem para `system-ui`. A evidência é um experimento que
+ * já tinha rodado sem ninguém notar: `canvas.css` pedia `'Archivo'`, que nunca
+ * foi carregado em lugar nenhum, e uma pele inteira do canvas renderizava em
+ * fonte de sistema há meses sem ninguém perceber. Diferença que ninguém nota
+ * não é carga.
+ *
+ * A mono FICOU porque aquela evidência é silenciosa sobre ela — ninguém testou
+ * a mono caindo — e é nela que mora o dado: hash, `seq`, caminho, contagem. Ali
+ * `0` contra `O` e `1` contra `l` custam caro, porque quem lê errado não sabe
+ * que leu errado. Não é alinhamento (qualquer monoespaçada alinha), é forma de
+ * caractere.
+ *
+ * Procedência, sha256 e licença OFL em `src/fontes/LEIA.md`.
+ */
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./fontes/ibm-plex-mono-latin-400.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('./fontes/ibm-plex-mono-latin-600.woff2') format('woff2');
+}
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
