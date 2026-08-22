@@ -236,6 +236,11 @@ Instrução de síntese: {instrucao} (formato: {formato})
 Resultados verificados dos subagentes:
 {resultados}
 {reprovados}
+Ao citar um artefato — em comando, import ou caminho — use SEMPRE o campo
+`arquivo`, que é o nome com que ele existe em disco. O campo
+`nome_declarado_na_spec` é o nome pedido na spec e NÃO é o nome do arquivo:
+instrução que o use não funciona.
+
 Produza a resposta final da missão."""
 
 # Bloco só presente quando algo reprovou. Antes ele não existia: o sintetizador
@@ -421,6 +426,25 @@ def carimbar_evidencia(texto: str, state: Mapping[str, Any]) -> str:
         f"Cobertura de evidência: {cobertura['execucao']} de {cobertura['total']} "
         f"artefatos passaram por portão de execução."
     ]
+    # O rodapé nomeia o arquivo COMO ELE EXISTE, quando a run produziu um.
+    #
+    # Segunda instância da issue #18, e esta o relato original não tinha visto:
+    # a contagem vem da spec (tem de vir — o denominador é o que a missão
+    # PROMETEU produzir, incluindo o que não saiu), mas o rótulo saía com o nome
+    # declarado, e o rodapé é lido pelo mesmo humano que lê a instrução de uso.
+    # Dizia "cod (ebay.py)" para um arquivo chamado `cod__ebay.py`.
+    #
+    # Sem artefato produzido não há nome real a consultar, e aí o declarado é o
+    # que existe — é o caso de artefato prometido e não entregue, e nomeá-lo pela
+    # promessa está certo.
+    real_por_declarado: dict[str, str] = {}
+    for r in state.get("resultados") or []:
+        if not isinstance(r, dict):
+            continue
+        for ref in r.get("artefatos") or []:
+            if isinstance(ref, dict) and ref.get("nome") and ref.get("caminho"):
+                real_por_declarado[str(ref["nome"])] = Path(str(ref["caminho"])).name
+
     for item in cobertura["artefatos"]:
         if item["prova"] != "execucao":
             if item["portao_falhou"]:
@@ -429,7 +453,8 @@ def carimbar_evidencia(texto: str, state: Mapping[str, Any]) -> str:
                 rotulo = "verificado só por opinião de modelo"
             else:
                 rotulo = "checado só na forma, não no comportamento"
-            linhas.append(f"- {item['id']} ({', '.join(item['artefatos'])}): {rotulo}")
+            nomes = [real_por_declarado.get(n, n) for n in item["artefatos"]]
+            linhas.append(f"- {item['id']} ({', '.join(nomes)}): {rotulo}")
     return texto + "\n\n---\n\n" + "\n".join(linhas)
 
 
@@ -578,6 +603,63 @@ def referenciar_artefato(caminho: str | Path, nome: str, tipo: str) -> dict[str,
     caminho = Path(caminho)
     digest = hashlib.sha256(caminho.read_bytes()).hexdigest()
     return {"nome": nome, "caminho": str(caminho), "tipo": tipo, "hash": digest}
+
+
+def artefatos_como_o_disco(resultados: list[dict], workspace_base: str | Path) -> list[dict]:
+    """O que o sintetizador vê de artefato: o nome QUE EXISTE, não o declarado.
+
+    Issue #18. O `nome` de um artefato é a declaração da spec (`produz_artefatos`)
+    e o motor grava com prefixo de subagente para evitar colisão — `ebay.py`
+    declarado vira `codificador__ebay.py` em disco, e isso está certo: a própria
+    spec depende do prefixo, porque o subagente `testador` recebe textualmente
+    "importe com `import codificador__ebay as ebay`".
+
+    O sintetizador recebia os dois campos e escolhia o errado, porque o errado se
+    chama `nome`. Resultado: a síntese — o ÚNICO texto que um humano lê no fim da
+    missão — mandava `pytest -q testes.py` e `from ebay import buscar` contra
+    arquivos que nunca existiram. Quem seguisse ao pé da letra recebia
+    `ModuleNotFoundError`, na ponta onde ninguém tem contexto para corrigir.
+
+    O QUE FAZ ISTO CONTINUAR VERDADEIRO NÃO É QUAL STRING SE ESCOLHE — é ela ser
+    DERIVADA DA ESCRITA em vez da declaração. `arquivo` sai de `Path(caminho).name`,
+    e `caminho` é o que `registrar_artefato` devolveu depois de gravar. Se o
+    esquema de prefixo mudar amanhã, ou o layout de diretório mudar, os dois
+    seguem certos sem ninguém tocar aqui. Uma regra que recriasse o prefixo
+    (`f"{sub}__{nome}"`) passaria hoje e mentiria no dia da mudança.
+
+    O caminho ABSOLUTO não vai para a síntese. Ele aponta para o checkout onde a
+    run rodou; num texto que alguém lê noutra máquina é ruído na melhor hipótese
+    e instrução errada na pior. Vai o relativo ao workspace.
+    """
+    raiz = Path(workspace_base)
+    saida = []
+    for resultado in resultados:
+        artefatos = resultado.get("artefatos")
+        if not artefatos:
+            saida.append(resultado)
+            continue
+        vistos = []
+        for ref in artefatos:
+            caminho = ref.get("caminho")
+            if not caminho:
+                # Sem caminho não há verdade a oferecer: mantém o que veio, e o
+                # `nome` declarado é o que sobra. Inventar seria pior.
+                vistos.append(dict(ref))
+                continue
+            p = Path(caminho)
+            try:
+                relativo = p.relative_to(raiz)
+            except ValueError:
+                relativo = Path(p.name)
+            vistos.append({
+                **ref,
+                "arquivo": p.name,
+                "caminho": str(relativo),
+                "nome_declarado_na_spec": ref.get("nome"),
+                "nome": p.name,
+            })
+        saida.append({**resultado, "artefatos": vistos})
+    return saida
 
 
 def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
@@ -1917,7 +1999,11 @@ def construir_grafo(cliente: ClienteModelo, log: LogEventos, checkpointer=None,
                     missao_objetivo=spec["missao"]["objetivo"],
                     instrucao=spec["sintese"]["instrucao"], formato=spec["sintese"]["formato"],
                     resultados=json.dumps(
-                        [r for r in state["resultados"] if r["aprovado"]], ensure_ascii=False,
+                        artefatos_como_o_disco(
+                            [r for r in state["resultados"] if r["aprovado"]],
+                            workspace_base,
+                        ),
+                        ensure_ascii=False,
                     ),
                     reprovados=(
                         BLOCO_REPROVADOS.format(itens="\n".join(
