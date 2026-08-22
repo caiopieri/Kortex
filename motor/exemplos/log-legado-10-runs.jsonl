@@ -47,7 +47,7 @@
 {"t": 122.582, "seq": 47, "evento": "executor.respondeu", "executor": "codificador", "tentativa": 1}
 {"t": 132.889, "seq": 48, "evento": "modelo.atendeu", "papel": "verifier", "fase": "verifier", "modelo": "claude-claude-opus-4-8", "provedor": "anthropic", "tentativa": 1}
 {"t": 132.892, "seq": 49, "evento": "portao.aprovado", "portao": "verifier:codificador", "ciclo": 1}
-{"t": 132.894, "seq": 50, "evento": "artefato.atualizou", "nome": "ebay.py", "tipo": "python", "subagente": "codificador", "caminho": "/home/cap/Kortex/motor/runs/c6a4999d718641c5ac6d20aaf5b97b7f/artefatos/codificador__ebay.py"}
+{"t": 132.894, "seq": 50, "evento": "artefato.atualizou", "nome": "ebay.py", "tipo": "python", "subagente": "codificador", "caminho": "<RUNNER>/motor/runs/c6a4999d718641c5ac6d20aaf5b97b7f/artefatos/codificador__ebay.py"}
 {"t": 132.895, "seq": 51, "evento": "onda.concluida", "ids": ["codificador"]}
 {"t": 132.896, "seq": 52, "evento": "onda.iniciada", "ids": ["contrato-do-modulo", "testador"]}
 {"t": 132.897, "seq": 53, "evento": "aresta.fluxo", "de": "codificador", "para": "contrato-do-modulo"}
@@ -58,7 +58,7 @@
 {"t": 167.279, "seq": 58, "evento": "executor.respondeu", "executor": "testador", "tentativa": 1}
 {"t": 174.685, "seq": 59, "evento": "modelo.atendeu", "papel": "verifier", "fase": "verifier", "modelo": "claude-claude-opus-4-8", "provedor": "anthropic", "tentativa": 1}
 {"t": 174.688, "seq": 60, "evento": "portao.aprovado", "portao": "verifier:testador", "ciclo": 1}
-{"t": 174.69, "seq": 61, "evento": "artefato.atualizou", "nome": "testes.py", "tipo": "python", "subagente": "testador", "caminho": "/home/cap/Kortex/motor/runs/c6a4999d718641c5ac6d20aaf5b97b7f/artefatos/testador__testes.py"}
+{"t": 174.69, "seq": 61, "evento": "artefato.atualizou", "nome": "testes.py", "tipo": "python", "subagente": "testador", "caminho": "<RUNNER>/motor/runs/c6a4999d718641c5ac6d20aaf5b97b7f/artefatos/testador__testes.py"}
 {"t": 174.691, "seq": 62, "evento": "onda.concluida", "ids": ["contrato-do-modulo", "testador"]}
 {"t": 174.693, "seq": 63, "evento": "onda.iniciada", "ids": ["prova"]}
 {"t": 174.694, "seq": 64, "evento": "aresta.fluxo", "de": "testador", "para": "prova"}
@@ -78,7 +78,7 @@
 {"t": 208.742, "seq": 78, "evento": "executor.respondeu", "executor": "codificador", "tentativa": 1}
 {"t": 219.217, "seq": 79, "evento": "modelo.atendeu", "papel": "verifier", "fase": "verifier", "modelo": "claude-claude-opus-4-8", "provedor": "anthropic", "tentativa": 1}
 {"t": 219.22, "seq": 80, "evento": "portao.aprovado", "portao": "verifier:codificador", "ciclo": 1}
-{"t": 219.221, "seq": 81, "evento": "artefato.atualizou", "nome": "ebay.py", "tipo": "python", "subagente": "codificador", "caminho": "/home/cap/Kortex/motor/runs/c6a4999d718641c5ac6d20aaf5b97b7f/artefatos/codificador__ebay.py"}
+{"t": 219.221, "seq": 81, "evento": "artefato.atualizou", "nome": "ebay.py", "tipo": "python", "subagente": "codificador", "caminho": "<RUNNER>/motor/runs/c6a4999d718641c5ac6d20aaf5b97b7f/artefatos/codificador__ebay.py"}
 {"t": 219.222, "seq": 82, "evento": "lacuna.preenchida", "subagente": "codificador"}
 {"t": 219.914, "seq": 83, "evento": "validador.rodou", "id": "contrato-do-modulo", "alvo": "codificador", "kind": "comando", "aprovado": true, "motivo": ""}
 {"t": 219.916, "seq": 84, "evento": "lacuna.preenchida", "subagente": "contrato-do-modulo"}
@@ -87,7 +87,7 @@
 {"t": 244.974, "seq": 87, "evento": "executor.respondeu", "executor": "testador", "tentativa": 1}
 {"t": 249.05, "seq": 88, "evento": "modelo.atendeu", "papel": "verifier", "fase": "verifier", "modelo": "claude-claude-opus-4-8", "provedor": "anthropic", "tentativa": 1}
 {"t": 249.053, "seq": 89, "evento": "portao.aprovado", "portao": "verifier:testador", "ciclo": 1}
-{"t": 249.055, "seq": 90, "evento": "artefato.atualizou", "nome": "testes.py", "tipo": "python", "subagente": "testador", "caminho": "/home/cap/Kortex/motor/runs/c6a4999d718641c5ac6d20aaf5b97b7f/artefatos/testador__testes.py"}
+{"t": 249.055, "seq": 90, "evento": "artefato.atualizou", "nome": "testes.py", "tipo": "python", "subagente": "testador", "caminho": "<RUNNER>/motor/runs/c6a4999d718641c5ac6d20aaf5b97b7f/artefatos/testador__testes.py"}
 {"t": 249.057, "seq": 91, "evento": "lacuna.preenchida", "subagente": "testador"}
 {"t": 249.938, "seq": 92, "evento": "validador.rodou", "id": "prova", "alvo": "testador", "kind": "comando", "aprovado": true, "motivo": ""}
 {"t": 249.94, "seq": 93, "evento": "lacuna.preenchida", "subagente": "prova"}
@@ -110,7 +110,7 @@
 {"t": 293.109, "seq": 110, "evento": "executor.respondeu", "executor": "codificador", "tentativa": 1}
 {"t": 304.027, "seq": 111, "evento": "modelo.atendeu", "papel": "verifier", "fase": "verifier", "modelo": "claude-claude-opus-4-8", "provedor": "anthropic", "tentativa": 2}
 {"t": 304.029, "seq": 112, "evento": "portao.aprovado", "portao": "verifier:codificador", "ciclo": 1}
-{"t": 304.03, "seq": 113, "evento": "artefato.atualizou", "nome": "ebay.py", "tipo": "python", "subagente": "codificador", "caminho": "/home/cap/Kortex/motor/runs/0f0f7aa59c4b4c0088d721a4c43dbf52/artefatos/codificador__ebay.py"}
+{"t": 304.03, "seq": 113, "evento": "artefato.atualizou", "nome": "ebay.py", "tipo": "python", "subagente": "codificador", "caminho": "<RUNNER>/motor/runs/0f0f7aa59c4b4c0088d721a4c43dbf52/artefatos/codificador__ebay.py"}
 {"t": 304.032, "seq": 114, "evento": "onda.concluida", "ids": ["codificador"]}
 {"t": 304.033, "seq": 115, "evento": "onda.iniciada", "ids": ["contrato-do-modulo", "testador"]}
 {"t": 304.035, "seq": 116, "evento": "aresta.fluxo", "de": "codificador", "para": "contrato-do-modulo"}
@@ -126,7 +126,7 @@
 {"t": 381.236, "seq": 126, "evento": "executor.respondeu", "executor": "testador", "tentativa": 2}
 {"t": 389.449, "seq": 127, "evento": "modelo.atendeu", "papel": "verifier", "fase": "verifier", "modelo": "claude-claude-opus-4-8", "provedor": "anthropic", "tentativa": 2}
 {"t": 389.451, "seq": 128, "evento": "portao.aprovado", "portao": "verifier:testador", "ciclo": 2}
-{"t": 389.454, "seq": 129, "evento": "artefato.atualizou", "nome": "testes.py", "tipo": "python", "subagente": "testador", "caminho": "/home/cap/Kortex/motor/runs/0f0f7aa59c4b4c0088d721a4c43dbf52/artefatos/testador__testes.py"}
+{"t": 389.454, "seq": 129, "evento": "artefato.atualizou", "nome": "testes.py", "tipo": "python", "subagente": "testador", "caminho": "<RUNNER>/motor/runs/0f0f7aa59c4b4c0088d721a4c43dbf52/artefatos/testador__testes.py"}
 {"t": 389.456, "seq": 130, "evento": "onda.concluida", "ids": ["contrato-do-modulo", "testador"]}
 {"t": 389.458, "seq": 131, "evento": "onda.iniciada", "ids": ["prova"]}
 {"t": 389.459, "seq": 132, "evento": "aresta.fluxo", "de": "testador", "para": "prova"}
@@ -151,7 +151,7 @@
 {"t": 438.866, "seq": 151, "evento": "executor.respondeu", "executor": "codificador", "tentativa": 1}
 {"t": 447.201, "seq": 152, "evento": "modelo.atendeu", "papel": "verifier", "fase": "verifier", "modelo": "agy-claude-opus-4-6-thinking", "provedor": "anthropic", "tentativa": 1}
 {"t": 447.202, "seq": 153, "evento": "portao.aprovado", "portao": "verifier:codificador", "ciclo": 1}
-{"t": 447.204, "seq": 154, "evento": "artefato.atualizou", "nome": "ebay.py", "tipo": "python", "subagente": "codificador", "caminho": "/home/cap/Kortex/motor/runs/275a1bf2d9694224b52e9d8a6cfd3055/artefatos/codificador__ebay.py"}
+{"t": 447.204, "seq": 154, "evento": "artefato.atualizou", "nome": "ebay.py", "tipo": "python", "subagente": "codificador", "caminho": "<RUNNER>/motor/runs/275a1bf2d9694224b52e9d8a6cfd3055/artefatos/codificador__ebay.py"}
 {"t": 447.205, "seq": 155, "evento": "onda.concluida", "ids": ["codificador"]}
 {"t": 447.206, "seq": 156, "evento": "onda.iniciada", "ids": ["contrato-do-modulo", "testador"]}
 {"t": 447.207, "seq": 157, "evento": "aresta.fluxo", "de": "codificador", "para": "contrato-do-modulo"}
@@ -162,7 +162,7 @@
 {"t": 472.809, "seq": 162, "evento": "executor.respondeu", "executor": "testador", "tentativa": 1}
 {"t": 479.339, "seq": 163, "evento": "modelo.atendeu", "papel": "verifier", "fase": "verifier", "modelo": "agy-claude-opus-4-6-thinking", "provedor": "anthropic", "tentativa": 1}
 {"t": 479.341, "seq": 164, "evento": "portao.aprovado", "portao": "verifier:testador", "ciclo": 1}
-{"t": 479.343, "seq": 165, "evento": "artefato.atualizou", "nome": "testes.py", "tipo": "python", "subagente": "testador", "caminho": "/home/cap/Kortex/motor/runs/275a1bf2d9694224b52e9d8a6cfd3055/artefatos/testador__testes.py"}
+{"t": 479.343, "seq": 165, "evento": "artefato.atualizou", "nome": "testes.py", "tipo": "python", "subagente": "testador", "caminho": "<RUNNER>/motor/runs/275a1bf2d9694224b52e9d8a6cfd3055/artefatos/testador__testes.py"}
 {"t": 479.345, "seq": 166, "evento": "onda.concluida", "ids": ["contrato-do-modulo", "testador"]}
 {"t": 479.346, "seq": 167, "evento": "onda.iniciada", "ids": ["prova"]}
 {"t": 479.347, "seq": 168, "evento": "aresta.fluxo", "de": "testador", "para": "prova"}
@@ -187,7 +187,7 @@
 {"t": 523.706, "seq": 187, "evento": "executor.respondeu", "executor": "codificador", "tentativa": 1}
 {"t": 530.389, "seq": 188, "evento": "modelo.atendeu", "papel": "verifier", "fase": "verifier", "modelo": "agy-claude-opus-4-6-thinking", "provedor": "anthropic", "tentativa": 1}
 {"t": 530.391, "seq": 189, "evento": "portao.aprovado", "portao": "verifier:codificador", "ciclo": 1}
-{"t": 530.393, "seq": 190, "evento": "artefato.atualizou", "nome": "ebay.py", "tipo": "python", "subagente": "codificador", "caminho": "/home/cap/Kortex/motor/runs/980ed4cc71a844a7b9108f14cfe2eb73/artefatos/codificador__ebay.py"}
+{"t": 530.393, "seq": 190, "evento": "artefato.atualizou", "nome": "ebay.py", "tipo": "python", "subagente": "codificador", "caminho": "<RUNNER>/motor/runs/980ed4cc71a844a7b9108f14cfe2eb73/artefatos/codificador__ebay.py"}
 {"t": 530.395, "seq": 191, "evento": "onda.concluida", "ids": ["codificador"]}
 {"t": 530.397, "seq": 192, "evento": "onda.iniciada", "ids": ["contrato-do-modulo", "testador"]}
 {"t": 530.399, "seq": 193, "evento": "aresta.fluxo", "de": "codificador", "para": "contrato-do-modulo"}
@@ -198,7 +198,7 @@
 {"t": 565.161, "seq": 198, "evento": "executor.respondeu", "executor": "testador", "tentativa": 1}
 {"t": 571.869, "seq": 199, "evento": "modelo.atendeu", "papel": "verifier", "fase": "verifier", "modelo": "agy-claude-opus-4-6-thinking", "provedor": "anthropic", "tentativa": 1}
 {"t": 571.871, "seq": 200, "evento": "portao.aprovado", "portao": "verifier:testador", "ciclo": 1}
-{"t": 571.873, "seq": 201, "evento": "artefato.atualizou", "nome": "testes.py", "tipo": "python", "subagente": "testador", "caminho": "/home/cap/Kortex/motor/runs/980ed4cc71a844a7b9108f14cfe2eb73/artefatos/testador__testes.py"}
+{"t": 571.873, "seq": 201, "evento": "artefato.atualizou", "nome": "testes.py", "tipo": "python", "subagente": "testador", "caminho": "<RUNNER>/motor/runs/980ed4cc71a844a7b9108f14cfe2eb73/artefatos/testador__testes.py"}
 {"t": 571.875, "seq": 202, "evento": "onda.concluida", "ids": ["contrato-do-modulo", "testador"]}
 {"t": 571.876, "seq": 203, "evento": "onda.iniciada", "ids": ["prova"]}
 {"t": 571.877, "seq": 204, "evento": "aresta.fluxo", "de": "testador", "para": "prova"}
@@ -223,7 +223,7 @@
 {"t": 610.601, "seq": 223, "evento": "executor.respondeu", "executor": "codificador", "tentativa": 1}
 {"t": 618.45, "seq": 224, "evento": "modelo.atendeu", "papel": "verifier", "fase": "verifier", "modelo": "agy-claude-opus-4-6-thinking", "provedor": "anthropic", "tentativa": 1}
 {"t": 618.452, "seq": 225, "evento": "portao.aprovado", "portao": "verifier:codificador", "ciclo": 1}
-{"t": 618.456, "seq": 226, "evento": "artefato.atualizou", "nome": "ebay.py", "tipo": "python", "subagente": "codificador", "caminho": "/home/cap/Kortex/motor/runs/722225be2d294983ab9fca68bc5b8823/artefatos/codificador__ebay.py"}
+{"t": 618.456, "seq": 226, "evento": "artefato.atualizou", "nome": "ebay.py", "tipo": "python", "subagente": "codificador", "caminho": "<RUNNER>/motor/runs/722225be2d294983ab9fca68bc5b8823/artefatos/codificador__ebay.py"}
 {"t": 618.458, "seq": 227, "evento": "onda.concluida", "ids": ["codificador"]}
 {"t": 618.459, "seq": 228, "evento": "onda.iniciada", "ids": ["contrato-do-modulo", "testador"]}
 {"t": 618.461, "seq": 229, "evento": "aresta.fluxo", "de": "codificador", "para": "contrato-do-modulo"}
@@ -234,7 +234,7 @@
 {"t": 658.534, "seq": 234, "evento": "executor.respondeu", "executor": "testador", "tentativa": 1}
 {"t": 664.463, "seq": 235, "evento": "modelo.atendeu", "papel": "verifier", "fase": "verifier", "modelo": "agy-claude-opus-4-6-thinking", "provedor": "anthropic", "tentativa": 1}
 {"t": 664.465, "seq": 236, "evento": "portao.aprovado", "portao": "verifier:testador", "ciclo": 1}
-{"t": 664.467, "seq": 237, "evento": "artefato.atualizou", "nome": "testes.py", "tipo": "python", "subagente": "testador", "caminho": "/home/cap/Kortex/motor/runs/722225be2d294983ab9fca68bc5b8823/artefatos/testador__testes.py"}
+{"t": 664.467, "seq": 237, "evento": "artefato.atualizou", "nome": "testes.py", "tipo": "python", "subagente": "testador", "caminho": "<RUNNER>/motor/runs/722225be2d294983ab9fca68bc5b8823/artefatos/testador__testes.py"}
 {"t": 664.469, "seq": 238, "evento": "onda.concluida", "ids": ["contrato-do-modulo", "testador"]}
 {"t": 664.472, "seq": 239, "evento": "onda.iniciada", "ids": ["prova"]}
 {"t": 664.474, "seq": 240, "evento": "aresta.fluxo", "de": "testador", "para": "prova"}
@@ -259,7 +259,7 @@
 {"t": 705.7, "seq": 259, "evento": "executor.respondeu", "executor": "codificador", "tentativa": 1}
 {"t": 713.354, "seq": 260, "evento": "modelo.atendeu", "papel": "verifier", "fase": "verifier", "modelo": "agy-claude-opus-4-6-thinking", "provedor": "anthropic", "tentativa": 1}
 {"t": 713.357, "seq": 261, "evento": "portao.aprovado", "portao": "verifier:codificador", "ciclo": 1}
-{"t": 713.359, "seq": 262, "evento": "artefato.atualizou", "nome": "ebay.py", "tipo": "python", "subagente": "codificador", "caminho": "/home/cap/Kortex/motor/runs/ea7439e146df4742bfa3ff6dd0cc1dcf/artefatos/codificador__ebay.py"}
+{"t": 713.359, "seq": 262, "evento": "artefato.atualizou", "nome": "ebay.py", "tipo": "python", "subagente": "codificador", "caminho": "<RUNNER>/motor/runs/ea7439e146df4742bfa3ff6dd0cc1dcf/artefatos/codificador__ebay.py"}
 {"t": 713.361, "seq": 263, "evento": "onda.concluida", "ids": ["codificador"]}
 {"t": 713.363, "seq": 264, "evento": "onda.iniciada", "ids": ["contrato-do-modulo", "testador"]}
 {"t": 713.365, "seq": 265, "evento": "aresta.fluxo", "de": "codificador", "para": "contrato-do-modulo"}
@@ -270,7 +270,7 @@
 {"t": 743.558, "seq": 270, "evento": "executor.respondeu", "executor": "testador", "tentativa": 1}
 {"t": 748.804, "seq": 271, "evento": "modelo.atendeu", "papel": "verifier", "fase": "verifier", "modelo": "agy-claude-opus-4-6-thinking", "provedor": "anthropic", "tentativa": 1}
 {"t": 748.806, "seq": 272, "evento": "portao.aprovado", "portao": "verifier:testador", "ciclo": 1}
-{"t": 748.807, "seq": 273, "evento": "artefato.atualizou", "nome": "testes.py", "tipo": "python", "subagente": "testador", "caminho": "/home/cap/Kortex/motor/runs/ea7439e146df4742bfa3ff6dd0cc1dcf/artefatos/testador__testes.py"}
+{"t": 748.807, "seq": 273, "evento": "artefato.atualizou", "nome": "testes.py", "tipo": "python", "subagente": "testador", "caminho": "<RUNNER>/motor/runs/ea7439e146df4742bfa3ff6dd0cc1dcf/artefatos/testador__testes.py"}
 {"t": 748.809, "seq": 274, "evento": "onda.concluida", "ids": ["contrato-do-modulo", "testador"]}
 {"t": 748.81, "seq": 275, "evento": "onda.iniciada", "ids": ["prova"]}
 {"t": 748.811, "seq": 276, "evento": "aresta.fluxo", "de": "testador", "para": "prova"}
@@ -295,7 +295,7 @@
 {"t": 800.209, "seq": 295, "evento": "executor.respondeu", "executor": "codificador", "tentativa": 1}
 {"t": 808.842, "seq": 296, "evento": "modelo.atendeu", "papel": "verifier", "fase": "verifier", "modelo": "agy-claude-opus-4-6-thinking", "provedor": "anthropic", "tentativa": 1}
 {"t": 808.843, "seq": 297, "evento": "portao.aprovado", "portao": "verifier:codificador", "ciclo": 1}
-{"t": 808.845, "seq": 298, "evento": "artefato.atualizou", "nome": "ebay.py", "tipo": "python", "subagente": "codificador", "caminho": "/home/cap/Kortex/motor/runs/e5c904fe48024ebf8b3ba008d0344c92/artefatos/codificador__ebay.py"}
+{"t": 808.845, "seq": 298, "evento": "artefato.atualizou", "nome": "ebay.py", "tipo": "python", "subagente": "codificador", "caminho": "<RUNNER>/motor/runs/e5c904fe48024ebf8b3ba008d0344c92/artefatos/codificador__ebay.py"}
 {"t": 808.847, "seq": 299, "evento": "onda.concluida", "ids": ["codificador"]}
 {"t": 808.848, "seq": 300, "evento": "onda.iniciada", "ids": ["contrato-do-modulo", "testador"]}
 {"t": 808.849, "seq": 301, "evento": "aresta.fluxo", "de": "codificador", "para": "contrato-do-modulo"}
@@ -306,7 +306,7 @@
 {"t": 836.776, "seq": 306, "evento": "executor.respondeu", "executor": "testador", "tentativa": 1}
 {"t": 842.424, "seq": 307, "evento": "modelo.atendeu", "papel": "verifier", "fase": "verifier", "modelo": "agy-claude-opus-4-6-thinking", "provedor": "anthropic", "tentativa": 1}
 {"t": 842.426, "seq": 308, "evento": "portao.aprovado", "portao": "verifier:testador", "ciclo": 1}
-{"t": 842.428, "seq": 309, "evento": "artefato.atualizou", "nome": "testes.py", "tipo": "python", "subagente": "testador", "caminho": "/home/cap/Kortex/motor/runs/e5c904fe48024ebf8b3ba008d0344c92/artefatos/testador__testes.py"}
+{"t": 842.428, "seq": 309, "evento": "artefato.atualizou", "nome": "testes.py", "tipo": "python", "subagente": "testador", "caminho": "<RUNNER>/motor/runs/e5c904fe48024ebf8b3ba008d0344c92/artefatos/testador__testes.py"}
 {"t": 842.429, "seq": 310, "evento": "onda.concluida", "ids": ["contrato-do-modulo", "testador"]}
 {"t": 842.431, "seq": 311, "evento": "onda.iniciada", "ids": ["prova"]}
 {"t": 842.432, "seq": 312, "evento": "aresta.fluxo", "de": "testador", "para": "prova"}
@@ -326,7 +326,7 @@
 {"t": 876.246, "seq": 326, "evento": "executor.respondeu", "executor": "testador", "tentativa": 1}
 {"t": 881.659, "seq": 327, "evento": "modelo.atendeu", "papel": "verifier", "fase": "verifier", "modelo": "agy-claude-opus-4-6-thinking", "provedor": "anthropic", "tentativa": 1}
 {"t": 881.661, "seq": 328, "evento": "portao.aprovado", "portao": "verifier:testador", "ciclo": 1}
-{"t": 881.664, "seq": 329, "evento": "artefato.atualizou", "nome": "testes.py", "tipo": "python", "subagente": "testador", "caminho": "/home/cap/Kortex/motor/runs/e5c904fe48024ebf8b3ba008d0344c92/artefatos/testador__testes.py"}
+{"t": 881.664, "seq": 329, "evento": "artefato.atualizou", "nome": "testes.py", "tipo": "python", "subagente": "testador", "caminho": "<RUNNER>/motor/runs/e5c904fe48024ebf8b3ba008d0344c92/artefatos/testador__testes.py"}
 {"t": 881.666, "seq": 330, "evento": "lacuna.preenchida", "subagente": "testador"}
 {"t": 882.574, "seq": 331, "evento": "validador.rodou", "id": "prova", "alvo": "testador", "kind": "comando", "aprovado": true, "motivo": ""}
 {"t": 882.576, "seq": 332, "evento": "lacuna.preenchida", "subagente": "prova"}
@@ -349,7 +349,7 @@
 {"t": 922.389, "seq": 349, "evento": "executor.respondeu", "executor": "codificador", "tentativa": 1}
 {"t": 928.852, "seq": 350, "evento": "modelo.atendeu", "papel": "verifier", "fase": "verifier", "modelo": "agy-claude-opus-4-6-thinking", "provedor": "anthropic", "tentativa": 1}
 {"t": 928.855, "seq": 351, "evento": "portao.aprovado", "portao": "verifier:codificador", "ciclo": 1}
-{"t": 928.857, "seq": 352, "evento": "artefato.atualizou", "nome": "tarefas.py", "tipo": "python", "subagente": "codificador", "caminho": "/home/cap/Kortex/motor/runs/c8add5e5496e4bcba08328285ffffc11/artefatos/codificador__tarefas.py"}
+{"t": 928.857, "seq": 352, "evento": "artefato.atualizou", "nome": "tarefas.py", "tipo": "python", "subagente": "codificador", "caminho": "<RUNNER>/motor/runs/c8add5e5496e4bcba08328285ffffc11/artefatos/codificador__tarefas.py"}
 {"t": 928.859, "seq": 353, "evento": "onda.concluida", "ids": ["codificador"]}
 {"t": 928.86, "seq": 354, "evento": "onda.iniciada", "ids": ["contrato-do-modulo", "programa-de-verdade", "testador"]}
 {"t": 928.861, "seq": 355, "evento": "aresta.fluxo", "de": "codificador", "para": "contrato-do-modulo"}
@@ -362,7 +362,7 @@
 {"t": 955.445, "seq": 362, "evento": "executor.respondeu", "executor": "testador", "tentativa": 1}
 {"t": 962.109, "seq": 363, "evento": "modelo.atendeu", "papel": "verifier", "fase": "verifier", "modelo": "agy-claude-opus-4-6-thinking", "provedor": "anthropic", "tentativa": 1}
 {"t": 962.11, "seq": 364, "evento": "portao.aprovado", "portao": "verifier:testador", "ciclo": 1}
-{"t": 962.112, "seq": 365, "evento": "artefato.atualizou", "nome": "testes.py", "tipo": "python", "subagente": "testador", "caminho": "/home/cap/Kortex/motor/runs/c8add5e5496e4bcba08328285ffffc11/artefatos/testador__testes.py"}
+{"t": 962.112, "seq": 365, "evento": "artefato.atualizou", "nome": "testes.py", "tipo": "python", "subagente": "testador", "caminho": "<RUNNER>/motor/runs/c8add5e5496e4bcba08328285ffffc11/artefatos/testador__testes.py"}
 {"t": 962.113, "seq": 366, "evento": "onda.concluida", "ids": ["contrato-do-modulo", "programa-de-verdade", "testador"]}
 {"t": 962.115, "seq": 367, "evento": "onda.iniciada", "ids": ["prova"]}
 {"t": 962.116, "seq": 368, "evento": "aresta.fluxo", "de": "testador", "para": "prova"}
@@ -392,7 +392,7 @@
 {"t": 1028.46, "seq": 392, "evento": "executor.respondeu", "executor": "codificador", "tentativa": 1}
 {"t": 1034.667, "seq": 393, "evento": "modelo.atendeu", "papel": "verifier", "fase": "verifier", "modelo": "agy-claude-opus-4-6-thinking", "provedor": "anthropic", "tentativa": 1}
 {"t": 1034.669, "seq": 394, "evento": "portao.aprovado", "portao": "verifier:codificador", "ciclo": 1}
-{"t": 1034.672, "seq": 395, "evento": "artefato.atualizou", "nome": "tarefas.py", "tipo": "python", "subagente": "codificador", "caminho": "/home/cap/Kortex/motor/runs/b1a02c771ab94b5bac3596b3b040c548/artefatos/codificador__tarefas.py"}
+{"t": 1034.672, "seq": 395, "evento": "artefato.atualizou", "nome": "tarefas.py", "tipo": "python", "subagente": "codificador", "caminho": "<RUNNER>/motor/runs/b1a02c771ab94b5bac3596b3b040c548/artefatos/codificador__tarefas.py"}
 {"t": 1034.673, "seq": 396, "evento": "onda.concluida", "ids": ["codificador"]}
 {"t": 1034.675, "seq": 397, "evento": "onda.iniciada", "ids": ["contrato-do-modulo", "programa-de-verdade", "testador"]}
 {"t": 1034.677, "seq": 398, "evento": "aresta.fluxo", "de": "codificador", "para": "contrato-do-modulo"}
@@ -410,7 +410,7 @@
 {"t": 1087.307, "seq": 410, "evento": "executor.respondeu", "executor": "testador", "tentativa": 2}
 {"t": 1093.45, "seq": 411, "evento": "modelo.atendeu", "papel": "verifier", "fase": "verifier", "modelo": "agy-claude-opus-4-6-thinking", "provedor": "anthropic", "tentativa": 1}
 {"t": 1093.452, "seq": 412, "evento": "portao.aprovado", "portao": "verifier:testador", "ciclo": 2}
-{"t": 1093.454, "seq": 413, "evento": "artefato.atualizou", "nome": "testes.py", "tipo": "python", "subagente": "testador", "caminho": "/home/cap/Kortex/motor/runs/b1a02c771ab94b5bac3596b3b040c548/artefatos/testador__testes.py"}
+{"t": 1093.454, "seq": 413, "evento": "artefato.atualizou", "nome": "testes.py", "tipo": "python", "subagente": "testador", "caminho": "<RUNNER>/motor/runs/b1a02c771ab94b5bac3596b3b040c548/artefatos/testador__testes.py"}
 {"t": 1093.455, "seq": 414, "evento": "onda.concluida", "ids": ["contrato-do-modulo", "programa-de-verdade", "testador"]}
 {"t": 1093.457, "seq": 415, "evento": "onda.iniciada", "ids": ["prova"]}
 {"t": 1093.458, "seq": 416, "evento": "aresta.fluxo", "de": "testador", "para": "prova"}

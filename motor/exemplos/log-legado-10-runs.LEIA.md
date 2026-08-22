@@ -1,6 +1,12 @@
 # `log-legado-10-runs.jsonl` — ledger legado real, capturado da produção
 
-**Não é sintético.** São os 426 eventos do `motor/log.jsonl` do runner
+**Uma única edição, declarada.** O prefixo de máquina `/home/cap/Kortex/motor/` dos 21
+campos `caminho` foi trocado por `<RUNNER>/motor/`, porque o `AGENTS.md` proíbe commitar
+caminhos locais. **Nada mais foi tocado:** 426 linhas, todas JSON válido, todos os eventos,
+`seq` e `t` originais. A parte que importa do caminho — `runs/<hex>/artefatos/...` — está
+intacta, porque é sobre ela que a última seção deste arquivo fala.
+
+**Fora isso, não é sintético.** São os 426 eventos do `motor/log.jsonl` do runner
 (192.168.15.50), capturados via `GET /dados` em 2026-08-21, antes de a máquina
 entrar em manutenção. Ficam aqui porque é **o único caso real** de um fenômeno
 que nenhum checkout local reproduz.
