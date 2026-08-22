@@ -5,6 +5,6 @@ include tools/validar_manifest_reprodutores.py
 include motor_painel/painel.html
 include specs/001-hardening-producao/invariant-matrix.jsonl
 include specs/001-hardening-producao/reproducer-manifest.jsonl
-include specs/001-hardening-producao/reproducer-corpus-784c478a054ca380.tar
+include specs/001-hardening-producao/reproducer-corpus-60d4f4002e35f55b.tar
 recursive-include exemplos *.json *.jsonl *.md
 recursive-include scripts *.py

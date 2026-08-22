@@ -113,9 +113,9 @@ class GerenciadorJobsTeste(GerenciadorJobs):
         cliente = kwargs.get("cliente")
         if isinstance(cliente, ClienteStub):
             if "repositorio_orcamento" not in kwargs:
-                workspace = Path(
-                    kwargs.get("workspace_base", tempfile.mkdtemp(prefix="kortex-jobs-"))
-                )
+                if "workspace_base" not in kwargs:
+                    raise TypeError("GerenciadorJobsTeste exige workspace_base explícito")
+                workspace = Path(kwargs["workspace_base"])
                 kwargs.update(dependencias_servico_stub(
                     cliente, workspace / ".orcamento-teste",
                 ))

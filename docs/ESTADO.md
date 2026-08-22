@@ -434,6 +434,16 @@ Reproduza antes de citar. Todos abaixo foram verificados em 2026-08-19.
   é cara se estiver certa. **Armadilha de medição aprendida no mesmo dia:** rodar duas suítes
   no mesmo checkout produz falha falsa — foi assim que eu vi
   `test_docker_runner_timeout_remove_arvore_container` cair, e o erro era meu, não do ramo.
+- **Higiene do workspace de testes medida e protegida** (issue #28, 2026-08-21). O
+  `GerenciadorJobs` agora exige `workspace_base` explícito; o MCP exige `MOTOR_WORKSPACE`,
+  e a suíte usa `tmp_path` nos construtores que poderiam abrir logs. Uma fixture recursiva
+  compara `motor/runs` antes/depois, nomeia cada caminho novo ou alterado e ignora somente
+  caches declarados (`.pytest_cache`, `.mypy_cache`, `.ruff_cache`, `__pycache__`, `.pyc`/`.pyo`).
+  Duas suítes sequenciais ficaram em **146 → 146** diretórios, com **1290 passantes, 35
+  pulados e só E-02 falhando** em cada uma. Restam 131 diretórios com `log.jsonl` vazio no
+  checkout, preservados para decisão humana; não foram apagados. A decisão do `db_path="motor.db"`
+  relativo ficou separada na issue #2, aberta após medir seis arquivos sob `Projetos`, um deles
+  fora do `motor/` esperado.
 
 ---
 

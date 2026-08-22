@@ -91,10 +91,13 @@ def _resposta_limitada(valor: object) -> dict[str, Any]:
 def _gerenciador_de_env() -> GerenciadorJobs:
     modelos = os.environ.get("MOTOR_MODELOS")
     registro = os.environ.get("MOTOR_REGISTRO")
+    workspace = os.environ.get("MOTOR_WORKSPACE")
+    if not workspace:
+        raise ValueError("MOTOR_WORKSPACE é obrigatório")
     cfg_modelos = json.loads(Path(modelos).read_text(encoding="utf-8")) if modelos else None
     return GerenciadorJobs(
         db_path=os.environ.get("MOTOR_DB", "motor.db"),
-        workspace_base=os.environ.get("MOTOR_WORKSPACE", "runs"),
+        workspace_base=workspace,
         cfg_modelos=cfg_modelos,
         dir_registro=registro,
     )

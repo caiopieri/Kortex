@@ -1,6 +1,7 @@
 import asyncio
 import json
 
+import pytest
 import motor.servico as servico_modulo
 from motor.mcp_servidor import (
     DESCRICAO_DESPACHAR,
@@ -23,6 +24,13 @@ from tests.helpers_grafo import (
     composicao_stub,
 )
 from tests.specs import faz_roteador
+
+
+def test_gerenciador_de_env_exige_workspace(monkeypatch):
+    monkeypatch.delenv("MOTOR_WORKSPACE", raising=False)
+
+    with pytest.raises(ValueError, match="MOTOR_WORKSPACE"):
+        _gerenciador_de_env()
 
 
 def test_gerenciador_de_env_carrega_modelos(tmp_path, monkeypatch):
@@ -59,6 +67,7 @@ def test_gerenciador_de_env_aceita_modelos_e_registro_ortogonais(tmp_path, monke
     monkeypatch.setenv("MOTOR_MODELOS", str(modelos))
     monkeypatch.setenv("MOTOR_REGISTRO", str(registro))
     monkeypatch.setenv("MOTOR_DB", str(tmp_path / "motor-ortogonal.db"))
+    monkeypatch.setenv("MOTOR_WORKSPACE", str(tmp_path / "runs-ortogonal"))
     monkeypatch.setattr(
         servico_modulo,
         "compor_orcamento_openai",
@@ -89,9 +98,12 @@ async def aguardar_estado(app, job_id: str, estado: str, timeout_s: float = 3) -
     raise AssertionError(f"estado {estado!r} não alcançado; último={ultimo!r}")
 
 
-def test_descricoes_mcp_sao_contrato():
+def test_descricoes_mcp_sao_contrato(tmp_path):
     async def cenario():
-        app = criar_app(GerenciadorJobs(cliente=ClienteStub(faz_roteador())))
+        app = criar_app(GerenciadorJobs(
+            cliente=ClienteStub(faz_roteador()),
+            workspace_base=tmp_path / "runs",
+        ))
         ferramentas = {tool.name: tool.description for tool in await app.list_tools()}
 
         assert ferramentas["metafabrica.despachar_missao"] == DESCRICAO_DESPACHAR

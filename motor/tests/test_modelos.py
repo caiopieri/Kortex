@@ -265,10 +265,12 @@ def test_construir_cliente_sem_config_com_claude_devolve_cliente_cli(monkeypatch
     assert isinstance(construir_cliente(None, None), ClienteClaudeCLI)
 
 
-def test_main_sem_config_orcada_mantem_saida_humana(monkeypatch, capsys):
+def test_main_sem_config_orcada_mantem_saida_humana(tmp_path, monkeypatch, capsys):
     from motor import __main__ as cli
 
-    monkeypatch.setattr(cli.sys, "argv", ["python -m motor", "missao"])
+    monkeypatch.setattr(cli.sys, "argv", [
+        "python -m motor", "missao", "--workspace", str(tmp_path / "runs"),
+    ])
     monkeypatch.setattr(modelos.ClienteClaudeCLI, "disponivel", staticmethod(lambda: False))
 
     assert cli.main() == 1

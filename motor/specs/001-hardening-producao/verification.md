@@ -38,9 +38,16 @@ The H00-H13 program and the H12b extension through H12b4f provide causal tests f
 - a 64 KiB UTF-8 cap on serialized MCP tool responses and bounded error messages.
 
 The public test corpus is content-addressed by `reproducer-manifest.jsonl` and
-`reproducer-corpus-784c478a054ca380.tar` (was `…-0bdbb677dd281edc.tar` until the U-01 contract
-change; see `docs/auditoria/FASE-C-CORRECOES.md`). `tests/test_hardening_*.py` contains the maintained
-causal tests. Loose audit copies and session reports are not part of the repository contract.
+`reproducer-corpus-60d4f4002e35f55b.tar` (was `…-0bdbb677dd281edc.tar` until the U-01 contract
+change; see `docs/auditoria/FASE-C-CORRECOES.md`). A later reseal for issue #28 replaced
+`reproducer-corpus-784c478a054ca380.tar` with `reproducer-corpus-60d4f4002e35f55b.tar`.
+The corpus members stayed the same (8 files); its only content change was one line in
+`tests/test_auditoria_codex.py`, adding `workspace_base=tmp_path / "runs"` to the
+`GerenciadorJobs` construction. This reseal was forced because the manifest validator runs
+`--collect-only` against the frozen extracted corpus and `workspace_base` became mandatory;
+it isolates the reproducer without changing its assertions. `tests/test_hardening_*.py`
+contains the maintained causal tests. Loose audit copies and session reports are not part of
+the repository contract.
 
 ## Current gates
 

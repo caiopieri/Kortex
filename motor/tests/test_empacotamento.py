@@ -10,7 +10,7 @@ ARTEFATOS_SDIST = {
     "motor_painel/painel.html",
     "specs/001-hardening-producao/invariant-matrix.jsonl",
     "specs/001-hardening-producao/reproducer-manifest.jsonl",
-    "specs/001-hardening-producao/reproducer-corpus-784c478a054ca380.tar",
+    "specs/001-hardening-producao/reproducer-corpus-60d4f4002e35f55b.tar",
 }
 
 
