@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { usePoll, fetchRuns, getGates, fetchDados, getMissaoAtiva } from '../api.js';
+import { colFor } from './boardState.js';
 
 /* ── helpers ── */
 const COL_DEFS = [
@@ -8,6 +9,7 @@ const COL_DEFS = [
   { key: 'prod',    num: '03', label: 'Produção',         sub: 'motor executando · status ao vivo', accent: 'var(--blue)' },
   { key: 'precisa', num: '04', label: 'Precisa de você',  sub: 'gate humano · PARA o run',         accent: 'var(--amber)' },
   { key: 'done',    num: '05', label: 'Concluída',        sub: 'digest · arquivável',              accent: 'var(--green)' },
+  { key: 'indeterminado', num: '06', label: 'Indeterminável', sub: 'sem evidência de estado',       accent: 'var(--text3)' },
 ];
 
 function shapeFor(estado) {
@@ -15,13 +17,6 @@ function shapeFor(estado) {
   if (estado === 'concluida') return 'sh green';
   if (estado === 'abortada')  return 'sh red';
   return 'sh idle';
-}
-
-function colFor(run, gateIds) {
-  if (run.estado === 'concluida' || run.estado === 'abortada') return 'done';
-  if (gateIds.has(run.id))        return 'precisa';
-  if (run.estado === 'ativa')     return 'prod';
-  return 'plan';
 }
 
 /* ── Card ── */
@@ -111,9 +106,9 @@ export default function Board() {
       id: r.id,
       col,
       title: r.objetivo || r.id,
-      note: `${eventos.length} eventos · estado: ${r.estado}`,
+      note: `${eventos.length} eventos · estado: ${r.estado ?? 'indeterminado'}`,
       shape: shapeFor(r.estado),
-      ev: lastEv ? `${lastEv.evento}` : `estado: ${r.estado}`,
+      ev: lastEv ? `${lastEv.evento}` : `estado: ${r.estado ?? 'indeterminado'}`,
       cost: r.custo > 0 ? `US$ ${r.custo.toFixed(2)}` : null,
       motor: col === 'prod' || col === 'precisa',
     };

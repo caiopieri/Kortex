@@ -72,7 +72,7 @@ function GateDetail({ gate, onDecision, submitting }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid var(--border)' }}>
                 <span className="mono" style={{ fontSize: 11, color: 'var(--text3)' }}>Estado</span>
-                <span className="mono" style={{ fontSize: 11, color: 'var(--text)', textTransform: 'uppercase' }}>{run.estado}</span>
+                <span className="mono" style={{ fontSize: 11, color: 'var(--text)', textTransform: 'uppercase' }}>{run.estado || '—'}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid var(--border)' }}>
                 <span className="mono" style={{ fontSize: 11, color: 'var(--text3)' }}>Custo</span>
