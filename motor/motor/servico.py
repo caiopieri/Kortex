@@ -91,7 +91,7 @@ class _LogConsulta:
 
 class GerenciadorJobs:
     def __init__(self, *, db_path: str | Path = "motor.db",
-                 workspace_base: str | Path = "runs",
+                 workspace_base: str | Path,
                  cfg_modelos: dict | None = None,
                  dir_registro: str | Path | None = None,
                  politica: PoliticaGates | None = None,

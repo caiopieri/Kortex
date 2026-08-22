@@ -33,6 +33,11 @@ def aguardar_estado(gerenciador: GerenciadorJobs, job_id: str, estado: str, time
     raise AssertionError(f"estado {estado!r} não alcançado; último={ultimo!r}")
 
 
+def test_servico_exige_workspace_base_explicito(tmp_path):
+    with pytest.raises(TypeError, match="workspace_base"):
+        GerenciadorJobsProducao(db_path=tmp_path / "motor.db")
+
+
 @pytest.mark.parametrize("topologia", [
     None,
     (RotaOrcadaCertificada(
@@ -44,7 +49,8 @@ def test_servico_preflight_bloqueia_antes_de_registrar_job(tmp_path, topologia):
     deps = dependencias_servico_stub(cliente, tmp_path / "orcamento-preflight")
     deps["rotas_certificadas"] = topologia
     jobs = GerenciadorJobsProducao(
-        db_path=tmp_path / "preflight.db", cliente=cliente, **deps,
+        db_path=tmp_path / "preflight.db",
+        workspace_base=tmp_path / "runs-preflight", cliente=cliente, **deps,
     )
     try:
         with pytest.raises(ErroOrcamento, match="catalogo|dois providers"):
@@ -60,7 +66,8 @@ def test_servico_preflight_exige_teto_bootstrap_antes_de_registrar_job(tmp_path)
     deps = dependencias_servico_stub(cliente, tmp_path / "orcamento-sem-teto")
     deps["teto_bootstrap"] = None
     jobs = GerenciadorJobsProducao(
-        db_path=tmp_path / "preflight-sem-teto.db", cliente=cliente, **deps,
+        db_path=tmp_path / "preflight-sem-teto.db",
+        workspace_base=tmp_path / "runs-preflight-sem-teto", cliente=cliente, **deps,
     )
     try:
         with pytest.raises(ErroOrcamento, match="teto bootstrap"):
@@ -74,6 +81,7 @@ def test_servico_preflight_exige_teto_bootstrap_antes_de_registrar_job(tmp_path)
 def test_servico_sem_topologia_bloqueia_resume_e_recovery_antes_de_estado(tmp_path):
     jobs = GerenciadorJobsProducao(
         db_path=tmp_path / "passivo.db",
+        workspace_base=tmp_path / "runs-passivo",
         cliente=ClienteStub(faz_roteador()),
         repositorio_orcamento=RepositorioOrcamento(tmp_path / "orcamento-passivo"),
         fabrica_tentativas_orcadas=lambda *_args: [],
@@ -148,7 +156,8 @@ def test_servico_certificado_injeta_orcamento_e_identidade_estavel(tmp_path):
 
 def test_servico_rejeita_identidade_incompativel_com_ledger(tmp_path):
     gerenciador = GerenciadorJobs(
-        db_path=tmp_path / "motor-id.db", cliente=ClienteStub(faz_roteador()),
+        db_path=tmp_path / "motor-id.db", workspace_base=tmp_path / "runs-id",
+        cliente=ClienteStub(faz_roteador()),
     )
     try:
         with pytest.raises(ValueError, match="job_id inválido"):
@@ -162,7 +171,8 @@ def test_servico_rejeita_cliente_sem_deps_antes_de_efeito(tmp_path):
     cliente = ClienteStub(lambda papel, _prompt: efeitos.append(papel) or "INDEVIDO")
     with pytest.raises(ValueError, match="cliente injetado exige"):
         GerenciadorJobsProducao(
-            db_path=tmp_path / "nao-criar.db", cliente=cliente,
+            db_path=tmp_path / "nao-criar.db",
+            workspace_base=tmp_path / "runs-nao-criar", cliente=cliente,
         )
     assert efeitos == []
     assert not (tmp_path / "nao-criar.db").exists()

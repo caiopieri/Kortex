@@ -1003,9 +1003,14 @@ def test_cli_escalar_liga_flag_e_default_mantem_inerte(tmp_path, monkeypatch, ca
 
     monkeypatch.setattr(cli, "construir_grafo", construir_fake)
 
-    monkeypatch.setattr(cli.sys, "argv", ["python -m motor", "missão"])
+    monkeypatch.setattr(cli.sys, "argv", [
+        "python -m motor", "missão", "--workspace", str(tmp_path / "runs"),
+    ])
     assert cli.main() == 0
-    monkeypatch.setattr(cli.sys, "argv", ["python -m motor", "missão", "--escalar"])
+    monkeypatch.setattr(cli.sys, "argv", [
+        "python -m motor", "missão", "--escalar",
+        "--workspace", str(tmp_path / "runs"),
+    ])
     assert cli.main() == 0
 
     assert flags == [False, True]

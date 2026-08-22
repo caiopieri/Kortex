@@ -256,6 +256,7 @@ def test_config_outbox_invalida_falha_antes_de_criar_worker(
     with pytest.raises(ValueError, match="outbox_"):
         GerenciadorJobs(
             db_path=db_path,
+            workspace_base=tmp_path / "runs-invalid",
             outbox_poll_s=poll_s,
             outbox_lease_s=lease_s,
         )
@@ -267,6 +268,7 @@ def test_fechar_nao_fecha_conexao_com_job_vivo_e_bloqueia_mutacoes(
 ) -> None:
     jobs = GerenciadorJobs(
         db_path=tmp_path / "motor.sqlite",
+        workspace_base=tmp_path / "runs-vivo",
         cliente=ClienteStub(faz_roteador()),
     )
     iniciou = threading.Event()

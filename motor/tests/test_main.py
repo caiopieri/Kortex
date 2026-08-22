@@ -23,6 +23,7 @@ def test_main_modelos_e_registro_sem_orcamento_falha_fechado(tmp_path, monkeypat
         "motor", "minha missão",
         "--modelos", str(cfg_file),
         "--registro", str(reg_dir),
+        "--workspace", str(tmp_path / "runs"),
     ])
 
     monkeypatch.setattr(
@@ -37,7 +38,10 @@ def test_main_so_registro_sem_orcamento_falha_fechado(tmp_path, monkeypatch):
     reg_dir.mkdir()
     (reg_dir / "rotas").mkdir()
 
-    monkeypatch.setattr(sys, "argv", ["motor", "missao", "--registro", str(reg_dir)])
+    monkeypatch.setattr(sys, "argv", [
+        "motor", "missao", "--registro", str(reg_dir),
+        "--workspace", str(tmp_path / "runs"),
+    ])
 
     monkeypatch.setattr(
         "motor.__main__.construir_cliente",
@@ -54,7 +58,10 @@ def test_main_so_modelos_legado_sem_orcamento_falha_fechado(tmp_path, monkeypatc
     cfg_file = tmp_path / "modelos.json"
     cfg_file.write_text(json.dumps(cfg))
 
-    monkeypatch.setattr(sys, "argv", ["motor", "missao", "--modelos", str(cfg_file)])
+    monkeypatch.setattr(sys, "argv", [
+        "motor", "missao", "--modelos", str(cfg_file),
+        "--workspace", str(tmp_path / "runs"),
+    ])
 
     monkeypatch.setattr(
         "motor.__main__.construir_cliente",
@@ -78,7 +85,10 @@ def test_main_global_pins_sem_orcamento_falha_fechado(tmp_path, monkeypatch):
     pins_file.write_text(json.dumps({"pins": {"synthesizer": "oc/openai/gpt-4o"}}))
 
     monkeypatch.setattr("pathlib.Path.home", lambda: fake_home)
-    monkeypatch.setattr(sys, "argv", ["motor", "missao", "--registro", str(reg_dir)])
+    monkeypatch.setattr(sys, "argv", [
+        "motor", "missao", "--registro", str(reg_dir),
+        "--workspace", str(tmp_path / "runs"),
+    ])
 
     monkeypatch.setattr(
         "motor.__main__.construir_cliente",

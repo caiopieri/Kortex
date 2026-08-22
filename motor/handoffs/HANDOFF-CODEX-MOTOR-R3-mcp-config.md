@@ -18,7 +18,7 @@ Env lidas (todas opcionais; ausência = comportamento de hoje):
 - `MOTOR_MODELOS` — caminho de um JSON de `--modelos` (ex.: `exemplos/modelos-codex.json`).
 - `MOTOR_REGISTRO` — diretório do Registry (alternativa a `MOTOR_MODELOS`; **erro se ambos**).
 - `MOTOR_DB` — caminho do `motor.db` (default `motor.db`).
-- `MOTOR_WORKSPACE` — base dos artefatos (default `runs`).
+- `MOTOR_WORKSPACE` — base dos artefatos (obrigatório; não há default relativo).
 
 Esqueleto:
 ```python
@@ -33,7 +33,7 @@ def _gerenciador_de_env() -> GerenciadorJobs:
     cfg_modelos = json.loads(Path(modelos).read_text(encoding="utf-8")) if modelos else None
     return GerenciadorJobs(
         db_path=os.environ.get("MOTOR_DB", "motor.db"),
-        workspace_base=os.environ.get("MOTOR_WORKSPACE", "runs"),
+        workspace_base=os.environ["MOTOR_WORKSPACE"],
         cfg_modelos=cfg_modelos,
         dir_registro=registro,
     )

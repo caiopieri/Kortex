@@ -12,7 +12,7 @@ from xml.etree import ElementTree
 MOTOR = Path(__file__).parents[1]
 SPEC = MOTOR / "specs/001-hardening-producao"
 MANIFEST = SPEC / "reproducer-manifest.jsonl"
-CORPUS = SPEC / "reproducer-corpus-784c478a054ca380.tar"
+CORPUS = SPEC / "reproducer-corpus-60d4f4002e35f55b.tar"
 LANDING_DISPOSITIONS = {"accepted", "duplicate", "retain_control"}
 
 
