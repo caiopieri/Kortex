@@ -240,24 +240,28 @@ def _run_canonica(eventos: list[dict], indice: int) -> dict:
     nos, arestas = grafo_do_log(eventos)
     seqs = [ev["seq"] for ev in eventos if isinstance(ev.get("seq"), int)]
     seq_de = seqs[0] if seqs else None
+    specs = [ev for ev in eventos if ev.get("evento") == "spec.recebida"]
+    multiplas_runs = len(specs) > 1
     fim = next(
         (ev for ev in reversed(eventos) if ev.get("evento") in ("tarefa.concluida", "tarefa.abortada")),
         None,
     )
-    spec = next((ev for ev in eventos if ev.get("evento") == "spec.recebida"), None)
-    return {
+    resumo = {
         "fonte": "cli",
         "id": _id_do_grupo(eventos),
         "perfil": next((ev.get("perfil") for ev in eventos if ev.get("evento") == "run.perfil"), None),
         "seqDe": seq_de,
         "seqAte": seqs[-1] if seqs else None,
-        "missao": spec.get("missao") if spec else None,
-        "desfecho": fim.get("evento") if fim else "aberta",
-        "motivoDoFim": fim.get("motivo") if fim else None,
+        "missao": None if multiplas_runs else specs[0].get("missao") if specs else None,
+        "desfecho": None if multiplas_runs else fim.get("evento") if fim else "aberta",
+        "motivoDoFim": None if multiplas_runs else fim.get("motivo") if fim else None,
         "eventos": eventos,
         "nos": nos,
         "arestas": arestas,
     }
+    if multiplas_runs:
+        resumo["runs_contidas"] = len(specs)
+    return resumo
 
 
 def dados_painel(log_path: str | Path | None = None) -> dict:
@@ -275,6 +279,8 @@ def obter_runs(eventos: list[dict]) -> list[dict]:
     runs_metadata = []
     for idx, run_evs in enumerate(runs_events, start=1):
         run_id = _id_do_grupo(run_evs)
+        specs = [ev for ev in run_evs if ev.get("evento") == "spec.recebida"]
+        multiplas_runs = len(specs) > 1
         objetivo = None
         missao = None
         for ev in run_evs:
@@ -284,30 +290,33 @@ def obter_runs(eventos: list[dict]) -> list[dict]:
                 missao = ev["missao"]
             
         # Determina o estado
-        estado = "ativa"
+        estado = None if multiplas_runs else "ativa"
         for ev in run_evs:
             ev_name = ev.get("evento")
-            if ev_name == "tarefa.concluida":
+            if not multiplas_runs and ev_name == "tarefa.concluida":
                 estado = "concluida"
                 break
-            elif ev_name == "tarefa.abortada":
+            elif not multiplas_runs and ev_name == "tarefa.abortada":
                 estado = "abortada"
                 break
                 
         # Telemetria de tokens nao possui autoridade monetaria.
         custo = None
                 
-        inicio = run_evs[0].get("t", 0.0) if run_evs else 0.0
-        
-        runs_metadata.append({
+        inicio = None if multiplas_runs else run_evs[0].get("t", 0.0) if run_evs else 0.0
+
+        resumo = {
             "id": run_id,
-            "missao": missao,
+            "missao": None if multiplas_runs else missao,
             "objetivo": objetivo,
             "estado": estado,
             "inicio": inicio,
             "custo": custo,
             "n_eventos": len(run_evs)
-        })
+        }
+        if multiplas_runs:
+            resumo["runs_contidas"] = len(specs)
+        runs_metadata.append(resumo)
         
     return runs_metadata
 
@@ -320,8 +329,8 @@ def _resumo_run(run_id: str, eventos: list[dict]) -> dict:
     else:
         resultado = {
             "objetivo": None,
-            "estado": "ativa",
-            "inicio": 0.0,
+            "estado": None,
+            "inicio": None,
             "custo": None,
             "n_eventos": 0,
         }
