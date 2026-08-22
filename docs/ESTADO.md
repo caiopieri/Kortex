@@ -157,6 +157,38 @@ menor do que a lista sugere.
       `/dados/orfaos` conta o que existe em disco e não tem evento, e o `Datahouse` mostra o
       número. **Não reconstrói**: o órfão aparece como caminho e nada mais — sem run, tipo
       nem data, porque o diretório sugere os três e nenhum foi registrado
+- [x] **a superfície legada sai do ar** (2026-08-22, merge `50e81f3`). A rota `/grafo3d`
+      respondia **antes** da checagem de `app/dist`, então servia em produção mesmo com o
+      painel construído — sondado no runner: 200, com `unpkg` e `RECENT_WINDOW = 24`. Tinha
+      projeção **própria** de estado, mais fraca que a do canvas: não conhecia falha nenhuma,
+      derivava *"ativo"* de o nó ter aparecido nos últimos 24 eventos do **arquivo**, e lia o
+      agregado de todas as runs — desenhando uma topologia que não é de nenhuma. Aberta ao
+      vivo, mostrava quatro nós em âmbar sob **"PRECISA DE VOCÊ"** numa run que já tinha
+      concluído. O 404 vem de regra nomeada e diz para onde a capacidade foi. A `painel.html`
+      caiu de 208 para 60 linhas e passa a declarar que o painel não foi construído, em vez de
+      mostrar custo `R$ 0,00` fixo, *"ao vivo"* que nunca reverte e um `catch` vazio engolindo
+      falha de leitura.
+- [x] **o balde legado para de se descrever como run** (issue #29, 2026-08-22, merge `6764029`).
+      Devolvia `missao` da primeira `spec.recebida` e `estado` do último desfecho — colando o
+      nome de uma run no desfecho de outra. E log vazio lia como `ativa`: não eram 14 runs
+      fantasma no painel, eram 14 runs que a tela afirmava estarem **rodando naquele momento**.
+      A regra: **contar não é segmentar.** A revisão pegou dois defeitos que os próprios
+      consertos criaram, o segundo pior que o original — com `estado: null` o Board dizia
+      *"planejada"* em vez de *"ativa"*, e depois a ordem dos `if` fez o único gate humano não
+      respondido sumir da única coluna que existe para mostrá-lo. Virou `boardState.js`, módulo
+      puro e testável, com o porquê da ordem no topo.
+- [x] **a estante de artefatos** (2026-08-22, merge `64c9242`), a "aba de aplicações" do
+      `DECISAO-interface-cortes-e-estante.md` §4 — construída contra o corpus que existe.
+      Censo no cabeçalho: 40 artefatos, 1 tipo, 3 nomes, 47 escritas. **Dois slots vazios
+      declarados, não um:** o visualizador (travado no contrato 2, `tipo` ainda é string livre)
+      e a proveniência (*"0 de 40 declaram run e hash"*). O segundo **se preenche sozinho** —
+      é medidor, não aviso, e some quando deixar de ser verdade. Artefato sem run vira **um
+      grupo**, não 40 cartões repetindo *"na run: —"*: a ausência é do corpus, e um fato só não
+      aparece 40 vezes. Substitui a Datahouse, que já era a tela de artefatos.
+      Dois defeitos que só apareceram atravessando fronteira: o teste cruzado JS×Python achou
+      um bug **no Python** (`_chave_de_artefato` devolvia `(run, "")` para a pasta vazia), e o
+      build pegou colisão `estante.js` × `Estante.jsx` — macOS resolvia para um, o Linux do
+      runner resolveria para o outro.
 - [x] **sete cortes na interface, e o 3D volta como modo de vista** (2026-08-21, merge `db539a1`).
       Saíram cinco telas e dois controles que afirmavam mais do que o ledger diz: `Grafo3D`
       antigo, `Grafo2D` (com o `reactflow`), `MapaGeral` (inventava "projeto" a partir de
