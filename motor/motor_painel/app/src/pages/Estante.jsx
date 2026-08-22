@@ -2,6 +2,8 @@ import { useMemo } from 'react';
 import { usePoll, fetchDados, getOrfaos } from '../api.js';
 import {
   agruparPorRun,
+  BASE_CAMINHO,
+  BASE_CHAVE,
   BASE_HASH,
   censoDoCorpus,
   conteudosRepetidos,
@@ -254,10 +256,29 @@ export default function Estante() {
                   : ' · quantas mudaram de conteúdo: não medido (sem hash)'}
               </span>
 
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                identidade por {item.baseDaIdentidade === BASE_HASH ? 'hash' : 'lugar'}:{' '}
-                {item.baseDaIdentidade === BASE_HASH ? `${item.identidade.slice(0, 12)}…` : item.identidade}
-              </span>
+              {/* TRES estados, tres rotulos. Um ternario aqui colapsaria
+                  `chave` e `caminho` em "lugar" -- e sao coisas diferentes: a
+                  chave `<run>/<resto>` e estavel entre maquinas, o caminho cru
+                  NAO e, e e justamente o que faz todo artefato virar orfao noutro
+                  checkout. Mandar o caso anomalo para o balde do normal e o
+                  defeito que derrubou a #29 tres vezes; hoje sao 0 de 40, que e
+                  como aquele tambem comecou. */}
+              {item.baseDaIdentidade === BASE_HASH && (
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  identidade por conteúdo (hash): {item.identidade.slice(0, 12)}…
+                </span>
+              )}
+              {item.baseDaIdentidade === BASE_CHAVE && (
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  identidade por lugar: {item.identidade}
+                </span>
+              )}
+              {item.baseDaIdentidade === BASE_CAMINHO && (
+                <span style={{ color: 'var(--amber)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  identidade por caminho absoluto — não é estável entre máquinas:{' '}
+                  {item.identidade}
+                </span>
+              )}
             </div>
 
             {/* SLOT 1 — VISUALIZADOR. Estatico ate o contrato 2. */}

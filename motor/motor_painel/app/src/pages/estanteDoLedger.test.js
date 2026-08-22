@@ -79,6 +79,22 @@ describe('identidade: hash quando ha, lugar quando nao, e o cartao diz qual', ()
     assert.equal(item.baseDaIdentidade, BASE_CAMINHO);
     assert.equal(item.identidade, '/solto/a.py');
   });
+
+  it('os TRÊS estados são distintos — `chave` e `caminho` não colapsam', () => {
+    /* O caminho cru é identidade INSTÁVEL entre máquinas: é exatamente o que
+       faz todo artefato virar órfão noutro checkout. A chave `<run>/<resto>` é
+       estável. Rotular os dois como "lugar" mandaria o caso anômalo para o
+       balde do normal — o defeito que derrubou a #29 três vezes, e que aqui
+       seria latente porque hoje há 0 caminhos crus em 40 artefatos. */
+    const bases = itensDaEstante([
+      escrita('/x/runs/r1/artefatos/cod__a.py', { hash: HASH_A, run_id: 'r1' }),
+      escrita('/x/runs/r1/artefatos/cod__b.py'),
+      escrita('/solto/c.py'),
+    ]).map((i) => i.baseDaIdentidade);
+
+    assert.equal(new Set(bases).size, 3);
+    assert.deepEqual([...bases].sort(), [BASE_CAMINHO, BASE_CHAVE, BASE_HASH].sort());
+  });
 });
 
 describe('a chave é relativa: clonar o repo não pode criar 40 órfãos', () => {
