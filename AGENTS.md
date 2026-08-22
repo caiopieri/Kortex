@@ -77,6 +77,24 @@ python -m bandit -r motor -q --severity-level high --confidence-level high
 python -m compileall -q motor tests
 ```
 
+### Bring `main` into your branch before asking for review
+
+The diff the reviewer reads must be the diff that lands. A branch cut from an older `main`
+shows every commit that landed since as a **deletion** — so the reviewer either wastes the
+review re-deriving what is real, or misses that the merge is about to undo someone's work.
+
+This happened twice on 2026-08-22. Both merges resolved correctly, because git uses the
+merge base and neither branch had touched those files — but that was the merge being right,
+not the review. Both times it was caught by scanning the delta by hand, which is not a
+control.
+
+So: `git merge origin/main` (or rebase) **before** you report, and re-run the gate after.
+If the reviewer is slow to merge and `main` moves again, do it again.
+
+Reviewers: diff against `git merge-base origin/main <branch>`, never against `main` alone,
+and after merging verify that the files you know were recently changed still carry those
+changes.
+
 ### When you change what a field means, follow it to its consumers
 
 A field that changes shape — new value, new `null`, new absence — is not done until you
