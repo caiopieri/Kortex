@@ -113,6 +113,113 @@ def test_parse_eventos_arquivo_inexistente_retorna_lista_vazia(tmp_path):
     assert result == []
 
 
+@pytest.mark.parametrize(
+    ("nome", "padrao", "nome_padrao"),
+    [("MOTOR_LOG", "../log.jsonl", "log.jsonl"),
+     ("MOTOR_WORKSPACE", "../runs", "runs")],
+)
+def test_resolver_caminho_exige_override_absoluto(
+    monkeypatch, tmp_path, nome, padrao, nome_padrao,
+):
+    monkeypatch.delenv(nome, raising=False)
+    assert painel._resolver_caminho(nome, padrao) == painel.BASE.parent / nome_padrao
+
+    monkeypatch.setenv(nome, "")
+    assert painel._resolver_caminho(nome, padrao) == painel.BASE.parent / nome_padrao
+
+    absoluto = tmp_path / "log.jsonl"
+    monkeypatch.setenv(nome, str(absoluto))
+    assert painel._resolver_caminho(nome, padrao) == absoluto
+
+    monkeypatch.setenv(nome, "runs/log.jsonl")
+    with pytest.raises(ValueError, match=rf"{nome}.*absoluto.*runs/log.jsonl"):
+        painel._resolver_caminho(nome, padrao)
+
+
+def test_resolver_caminho_confina_valor_na_raiz(tmp_path):
+    raiz = tmp_path / "runs"
+    raiz.mkdir()
+    assert painel._resolver_caminho(
+        "run_id", None, valor="run-1", raiz=raiz,
+    ) == raiz / "run-1"
+
+    for hostil in ("../fora", str(tmp_path / "fora")):
+        with pytest.raises(ValueError, match="fora do workspace"):
+            painel._resolver_caminho("run_id", None, valor=hostil, raiz=raiz)
+
+
+@pytest.mark.parametrize("estado", ["ausente", "vazio"])
+def test_endpoint_declara_log_configurado_indisponivel(tmp_path, estado, monkeypatch):
+    log = tmp_path / "log-configurado.jsonl"
+    if estado == "vazio":
+        log.write_bytes(b"")
+    monkeypatch.setenv("MOTOR_LOG", str(log))
+
+    with pytest.raises(urllib.error.HTTPError) as excinfo:
+        _http_get("/dados", log)
+
+    assert excinfo.value.code == 503
+    corpo = excinfo.value.read().decode("utf-8")
+    assert "ledger configurado indisponivel" in corpo
+    assert str(log) in corpo
+
+
+def test_motor_log_vazio_importa_e_serve_200(tmp_path, monkeypatch):
+    """MOTOR_LOG='' equivale a ausência também na inicialização do painel."""
+    monkeypatch.setenv("MOTOR_LOG", "")
+    monkeypatch.delenv("MOTOR_WORKSPACE", raising=False)
+    spec = importlib.util.spec_from_file_location(
+        "painel_motor_log_vazio",
+        REPO / "motor_painel" / "painel.py",
+    )
+    assert spec is not None and spec.loader is not None
+    modulo = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(modulo)
+
+    assert modulo.LOG_PATH == modulo.BASE.parent / "log.jsonl"
+    monkeypatch.setattr(modulo.Handler, "log_path", tmp_path / "ausente.jsonl")
+    with _TCPServerTeste(("127.0.0.1", 0), modulo.Handler) as server:
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with urllib.request.urlopen(
+                f"http://127.0.0.1:{server.server_address[1]}/dados",
+                timeout=3,
+            ) as resposta:
+                assert resposta.status == 200
+        finally:
+            server.shutdown()
+            thread.join(timeout=3)
+
+
+def test_endpoint_sem_motor_log_usa_workspace_sem_ledger_legado(tmp_path, monkeypatch):
+    """O default sem MOTOR_LOG tolera legado ausente e ainda lista runs válidas."""
+    raiz_log = tmp_path / "log-legado-ausente.jsonl"
+    workspace = tmp_path / "runs"
+    run = workspace / "run-valida"
+    run.mkdir(parents=True)
+    (run / "log.jsonl").write_text(
+        json.dumps({
+            "t": 0.1,
+            "evento": "spec.recebida",
+            "run_id": "run-valida",
+            "missao": "m-valida",
+        }) + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("MOTOR_LOG", raising=False)
+    monkeypatch.setattr(painel.Handler, "runs_path", workspace)
+
+    status, _content_type, body = _http_get("/dados", raiz_log)
+    assert status == 200
+    assert json.loads(body)["eventos"] == []
+
+    status_runs, _content_type_runs, body_runs = _http_get("/dados/runs", raiz_log)
+    assert status_runs == 200
+    runs = json.loads(body_runs)
+    assert [item["id"] for item in runs] == ["run-valida"]
+
+
 def test_parse_eventos_todos_os_tipos_v05(tmp_path):
     """parse_eventos aceita todas as 17 linhas com tipos de evento do v0.5."""
     log = tmp_path / "full.jsonl"

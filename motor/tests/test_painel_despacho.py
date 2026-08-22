@@ -67,10 +67,13 @@ def despachos(tmp_path, monkeypatch):
     """Isola o diretório de despachos (lock/spec/log) em tmp_path."""
     d = tmp_path / "despachos"
     monkeypatch.setattr(painel.Handler, "despachos_dir", d)
+    monkeypatch.setattr(painel.Handler, "runs_path", tmp_path / "runs")
     monkeypatch.setattr(painel.Handler, "log_path", tmp_path / "log.jsonl")
     monkeypatch.setattr(painel.Handler, "db_path", tmp_path / "motor.db")
     monkeypatch.delenv("MOTOR_MODELOS", raising=False)
     monkeypatch.delenv("MOTOR_SANDBOX", raising=False)
+    monkeypatch.delenv("MOTOR_LOG", raising=False)
+    monkeypatch.delenv("MOTOR_WORKSPACE", raising=False)
     return d
 
 
@@ -137,6 +140,7 @@ def test_post_missao_valido_despacha(despachos, popen_espiao):
         "--spec", resp["spec"],
         "--caixa", "runs/caixa",
         "--run-id", f"painel-{Path(resp['spec']).stem.removeprefix('spec-')}",
+        "--workspace", str(painel.Handler.runs_path),
         "--auto", "--escalar",
     ]
     assert isinstance(argv, list)  # nunca string de shell
@@ -167,6 +171,7 @@ def test_post_missao_sem_opcoes_argv_base(despachos, popen_espiao):
         "--spec", resp["spec"],
         "--caixa", "runs/caixa",
         "--run-id", f"painel-{Path(resp['spec']).stem.removeprefix('spec-')}",
+        "--workspace", str(painel.Handler.runs_path),
     ]
 
 
@@ -182,6 +187,7 @@ def test_post_propaga_modelos_somente_do_env(despachos, popen_espiao, monkeypatc
         sys.executable, "-m", "motor", "--spec", resp["spec"],
         "--caixa", "runs/caixa",
         "--run-id", f"painel-{Path(resp['spec']).stem.removeprefix('spec-')}",
+        "--workspace", str(painel.Handler.runs_path),
         "--modelos", "/config/modelos-orcados.json",
     ]
 
@@ -198,8 +204,32 @@ def test_post_propaga_sandbox_somente_do_env(despachos, popen_espiao, monkeypatc
         sys.executable, "-m", "motor", "--spec", resp["spec"],
         "--caixa", "runs/caixa",
         "--run-id", f"painel-{Path(resp['spec']).stem.removeprefix('spec-')}",
+        "--workspace", str(painel.Handler.runs_path),
         "--sandbox", "/config/sandbox.json",
     ]
+
+
+def test_post_missao_nao_escreve_no_log_configurado(
+    despachos, popen_espiao, monkeypatch, tmp_path,
+):
+    """MOTOR_LOG é fonte de leitura do painel, nunca destino do despacho."""
+    sentinela = tmp_path / "ledger-configurado" / "log.jsonl"
+    monkeypatch.setattr(painel.Handler, "log_path", sentinela)
+
+    status, corpo = _post_missao({
+        "spec": SPEC_MINIMA,
+        "opcoes": {"log": "/tmp/caminho-hostil.jsonl"},
+    })
+
+    assert status == 200
+    resposta = json.loads(corpo)
+    assert not sentinela.exists()
+    assert Path(resposta["log"]).parent == despachos
+    assert str(sentinela) not in popen_espiao[0]["argv"]
+    assert "--workspace" in popen_espiao[0]["argv"]
+    assert popen_espiao[0]["argv"][popen_espiao[0]["argv"].index("--workspace") + 1] == str(
+        painel.Handler.runs_path
+    )
 
 
 # ---------------------------------------------------------------------------

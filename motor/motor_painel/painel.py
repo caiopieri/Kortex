@@ -24,8 +24,45 @@ PORTA = 8378
 BASE = Path(__file__).parent.resolve()
 # log.jsonl na raiz é mantido apenas como legado de leitura (um nível acima de
 # motor_painel/); missões novas ficam em RUNS_PATH/<run_id>/log.jsonl.
-LOG_PATH = BASE.parent / "log.jsonl"
-RUNS_PATH = Path(os.environ.get("MOTOR_WORKSPACE", "runs"))
+
+
+def _valor_env(nome: str) -> str | None:
+    """Retorna somente overrides afirmados com conteúdo não vazio."""
+    return os.environ.get(nome) or None
+
+
+def _resolver_caminho(
+    nome: str,
+    padrao_relativo_a_base: str | None,
+    *,
+    valor: str | None = None,
+    raiz: Path | None = None,
+) -> Path:
+    bruto = _valor_env(nome) if valor is None else (valor or None)
+    if bruto is None:
+        if padrao_relativo_a_base is None:
+            raise ValueError(f"{nome} sem valor")
+        return (BASE / padrao_relativo_a_base).resolve()
+    caminho = Path(bruto).expanduser()
+    if raiz is not None:
+        raiz_absoluta = raiz.resolve()
+        candidato = (
+            (raiz_absoluta / caminho).resolve()
+            if not caminho.is_absolute()
+            else caminho.resolve()
+        )
+        if not candidato.is_relative_to(raiz_absoluta):
+            raise ValueError(f"{nome} fora do workspace; recebeu {bruto!r}")
+        return candidato
+    if not caminho.is_absolute():
+        raise ValueError(
+            f"{nome} deve ser um caminho absoluto; recebeu {bruto!r}"
+        )
+    return caminho
+
+
+LOG_PATH = _resolver_caminho("MOTOR_LOG", "../log.jsonl")
+RUNS_PATH = _resolver_caminho("MOTOR_WORKSPACE", "../runs")
 DB_PATH = BASE.parent / "motor.db"
 APP_DIST = BASE / "app" / "dist"
 
@@ -47,11 +84,15 @@ def parse_linha(linha: str) -> dict | None:
     return cast(Optional[dict[Any, Any]], res) if isinstance(res, dict) else None
 
 
-def parse_eventos(log_path: str | Path | None = None) -> list[dict]:
-    """Lê linhas completas e ignora somente o último fragmento sem newline."""
+def parse_eventos(log_path: str | Path | None = None, *, estrito: bool = False) -> list[dict]:
+    """Lê linhas completas; em modo estrito, ausência/vazio vira erro declarado."""
     path = Path(log_path) if log_path is not None else LOG_PATH
-    if not path.exists():
+    if not path.is_file():
+        if estrito:
+            raise FileNotFoundError(f"ledger nao encontrado: {path}")
         return []
+    if estrito and path.stat().st_size == 0:
+        raise ValueError(f"ledger vazio: {path}")
     eventos: list[dict] = []
     ultimo_seq = 0
     ultimo_t: int | float = 0
@@ -75,6 +116,8 @@ def parse_eventos(log_path: str | Path | None = None) -> list[dict]:
             ultimo_seq = ev["seq"]
             ultimo_t = ev["t"]
         eventos.append(ev)
+    if estrito and not eventos:
+        raise ValueError(f"ledger sem eventos: {path}")
     return eventos
 
 
@@ -264,9 +307,14 @@ def _run_canonica(eventos: list[dict], indice: int) -> dict:
     return resumo
 
 
-def dados_painel(log_path: str | Path | None = None) -> dict:
+def dados_painel(
+    log_path: str | Path | None = None,
+    *,
+    eventos: list[dict] | None = None,
+) -> dict:
     """Retorna o payload completo para o frontend."""
-    eventos = parse_eventos(log_path)
+    if eventos is None:
+        eventos = parse_eventos(log_path)
     nos, arestas = grafo_do_log(eventos)
     dados = {"nos": nos, "arestas": arestas, "eventos": eventos}
     if eventos:
@@ -820,7 +868,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
     log_path: Path = LOG_PATH  # substituível em testes
     runs_path: Path = RUNS_PATH  # substituível em testes
     db_path: Path = DB_PATH    # substituível em testes
-    despachos_dir: Path = BASE.parent / "runs" / "despachos"  # substituível em testes
+    despachos_dir: Path = RUNS_PATH / "despachos"  # substituível em testes
 
     def log_message(self, *a):
         pass  # silencia o log padrão do BaseHTTPRequestHandler
@@ -856,12 +904,45 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _falha_ledger_configurado(self) -> bool:
+        # O arquivo legado é opcional no caminho normal: missões novas escrevem
+        # em runs/<run_id>/log.jsonl. O modo estrito só vale quando o operador
+        # afirmou MOTOR_LOG, para distinguir erro de configuração de ausência
+        # normal do legado.
+        if _valor_env("MOTOR_LOG") is None:
+            return False
+        try:
+            self._eventos_ledger(estrito=True)
+        except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as erro:
+            self._erro(503, f"ledger configurado indisponivel: {erro}".encode("utf-8"))
+            return True
+        return False
+
+    def _eventos_ledger(self, *, estrito: bool = False) -> list[dict]:
+        """Lê o ledger uma vez por requisição, preservando o modo declarado."""
+        cache = cast(list[dict] | None, getattr(self, "_eventos_ledger_cache", None))
+        if cache is not None:
+            return cache
+        eventos = parse_eventos(self.log_path, estrito=estrito)
+        self._eventos_ledger_cache = eventos
+        return eventos
+
     def do_GET(self):
         path = urlparse(self.path).path
+
+        if (
+            path in {"/dados", "/dados/gates", "/dados/agentes", "/dados/custos"}
+            and self._falha_ledger_configurado()
+        ):
+            return
+
+        eventos_projecao: list[dict] | None = None
+        if path in {"/dados", "/dados/gates", "/dados/agentes", "/dados/custos"}:
+            eventos_projecao = self._eventos_ledger()
         
         # 1. Endpoints do contrato de dados (/dados/*)
         if path == "/dados":
-            return self._json(dados_painel(self.log_path))
+            return self._json(dados_painel(eventos=eventos_projecao or []))
             
         if path == "/dados/runs":
             registros = _runs_do_workspace(self.runs_path, self.log_path)
@@ -897,12 +978,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             })
             
         if path == "/dados/gates":
-            eventos = parse_eventos(self.log_path)
+            eventos = eventos_projecao or []
             gates = obter_gates_pendentes(eventos)
             return self._json(gates)
             
         if path == "/dados/agentes":
-            eventos = parse_eventos(self.log_path)
+            eventos = eventos_projecao or []
             agentes_dict = {}
             for ev in eventos:
                 ev_name = ev.get("evento")
@@ -931,7 +1012,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._json(list(agentes_dict.values()))
             
         if path == "/dados/custos":
-            eventos = parse_eventos(self.log_path)
+            eventos = eventos_projecao or []
             runs_events = agrupar_eventos_por_run(eventos)
 
             total_tokens = 0
@@ -995,7 +1076,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             eventos: list[dict] = []
             legado_ilegivel = None
             try:
-                eventos = parse_eventos(self.log_path)
+                eventos = self._eventos_ledger(
+                    estrito=_valor_env("MOTOR_LOG") is not None,
+                )
             except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as erro:
                 legado_ilegivel = str(erro)
             for registro in _runs_do_workspace(self.runs_path):
@@ -1143,6 +1226,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         argv = [
             sys.executable, "-m", "motor", "--spec", str(spec_path),
             "--caixa", "runs/caixa", "--run-id", f"painel-{ts}",
+            "--workspace", str(self.runs_path),
         ]
         modelos = os.environ.get("MOTOR_MODELOS")
         if modelos:
@@ -1175,6 +1259,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if not self._origem_permitida():
                 return self._erro(403, b"Erro CSRF: Origem nao permitida")
 
+            if self._falha_ledger_configurado():
+                return
+
             gate_id = path.split("/")[-1]
             content_length = int(self.headers.get("Content-Length", 0))
             post_data = self.rfile.read(content_length)
@@ -1193,7 +1280,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.wfile.write(b"decisao obrigatoria")
                 return
                 
-            eventos = parse_eventos(self.log_path)
+            eventos = self._eventos_ledger(
+                estrito=_valor_env("MOTOR_LOG") is not None,
+            )
             gates_pendentes = obter_gates_pendentes(eventos)
             gate = next((g for g in gates_pendentes if g["portao"] == gate_id), None)
             
