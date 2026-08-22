@@ -32,6 +32,7 @@ medido antes de assumir qualquer coisa.
 |---|---|---|
 | 1 | `AGENTS.md` | invariantes e regras de contribuição. Curto, obrigatório. |
 | 2 | **este arquivo** | onde paramos. |
+| 2b | `docs/PENDENCIAS-DO-FUNDADOR.md` | o que **só o Caio** resolve. Se você é agente, não espere por nada daqui: pegue outra coisa. |
 | 3 | `docs/PARECER-ARQUITETO-visao-vs-sistema.md` | a visão fundadora registrada com fidelidade + veredito estrutural. |
 | 4 | `docs/DECISAO-ciclo-de-vida-workflow.md` | **canônico** sobre workflow: template vs missão, catálogo, composição entre casas. Se outro doc conflitar neste tema, este vence. |
 | 4b | `docs/DECISAO-canvas-e-operacao.md` + `docs/DECISAO-modos-do-produto-e-colapso.md` | a superfície: zonas de rascunho e roteiro, andares, andon; colapso como apresentação e o modo aplicação. |
