@@ -499,3 +499,27 @@ mudar um teste que fixa contrato, e a autorização é do fundador.
   o parecer. Não reescreva o documento antigo em silêncio.
 - Issues vivem em `caiopieri/Kortex-backup` (repo privado; o código é público). Não duplique a
   lista aqui — referencie o número.
+- **Audite os `[x]` de vez em quando, rodando.** Este arquivo é a superfície que diz o
+  estado, e superfície que afirma mais do que sabe é exatamente o defeito que os issues #15,
+  #23 e #29 corrigiram nas telas. Ele não está imune só por ser markdown.
+
+### Auditoria de 2026-08-22
+
+Seis afirmações `[x]` verificadas executando, não lendo:
+
+| afirmação | veredito | como |
+|---|---|---|
+| painel servido na LAN por systemd | **FALSA** | processo solto, sem systemd nem tmux; env só na memória. Corrigida na §F, e o systemd foi de fato instalado depois |
+| `npm ci` volta a funcionar (#16) | verdadeira | `npm ci` em pasta limpa, só com `package.json` + lock |
+| despacho pela interface inclui `--sandbox` | verdadeira | `painel.py:1137` — de env, nunca do corpo HTTP |
+| snapshot vencido bloqueia | verdadeira | `omniroute_orcado.py:236` — e recusa também data no **futuro** |
+| `CommandRunner` default é negar | verdadeira | `grafo.py:625`, `costura_executor.py:72` |
+| com `--auto`, cobertura reprovada não é auto-aprovada | verdadeira | `grafo.py:1701` — o default de `--auto` para cobertura é `escalar`, e sem juiz independente o portão **degrada para humano**, nunca libera |
+
+**Achado lateral:** o `npm ci` reporta 2 vulnerabilidades *high* transitivas (`postcss`,
+`nanoid`, via `vite`), ambas de tempo de build. Issue #31, com o motivo de não terem sido
+corrigidas de imediato.
+
+**O que a auditoria diz do arquivo:** a única mentira era sobre **infra**, não sobre o motor.
+As afirmações sobre invariantes se sustentaram, e duas delas (`--auto` não aprova cobertura;
+snapshot vencido bloqueia) estão implementadas com mais rigor do que a linha prometia.
