@@ -20,7 +20,7 @@ const NAV = [
       { label: 'Dashboard', path: '/dashboard' },
       { label: 'Canvas', path: '/canvas' },
       { label: 'Rotas do registro', path: '/rotas' },
-      { label: 'Datahouse', path: '/datahouse' },
+      { label: 'Estante de artefatos', path: '/estante' },
       { label: 'Runs & Histórico', path: '/runs' },
     ],
   },

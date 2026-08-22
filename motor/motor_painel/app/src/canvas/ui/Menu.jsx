@@ -25,7 +25,7 @@ const ZONAS = [
     itens: [
       { rotulo: 'Dashboard', destino: null },
       { rotulo: 'Workflows', destino: null },
-      { rotulo: 'Datahouse', destino: null },
+      { rotulo: 'Estante de artefatos', destino: null },
       { rotulo: 'Runs & Histórico', destino: null },
     ],
   },

@@ -662,6 +662,10 @@ def _chave_de_artefato(caminho: str | Path) -> tuple[str, str] | None:
     if "artefatos" not in partes:
         return None
     i = partes.index("artefatos")
+    # A própria pasta `artefatos/`, sem arquivo dentro, devolvia ``(run, "")`` —
+    # uma chave que nomeia uma run e um artefato vazio. Não é artefato nenhum.
+    if i == len(partes) - 1:
+        return None
     if i == 0:
         return None
     return (partes[i - 1], "/".join(partes[i + 1:]))

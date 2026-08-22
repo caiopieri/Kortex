@@ -10,7 +10,7 @@ import Agentes from './pages/Agentes';
 import Board from './pages/Board';
 import CatalogoWorkflows from './pages/CatalogoWorkflows';
 import Configuracoes from './pages/Configuracoes';
-import Datahouse from './pages/Datahouse';
+import Estante from './pages/Estante';
 import Logs from './pages/Logs';
 import NovaMissao from './pages/NovaMissao';
 import Runners from './pages/Runners';
@@ -91,7 +91,11 @@ function App() {
      raiz sem dizer por que. */
   else if (route === '/rotas' || route === '/workflows') Page = <CatalogoWorkflows />;
   else if (route === '/config') Page = <Configuracoes />;
-  else if (route === '/datahouse') Page = <Datahouse />;
+  /* A Datahouse virou a Estante (§4): mesma fonte (`artefato.atualizou`), forma
+     de cartao com os slots vazios nomeados. Nao e tela nova -- o §3 do mesmo
+     documento diz que construir a estante sobre 21 telas seria fazer a 22a, e a
+     Datahouse ja era a tela de artefatos. Rota velha continua respondendo. */
+  else if (route === '/estante' || route === '/datahouse') Page = <Estante />;
   else if (route === '/logs') Page = <Logs />;
   /* `/mapa` foi removida: inventava "projeto" agrupando runs por `objetivo`,
      e projeto nao existe no modelo. O resto era Runs + Custos + Agentes. */
