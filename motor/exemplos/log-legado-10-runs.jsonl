@@ -1,0 +1,426 @@
+{"t": 0.001, "seq": 1, "evento": "medicao.monetaria_desligada", "motivo": "operador declarou sem_contencao_monetaria"}
+{"t": 0.048, "seq": 2, "evento": "run.perfil", "perfil": "certificado"}
+{"t": 0.049, "seq": 3, "evento": "spec.recebida", "missao": "ebay-portao-de-processo", "subagentes": 4}
+{"t": 0.052, "seq": 4, "evento": "gate.auto", "portao": "plano", "decisao": "prosseguir"}
+{"t": 0.054, "seq": 5, "evento": "grafo_dep.iniciado", "subagentes": ["codificador", "testador", "contrato-do-modulo", "prova"]}
+{"t": 0.055, "seq": 6, "evento": "onda.iniciada", "ids": ["codificador"]}
+{"t": 0.057, "seq": 7, "evento": "executor.chamado", "executor": "codificador", "papel": "executor", "tier": null, "tentativa": 1, "modelo": "omniroute/roteado"}
+{"t": 33.398, "seq": 8, "evento": "modelo.atendeu", "papel": "executor", "fase": "executor", "modelo": "codex-gpt-5.6-luna", "provedor": "openai", "tentativa": 1}
+{"t": 33.399, "seq": 9, "evento": "executor.respondeu", "executor": "codificador", "tentativa": 1}
+{"t": 33.426, "seq": 10, "evento": "portao.reprovado", "portao": "verifier:codificador", "ciclo": 1, "motivo": "verifier sem veredito valido"}
+{"t": 33.427, "seq": 11, "evento": "executor.chamado", "executor": "codificador", "papel": "executor", "tier": null, "tentativa": 2, "modelo": "omniroute/roteado"}
+{"t": 59.555, "seq": 12, "evento": "modelo.atendeu", "papel": "executor", "fase": "executor", "modelo": "codex-gpt-5.6-luna", "provedor": "openai", "tentativa": 1}
+{"t": 59.556, "seq": 13, "evento": "executor.respondeu", "executor": "codificador", "tentativa": 2}
+{"t": 59.586, "seq": 14, "evento": "portao.reprovado", "portao": "verifier:codificador", "ciclo": 2, "motivo": "verifier sem veredito valido"}
+{"t": 59.588, "seq": 15, "evento": "executor.chamado", "executor": "codificador", "papel": "executor", "tier": null, "tentativa": 3, "modelo": "omniroute/roteado"}
+{"t": 81.655, "seq": 16, "evento": "modelo.atendeu", "papel": "executor", "fase": "executor", "modelo": "codex-gpt-5.6-luna", "provedor": "openai", "tentativa": 1}
+{"t": 81.657, "seq": 17, "evento": "executor.respondeu", "executor": "codificador", "tentativa": 3}
+{"t": 81.684, "seq": 18, "evento": "portao.reprovado", "portao": "verifier:codificador", "ciclo": 3, "motivo": "verifier sem veredito valido"}
+{"t": 81.686, "seq": 19, "evento": "onda.concluida", "ids": ["codificador"]}
+{"t": 81.687, "seq": 20, "evento": "onda.iniciada", "ids": ["contrato-do-modulo", "testador"]}
+{"t": 81.688, "seq": 21, "evento": "aresta.fluxo", "de": "codificador", "para": "contrato-do-modulo"}
+{"t": 81.69, "seq": 22, "evento": "portao.reprovado", "portao": "dependencias:contrato-do-modulo", "motivo": "dependencias reprovadas: codificador"}
+{"t": 81.691, "seq": 23, "evento": "aresta.fluxo", "de": "codificador", "para": "testador"}
+{"t": 81.692, "seq": 24, "evento": "portao.reprovado", "portao": "dependencias:testador", "motivo": "dependencias reprovadas: codificador"}
+{"t": 81.693, "seq": 25, "evento": "onda.concluida", "ids": ["contrato-do-modulo", "testador"]}
+{"t": 81.694, "seq": 26, "evento": "onda.iniciada", "ids": ["prova"]}
+{"t": 81.695, "seq": 27, "evento": "aresta.fluxo", "de": "testador", "para": "prova"}
+{"t": 81.696, "seq": 28, "evento": "portao.reprovado", "portao": "dependencias:prova", "motivo": "dependencias reprovadas: testador"}
+{"t": 81.697, "seq": 29, "evento": "onda.concluida", "ids": ["prova"]}
+{"t": 81.699, "seq": 30, "evento": "paralelo.concluido", "commitados": 4}
+{"t": 81.7, "seq": 31, "evento": "executor.chamado", "executor": "global_evaluator", "modelo": "omniroute/roteado"}
+{"t": 93.614, "seq": 32, "evento": "modelo.atendeu", "papel": "evaluator", "fase": "evaluator", "modelo": "codex-gpt-5.6-luna", "provedor": "openai", "tentativa": 1}
+{"t": 93.616, "seq": 33, "evento": "portao.reprovado", "portao": "cobertura", "lacunas": ["Não há suíte de testes commitada nem evidência de execução no sandbox com exit code 0", "Não foi demonstrada cobertura testada da construção de filtros", "Não foi demonstrada cobertura testada do tratamento de erros HTTP", "O verificador não apresentou um veredito válido; portanto, a ausência de segredos operacionais não foi validada por execução", "subagente reprovado: codificador", "subagente reprovado: contrato-do-modulo", "subagente reprovado: testador", "subagente reprovado: prova"]}
+{"t": 93.618, "seq": 34, "evento": "gate.auto", "portao": "cobertura", "decisao": "escalar"}
+{"t": 93.619, "seq": 35, "evento": "gate.escalado", "portao": "cobertura", "evitando": "openai", "tentativa": 1}
+{"t": 93.621, "seq": 36, "evento": "executor.chamado", "executor": "global_evaluator", "modelo": "omniroute/roteado"}
+{"t": 93.65, "seq": 37, "evento": "escalada.indisponivel", "portao": "cobertura"}
+{"t": 93.652, "seq": 38, "evento": "escalado", "para": "fundador"}
+{"t": 93.653, "seq": 39, "evento": "medicao.monetaria_desligada", "motivo": "operador declarou sem_contencao_monetaria"}
+{"t": 93.704, "seq": 40, "evento": "run.perfil", "perfil": "certificado"}
+{"t": 93.705, "seq": 41, "evento": "spec.recebida", "missao": "ebay-portao-de-processo", "subagentes": 4}
+{"t": 93.707, "seq": 42, "evento": "gate.auto", "portao": "plano", "decisao": "prosseguir"}
+{"t": 93.71, "seq": 43, "evento": "grafo_dep.iniciado", "subagentes": ["codificador", "testador", "contrato-do-modulo", "prova"]}
+{"t": 93.711, "seq": 44, "evento": "onda.iniciada", "ids": ["codificador"]}
+{"t": 93.712, "seq": 45, "evento": "executor.chamado", "executor": "codificador", "papel": "executor", "tier": null, "tentativa": 1, "modelo": "omniroute/roteado"}
+{"t": 122.581, "seq": 46, "evento": "modelo.atendeu", "papel": "executor", "fase": "executor", "modelo": "codex-gpt-5.6-luna", "provedor": "openai", "tentativa": 1}
+{"t": 122.582, "seq": 47, "evento": "executor.respondeu", "executor": "codificador", "tentativa": 1}
+{"t": 132.889, "seq": 48, "evento": "modelo.atendeu", "papel": "verifier", "fase": "verifier", "modelo": "claude-claude-opus-4-8", "provedor": "anthropic", "tentativa": 1}
+{"t": 132.892, "seq": 49, "evento": "portao.aprovado", "portao": "verifier:codificador", "ciclo": 1}
+{"t": 132.894, "seq": 50, "evento": "artefato.atualizou", "nome": "ebay.py", "tipo": "python", "subagente": "codificador", "caminho": "/home/cap/Kortex/motor/runs/c6a4999d718641c5ac6d20aaf5b97b7f/artefatos/codificador__ebay.py"}
+{"t": 132.895, "seq": 51, "evento": "onda.concluida", "ids": ["codificador"]}
+{"t": 132.896, "seq": 52, "evento": "onda.iniciada", "ids": ["contrato-do-modulo", "testador"]}
+{"t": 132.897, "seq": 53, "evento": "aresta.fluxo", "de": "codificador", "para": "contrato-do-modulo"}
+{"t": 133.831, "seq": 54, "evento": "validador.rodou", "id": "contrato-do-modulo", "alvo": "codificador", "kind": "comando", "aprovado": true, "motivo": ""}
+{"t": 133.833, "seq": 55, "evento": "aresta.fluxo", "de": "codificador", "para": "testador"}
+{"t": 133.834, "seq": 56, "evento": "executor.chamado", "executor": "testador", "papel": "executor", "tier": null, "tentativa": 1, "modelo": "omniroute/roteado"}
+{"t": 167.278, "seq": 57, "evento": "modelo.atendeu", "papel": "executor", "fase": "executor", "modelo": "codex-gpt-5.6-luna", "provedor": "openai", "tentativa": 1}
+{"t": 167.279, "seq": 58, "evento": "executor.respondeu", "executor": "testador", "tentativa": 1}
+{"t": 174.685, "seq": 59, "evento": "modelo.atendeu", "papel": "verifier", "fase": "verifier", "modelo": "claude-claude-opus-4-8", "provedor": "anthropic", "tentativa": 1}
+{"t": 174.688, "seq": 60, "evento": "portao.aprovado", "portao": "verifier:testador", "ciclo": 1}
+{"t": 174.69, "seq": 61, "evento": "artefato.atualizou", "nome": "testes.py", "tipo": "python", "subagente": "testador", "caminho": "/home/cap/Kortex/motor/runs/c6a4999d718641c5ac6d20aaf5b97b7f/artefatos/testador__testes.py"}
+{"t": 174.691, "seq": 62, "evento": "onda.concluida", "ids": ["contrato-do-modulo", "testador"]}
+{"t": 174.693, "seq": 63, "evento": "onda.iniciada", "ids": ["prova"]}
+{"t": 174.694, "seq": 64, "evento": "aresta.fluxo", "de": "testador", "para": "prova"}
+{"t": 175.589, "seq": 65, "evento": "validador.rodou", "id": "prova", "alvo": "testador", "kind": "comando", "aprovado": false, "motivo": ".......F.........                                                        [100%]\n=================================== FAILURES ===================================\n_ test_construir_filtros_cobre_filtros_individuais[kwargs6-conditions:{NEW},buyingOptions:{FIXED_PRICE}] _\n\nkwargs = {'conditions': ['NEW', '', None], 'buying_options': ['FIXED_PRICE', '']}\nesperado = 'conditions:{NEW},buyingOptions:{FIXED_PRICE}'\n\n    @pytest.mark.parametrize(\n        (\"kwargs\", \"esperado\"),\n        [\n            ({\"min_price\": 10}, \"price:[10..None]\"),\n            ({\"max_price\": 100}, \"price:[None..100]\"),\n            ({\"conditions\": [\"NEW\"]}, \"conditions:{NEW}\"),\n            ({\"buying_options\": [\"FIXED_PRICE\"]}, \"buyingOptions:{FIXED_PRICE}\"),\n            ({\"conditions\": \"USED\"}, \"conditions:{USED}\"),\n            ({\"buying_options\": (\"AUCTION\",)}, \"buyingOptions:{AUCTION}\"),\n            (\n                {\"conditions\": [\"NEW\", \"\", None], \"buying_options\": [\"FIXED_PRICE\", \"\"]},\n                \"conditions:{NEW},buyingOptions:{FIXED_PRICE}\",\n            ),\n            ({}, \"\"),\n        ],\n    )\n    def test_construir_filtros_cobre_filtros_individuais(kwargs, esperado):\n>       assert ebay.construir_filtros(**kwargs) == esperado\nE       AssertionError: assert 'conditions:{...{FIXED_PRICE}' == 'conditions:{...{FIXED_PRICE}'\nE         \nE         - conditions:{NEW},buyingOptions:{FIXED_PRICE}\nE         + conditions:{NEW|None},buyingOptions:{FIXED_PRICE}\nE         ?                +++++\n\ntestador__testes.py:37: AssertionError\n=========================== short test summary info ============================\nFAILED testador__testes.py::test_construir_filtros_cobre_filtros_individuais[kwargs6-conditions:{NEW},buyingOptions:{FIXED_PRICE}]\n1 failed, 16 passed in 0.24s"}
+{"t": 175.591, "seq": 66, "evento": "onda.concluida", "ids": ["prova"]}
+{"t": 175.593, "seq": 67, "evento": "paralelo.concluido", "commitados": 4}
+{"t": 175.594, "seq": 68, "evento": "executor.chamado", "executor": "global_evaluator", "modelo": "omniroute/roteado"}
+{"t": 181.255, "seq": 69, "evento": "modelo.atendeu", "papel": "evaluator", "fase": "evaluator", "modelo": "claude-claude-opus-4-8", "provedor": "anthropic", "tentativa": 1}
+{"t": 181.26, "seq": 70, "evento": "portao.reprovado", "portao": "cobertura", "lacunas": ["A suíte de testes falha: exit code 1 (1 teste falhou, 16 passaram), violando o critério de sair com exit code 0", "Inconsistência entre o filtro de valores do código (_formatar_valores usa 'if str(valor)', o que mantém 'None' pois str(None)='None' é truthy) e o teste que espera que None seja removido — o código gera 'conditions:{NEW|None}' enquanto o teste espera 'conditions:{NEW}'", "O critério de cobertura de construção de filtros não está efetivamente verificado porque o portão de execução (prova) reprovou", "subagente reprovado: prova"]}
+{"t": 181.262, "seq": 71, "evento": "gate.auto", "portao": "cobertura", "decisao": "escalar"}
+{"t": 181.264, "seq": 72, "evento": "gate.escalado", "portao": "cobertura", "evitando": "anthropic", "tentativa": 1}
+{"t": 181.265, "seq": 73, "evento": "executor.chamado", "executor": "global_evaluator", "modelo": "omniroute/roteado"}
+{"t": 187.026, "seq": 74, "evento": "modelo.atendeu", "papel": "evaluator", "fase": "evaluator", "modelo": "codex-gpt-5.6-luna", "provedor": "openai", "tentativa": 1}
+{"t": 187.031, "seq": 75, "evento": "reconciliacao.iniciada", "nos": ["codificador", "contrato-do-modulo", "prova", "testador"]}
+{"t": 187.033, "seq": 76, "evento": "executor.chamado", "executor": "codificador", "papel": "executor", "tier": null, "tentativa": 1, "modelo": "omniroute/roteado"}
+{"t": 208.74, "seq": 77, "evento": "modelo.atendeu", "papel": "executor", "fase": "executor", "modelo": "codex-gpt-5.6-luna", "provedor": "openai", "tentativa": 1}
+{"t": 208.742, "seq": 78, "evento": "executor.respondeu", "executor": "codificador", "tentativa": 1}
+{"t": 219.217, "seq": 79, "evento": "modelo.atendeu", "papel": "verifier", "fase": "verifier", "modelo": "claude-claude-opus-4-8", "provedor": "anthropic", "tentativa": 1}
+{"t": 219.22, "seq": 80, "evento": "portao.aprovado", "portao": "verifier:codificador", "ciclo": 1}
+{"t": 219.221, "seq": 81, "evento": "artefato.atualizou", "nome": "ebay.py", "tipo": "python", "subagente": "codificador", "caminho": "/home/cap/Kortex/motor/runs/c6a4999d718641c5ac6d20aaf5b97b7f/artefatos/codificador__ebay.py"}
+{"t": 219.222, "seq": 82, "evento": "lacuna.preenchida", "subagente": "codificador"}
+{"t": 219.914, "seq": 83, "evento": "validador.rodou", "id": "contrato-do-modulo", "alvo": "codificador", "kind": "comando", "aprovado": true, "motivo": ""}
+{"t": 219.916, "seq": 84, "evento": "lacuna.preenchida", "subagente": "contrato-do-modulo"}
+{"t": 219.917, "seq": 85, "evento": "executor.chamado", "executor": "testador", "papel": "executor", "tier": null, "tentativa": 1, "modelo": "omniroute/roteado"}
+{"t": 244.967, "seq": 86, "evento": "modelo.atendeu", "papel": "executor", "fase": "executor", "modelo": "codex-gpt-5.6-luna", "provedor": "openai", "tentativa": 1}
+{"t": 244.974, "seq": 87, "evento": "executor.respondeu", "executor": "testador", "tentativa": 1}
+{"t": 249.05, "seq": 88, "evento": "modelo.atendeu", "papel": "verifier", "fase": "verifier", "modelo": "claude-claude-opus-4-8", "provedor": "anthropic", "tentativa": 1}
+{"t": 249.053, "seq": 89, "evento": "portao.aprovado", "portao": "verifier:testador", "ciclo": 1}
+{"t": 249.055, "seq": 90, "evento": "artefato.atualizou", "nome": "testes.py", "tipo": "python", "subagente": "testador", "caminho": "/home/cap/Kortex/motor/runs/c6a4999d718641c5ac6d20aaf5b97b7f/artefatos/testador__testes.py"}
+{"t": 249.057, "seq": 91, "evento": "lacuna.preenchida", "subagente": "testador"}
+{"t": 249.938, "seq": 92, "evento": "validador.rodou", "id": "prova", "alvo": "testador", "kind": "comando", "aprovado": true, "motivo": ""}
+{"t": 249.94, "seq": 93, "evento": "lacuna.preenchida", "subagente": "prova"}
+{"t": 249.941, "seq": 94, "evento": "reconciliacao.concluida", "nos": ["codificador", "contrato-do-modulo", "testador", "prova"]}
+{"t": 249.943, "seq": 95, "evento": "executor.chamado", "executor": "global_evaluator", "modelo": "omniroute/roteado"}
+{"t": 251.965, "seq": 96, "evento": "modelo.atendeu", "papel": "evaluator", "fase": "evaluator", "modelo": "claude-claude-opus-4-8", "provedor": "anthropic", "tentativa": 1}
+{"t": 251.966, "seq": 97, "evento": "portao.aprovado", "portao": "cobertura"}
+{"t": 251.968, "seq": 98, "evento": "executor.chamado", "executor": "synthesizer", "modelo": "omniroute/roteado"}
+{"t": 264.174, "seq": 99, "evento": "modelo.atendeu", "papel": "synthesizer", "fase": "synthesizer", "modelo": "codex-gpt-5.6-luna", "provedor": "openai", "tentativa": 1}
+{"t": 264.177, "seq": 100, "evento": "evidencia.cobertura", "missao": "ebay-portao-de-processo", "execucao": 2, "artefatos": 2}
+{"t": 264.179, "seq": 101, "evento": "tarefa.concluida", "missao": "ebay-portao-de-processo"}
+{"t": 264.18, "seq": 102, "evento": "medicao.monetaria_desligada", "motivo": "operador declarou sem_contencao_monetaria"}
+{"t": 264.222, "seq": 103, "evento": "run.perfil", "perfil": "certificado"}
+{"t": 264.223, "seq": 104, "evento": "spec.recebida", "missao": "ebay-portao-de-processo", "subagentes": 4}
+{"t": 264.225, "seq": 105, "evento": "gate.auto", "portao": "plano", "decisao": "prosseguir"}
+{"t": 264.228, "seq": 106, "evento": "grafo_dep.iniciado", "subagentes": ["codificador", "testador", "contrato-do-modulo", "prova"]}
+{"t": 264.229, "seq": 107, "evento": "onda.iniciada", "ids": ["codificador"]}
+{"t": 264.23, "seq": 108, "evento": "executor.chamado", "executor": "codificador", "papel": "executor", "tier": null, "tentativa": 1, "modelo": "omniroute/roteado"}
+{"t": 293.103, "seq": 109, "evento": "modelo.atendeu", "papel": "executor", "fase": "executor", "modelo": "codex-gpt-5.6-luna", "provedor": "openai", "tentativa": 2}
+{"t": 293.109, "seq": 110, "evento": "executor.respondeu", "executor": "codificador", "tentativa": 1}
+{"t": 304.027, "seq": 111, "evento": "modelo.atendeu", "papel": "verifier", "fase": "verifier", "modelo": "claude-claude-opus-4-8", "provedor": "anthropic", "tentativa": 2}
+{"t": 304.029, "seq": 112, "evento": "portao.aprovado", "portao": "verifier:codificador", "ciclo": 1}
+{"t": 304.03, "seq": 113, "evento": "artefato.atualizou", "nome": "ebay.py", "tipo": "python", "subagente": "codificador", "caminho": "/home/cap/Kortex/motor/runs/0f0f7aa59c4b4c0088d721a4c43dbf52/artefatos/codificador__ebay.py"}
+{"t": 304.032, "seq": 114, "evento": "onda.concluida", "ids": ["codificador"]}
+{"t": 304.033, "seq": 115, "evento": "onda.iniciada", "ids": ["contrato-do-modulo", "testador"]}
+{"t": 304.035, "seq": 116, "evento": "aresta.fluxo", "de": "codificador", "para": "contrato-do-modulo"}
+{"t": 304.672, "seq": 117, "evento": "validador.rodou", "id": "contrato-do-modulo", "alvo": "codificador", "kind": "comando", "aprovado": true, "motivo": ""}
+{"t": 304.674, "seq": 118, "evento": "aresta.fluxo", "de": "codificador", "para": "testador"}
+{"t": 304.675, "seq": 119, "evento": "executor.chamado", "executor": "testador", "papel": "executor", "tier": null, "tentativa": 1, "modelo": "omniroute/roteado"}
+{"t": 337.836, "seq": 120, "evento": "modelo.atendeu", "papel": "executor", "fase": "executor", "modelo": "codex-gpt-5.6-luna", "provedor": "openai", "tentativa": 2}
+{"t": 337.838, "seq": 121, "evento": "executor.respondeu", "executor": "testador", "tentativa": 1}
+{"t": 347.546, "seq": 122, "evento": "modelo.atendeu", "papel": "verifier", "fase": "verifier", "modelo": "claude-claude-opus-4-8", "provedor": "anthropic", "tentativa": 2}
+{"t": 347.548, "seq": 123, "evento": "portao.reprovado", "portao": "verifier:testador", "ciclo": 1, "motivo": "verifier sem veredito valido"}
+{"t": 347.549, "seq": 124, "evento": "executor.chamado", "executor": "testador", "papel": "executor", "tier": null, "tentativa": 2, "modelo": "omniroute/roteado"}
+{"t": 381.235, "seq": 125, "evento": "modelo.atendeu", "papel": "executor", "fase": "executor", "modelo": "codex-gpt-5.6-luna", "provedor": "openai", "tentativa": 2}
+{"t": 381.236, "seq": 126, "evento": "executor.respondeu", "executor": "testador", "tentativa": 2}
+{"t": 389.449, "seq": 127, "evento": "modelo.atendeu", "papel": "verifier", "fase": "verifier", "modelo": "claude-claude-opus-4-8", "provedor": "anthropic", "tentativa": 2}
+{"t": 389.451, "seq": 128, "evento": "portao.aprovado", "portao": "verifier:testador", "ciclo": 2}
+{"t": 389.454, "seq": 129, "evento": "artefato.atualizou", "nome": "testes.py", "tipo": "python", "subagente": "testador", "caminho": "/home/cap/Kortex/motor/runs/0f0f7aa59c4b4c0088d721a4c43dbf52/artefatos/testador__testes.py"}
+{"t": 389.456, "seq": 130, "evento": "onda.concluida", "ids": ["contrato-do-modulo", "testador"]}
+{"t": 389.458, "seq": 131, "evento": "onda.iniciada", "ids": ["prova"]}
+{"t": 389.459, "seq": 132, "evento": "aresta.fluxo", "de": "testador", "para": "prova"}
+{"t": 390.34, "seq": 133, "evento": "validador.rodou", "id": "prova", "alvo": "testador", "kind": "comando", "aprovado": true, "motivo": ""}
+{"t": 390.342, "seq": 134, "evento": "onda.concluida", "ids": ["prova"]}
+{"t": 390.344, "seq": 135, "evento": "paralelo.concluido", "commitados": 4}
+{"t": 390.345, "seq": 136, "evento": "executor.chamado", "executor": "global_evaluator", "modelo": "omniroute/roteado"}
+{"t": 392.272, "seq": 137, "evento": "modelo.atendeu", "papel": "evaluator", "fase": "evaluator", "modelo": "claude-claude-opus-4-8", "provedor": "anthropic", "tentativa": 1}
+{"t": 392.275, "seq": 138, "evento": "portao.aprovado", "portao": "cobertura"}
+{"t": 392.279, "seq": 139, "evento": "executor.chamado", "executor": "synthesizer", "modelo": "omniroute/roteado"}
+{"t": 402.489, "seq": 140, "evento": "modelo.atendeu", "papel": "synthesizer", "fase": "synthesizer", "modelo": "codex-gpt-5.6-luna", "provedor": "openai", "tentativa": 1}
+{"t": 402.49, "seq": 141, "evento": "evidencia.cobertura", "missao": "ebay-portao-de-processo", "execucao": 2, "artefatos": 2}
+{"t": 402.491, "seq": 142, "evento": "tarefa.concluida", "missao": "ebay-portao-de-processo"}
+{"t": 402.492, "seq": 143, "evento": "medicao.monetaria_desligada", "motivo": "operador declarou sem_contencao_monetaria"}
+{"t": 402.534, "seq": 144, "evento": "run.perfil", "perfil": "certificado"}
+{"t": 402.536, "seq": 145, "evento": "spec.recebida", "missao": "ebay-portao-de-processo", "subagentes": 4}
+{"t": 402.538, "seq": 146, "evento": "gate.auto", "portao": "plano", "decisao": "prosseguir"}
+{"t": 402.541, "seq": 147, "evento": "grafo_dep.iniciado", "subagentes": ["codificador", "testador", "contrato-do-modulo", "prova"]}
+{"t": 402.542, "seq": 148, "evento": "onda.iniciada", "ids": ["codificador"]}
+{"t": 402.544, "seq": 149, "evento": "executor.chamado", "executor": "codificador", "papel": "executor", "tier": null, "tentativa": 1, "modelo": "omniroute/roteado"}
+{"t": 438.864, "seq": 150, "evento": "modelo.atendeu", "papel": "executor", "fase": "executor", "modelo": "codex-gpt-5.6-luna", "provedor": "openai", "tentativa": 1}
+{"t": 438.866, "seq": 151, "evento": "executor.respondeu", "executor": "codificador", "tentativa": 1}
+{"t": 447.201, "seq": 152, "evento": "modelo.atendeu", "papel": "verifier", "fase": "verifier", "modelo": "agy-claude-opus-4-6-thinking", "provedor": "anthropic", "tentativa": 1}
+{"t": 447.202, "seq": 153, "evento": "portao.aprovado", "portao": "verifier:codificador", "ciclo": 1}
+{"t": 447.204, "seq": 154, "evento": "artefato.atualizou", "nome": "ebay.py", "tipo": "python", "subagente": "codificador", "caminho": "/home/cap/Kortex/motor/runs/275a1bf2d9694224b52e9d8a6cfd3055/artefatos/codificador__ebay.py"}
+{"t": 447.205, "seq": 155, "evento": "onda.concluida", "ids": ["codificador"]}
+{"t": 447.206, "seq": 156, "evento": "onda.iniciada", "ids": ["contrato-do-modulo", "testador"]}
+{"t": 447.207, "seq": 157, "evento": "aresta.fluxo", "de": "codificador", "para": "contrato-do-modulo"}
+{"t": 448.672, "seq": 158, "evento": "validador.rodou", "id": "contrato-do-modulo", "alvo": "codificador", "kind": "comando", "aprovado": true, "motivo": ""}
+{"t": 448.674, "seq": 159, "evento": "aresta.fluxo", "de": "codificador", "para": "testador"}
+{"t": 448.675, "seq": 160, "evento": "executor.chamado", "executor": "testador", "papel": "executor", "tier": null, "tentativa": 1, "modelo": "omniroute/roteado"}
+{"t": 472.807, "seq": 161, "evento": "modelo.atendeu", "papel": "executor", "fase": "executor", "modelo": "codex-gpt-5.6-luna", "provedor": "openai", "tentativa": 1}
+{"t": 472.809, "seq": 162, "evento": "executor.respondeu", "executor": "testador", "tentativa": 1}
+{"t": 479.339, "seq": 163, "evento": "modelo.atendeu", "papel": "verifier", "fase": "verifier", "modelo": "agy-claude-opus-4-6-thinking", "provedor": "anthropic", "tentativa": 1}
+{"t": 479.341, "seq": 164, "evento": "portao.aprovado", "portao": "verifier:testador", "ciclo": 1}
+{"t": 479.343, "seq": 165, "evento": "artefato.atualizou", "nome": "testes.py", "tipo": "python", "subagente": "testador", "caminho": "/home/cap/Kortex/motor/runs/275a1bf2d9694224b52e9d8a6cfd3055/artefatos/testador__testes.py"}
+{"t": 479.345, "seq": 166, "evento": "onda.concluida", "ids": ["contrato-do-modulo", "testador"]}
+{"t": 479.346, "seq": 167, "evento": "onda.iniciada", "ids": ["prova"]}
+{"t": 479.347, "seq": 168, "evento": "aresta.fluxo", "de": "testador", "para": "prova"}
+{"t": 480.363, "seq": 169, "evento": "validador.rodou", "id": "prova", "alvo": "testador", "kind": "comando", "aprovado": true, "motivo": ""}
+{"t": 480.365, "seq": 170, "evento": "onda.concluida", "ids": ["prova"]}
+{"t": 480.367, "seq": 171, "evento": "paralelo.concluido", "commitados": 4}
+{"t": 480.368, "seq": 172, "evento": "executor.chamado", "executor": "global_evaluator", "modelo": "omniroute/roteado"}
+{"t": 483.255, "seq": 173, "evento": "modelo.atendeu", "papel": "evaluator", "fase": "evaluator", "modelo": "codex-gpt-5.6-luna", "provedor": "openai", "tentativa": 1}
+{"t": 483.258, "seq": 174, "evento": "portao.aprovado", "portao": "cobertura"}
+{"t": 483.262, "seq": 175, "evento": "executor.chamado", "executor": "synthesizer", "modelo": "omniroute/roteado"}
+{"t": 498.294, "seq": 176, "evento": "modelo.atendeu", "papel": "synthesizer", "fase": "synthesizer", "modelo": "codex-gpt-5.6-luna", "provedor": "openai", "tentativa": 1}
+{"t": 498.296, "seq": 177, "evento": "evidencia.cobertura", "missao": "ebay-portao-de-processo", "execucao": 2, "artefatos": 2}
+{"t": 498.297, "seq": 178, "evento": "tarefa.concluida", "missao": "ebay-portao-de-processo"}
+{"t": 498.298, "seq": 179, "evento": "medicao.monetaria_desligada", "motivo": "operador declarou sem_contencao_monetaria"}
+{"t": 498.36, "seq": 180, "evento": "run.perfil", "perfil": "certificado"}
+{"t": 498.361, "seq": 181, "evento": "spec.recebida", "missao": "ebay-portao-de-processo", "subagentes": 4}
+{"t": 498.364, "seq": 182, "evento": "gate.auto", "portao": "plano", "decisao": "prosseguir"}
+{"t": 498.366, "seq": 183, "evento": "grafo_dep.iniciado", "subagentes": ["codificador", "testador", "contrato-do-modulo", "prova"]}
+{"t": 498.368, "seq": 184, "evento": "onda.iniciada", "ids": ["codificador"]}
+{"t": 498.37, "seq": 185, "evento": "executor.chamado", "executor": "codificador", "papel": "executor", "tier": null, "tentativa": 1, "modelo": "omniroute/roteado"}
+{"t": 523.705, "seq": 186, "evento": "modelo.atendeu", "papel": "executor", "fase": "executor", "modelo": "codex-gpt-5.6-luna", "provedor": "openai", "tentativa": 1}
+{"t": 523.706, "seq": 187, "evento": "executor.respondeu", "executor": "codificador", "tentativa": 1}
+{"t": 530.389, "seq": 188, "evento": "modelo.atendeu", "papel": "verifier", "fase": "verifier", "modelo": "agy-claude-opus-4-6-thinking", "provedor": "anthropic", "tentativa": 1}
+{"t": 530.391, "seq": 189, "evento": "portao.aprovado", "portao": "verifier:codificador", "ciclo": 1}
+{"t": 530.393, "seq": 190, "evento": "artefato.atualizou", "nome": "ebay.py", "tipo": "python", "subagente": "codificador", "caminho": "/home/cap/Kortex/motor/runs/980ed4cc71a844a7b9108f14cfe2eb73/artefatos/codificador__ebay.py"}
+{"t": 530.395, "seq": 191, "evento": "onda.concluida", "ids": ["codificador"]}
+{"t": 530.397, "seq": 192, "evento": "onda.iniciada", "ids": ["contrato-do-modulo", "testador"]}
+{"t": 530.399, "seq": 193, "evento": "aresta.fluxo", "de": "codificador", "para": "contrato-do-modulo"}
+{"t": 531.071, "seq": 194, "evento": "validador.rodou", "id": "contrato-do-modulo", "alvo": "codificador", "kind": "comando", "aprovado": true, "motivo": ""}
+{"t": 531.073, "seq": 195, "evento": "aresta.fluxo", "de": "codificador", "para": "testador"}
+{"t": 531.075, "seq": 196, "evento": "executor.chamado", "executor": "testador", "papel": "executor", "tier": null, "tentativa": 1, "modelo": "omniroute/roteado"}
+{"t": 565.16, "seq": 197, "evento": "modelo.atendeu", "papel": "executor", "fase": "executor", "modelo": "codex-gpt-5.6-luna", "provedor": "openai", "tentativa": 1}
+{"t": 565.161, "seq": 198, "evento": "executor.respondeu", "executor": "testador", "tentativa": 1}
+{"t": 571.869, "seq": 199, "evento": "modelo.atendeu", "papel": "verifier", "fase": "verifier", "modelo": "agy-claude-opus-4-6-thinking", "provedor": "anthropic", "tentativa": 1}
+{"t": 571.871, "seq": 200, "evento": "portao.aprovado", "portao": "verifier:testador", "ciclo": 1}
+{"t": 571.873, "seq": 201, "evento": "artefato.atualizou", "nome": "testes.py", "tipo": "python", "subagente": "testador", "caminho": "/home/cap/Kortex/motor/runs/980ed4cc71a844a7b9108f14cfe2eb73/artefatos/testador__testes.py"}
+{"t": 571.875, "seq": 202, "evento": "onda.concluida", "ids": ["contrato-do-modulo", "testador"]}
+{"t": 571.876, "seq": 203, "evento": "onda.iniciada", "ids": ["prova"]}
+{"t": 571.877, "seq": 204, "evento": "aresta.fluxo", "de": "testador", "para": "prova"}
+{"t": 572.734, "seq": 205, "evento": "validador.rodou", "id": "prova", "alvo": "testador", "kind": "comando", "aprovado": true, "motivo": ""}
+{"t": 572.735, "seq": 206, "evento": "onda.concluida", "ids": ["prova"]}
+{"t": 572.737, "seq": 207, "evento": "paralelo.concluido", "commitados": 4}
+{"t": 572.739, "seq": 208, "evento": "executor.chamado", "executor": "global_evaluator", "modelo": "omniroute/roteado"}
+{"t": 575.414, "seq": 209, "evento": "modelo.atendeu", "papel": "evaluator", "fase": "evaluator", "modelo": "codex-gpt-5.6-luna", "provedor": "openai", "tentativa": 1}
+{"t": 575.417, "seq": 210, "evento": "portao.aprovado", "portao": "cobertura"}
+{"t": 575.42, "seq": 211, "evento": "executor.chamado", "executor": "synthesizer", "modelo": "omniroute/roteado"}
+{"t": 585.684, "seq": 212, "evento": "modelo.atendeu", "papel": "synthesizer", "fase": "synthesizer", "modelo": "codex-gpt-5.6-luna", "provedor": "openai", "tentativa": 1}
+{"t": 585.687, "seq": 213, "evento": "evidencia.cobertura", "missao": "ebay-portao-de-processo", "execucao": 2, "artefatos": 2}
+{"t": 585.688, "seq": 214, "evento": "tarefa.concluida", "missao": "ebay-portao-de-processo"}
+{"t": 585.689, "seq": 215, "evento": "medicao.monetaria_desligada", "motivo": "operador declarou sem_contencao_monetaria"}
+{"t": 585.73, "seq": 216, "evento": "run.perfil", "perfil": "certificado"}
+{"t": 585.732, "seq": 217, "evento": "spec.recebida", "missao": "ebay-portao-de-processo", "subagentes": 4}
+{"t": 585.734, "seq": 218, "evento": "gate.auto", "portao": "plano", "decisao": "prosseguir"}
+{"t": 585.737, "seq": 219, "evento": "grafo_dep.iniciado", "subagentes": ["codificador", "testador", "contrato-do-modulo", "prova"]}
+{"t": 585.738, "seq": 220, "evento": "onda.iniciada", "ids": ["codificador"]}
+{"t": 585.74, "seq": 221, "evento": "executor.chamado", "executor": "codificador", "papel": "executor", "tier": null, "tentativa": 1, "modelo": "omniroute/roteado"}
+{"t": 610.595, "seq": 222, "evento": "modelo.atendeu", "papel": "executor", "fase": "executor", "modelo": "codex-gpt-5.6-luna", "provedor": "openai", "tentativa": 1}
+{"t": 610.601, "seq": 223, "evento": "executor.respondeu", "executor": "codificador", "tentativa": 1}
+{"t": 618.45, "seq": 224, "evento": "modelo.atendeu", "papel": "verifier", "fase": "verifier", "modelo": "agy-claude-opus-4-6-thinking", "provedor": "anthropic", "tentativa": 1}
+{"t": 618.452, "seq": 225, "evento": "portao.aprovado", "portao": "verifier:codificador", "ciclo": 1}
+{"t": 618.456, "seq": 226, "evento": "artefato.atualizou", "nome": "ebay.py", "tipo": "python", "subagente": "codificador", "caminho": "/home/cap/Kortex/motor/runs/722225be2d294983ab9fca68bc5b8823/artefatos/codificador__ebay.py"}
+{"t": 618.458, "seq": 227, "evento": "onda.concluida", "ids": ["codificador"]}
+{"t": 618.459, "seq": 228, "evento": "onda.iniciada", "ids": ["contrato-do-modulo", "testador"]}
+{"t": 618.461, "seq": 229, "evento": "aresta.fluxo", "de": "codificador", "para": "contrato-do-modulo"}
+{"t": 619.122, "seq": 230, "evento": "validador.rodou", "id": "contrato-do-modulo", "alvo": "codificador", "kind": "comando", "aprovado": true, "motivo": ""}
+{"t": 619.124, "seq": 231, "evento": "aresta.fluxo", "de": "codificador", "para": "testador"}
+{"t": 619.125, "seq": 232, "evento": "executor.chamado", "executor": "testador", "papel": "executor", "tier": null, "tentativa": 1, "modelo": "omniroute/roteado"}
+{"t": 658.529, "seq": 233, "evento": "modelo.atendeu", "papel": "executor", "fase": "executor", "modelo": "codex-gpt-5.6-luna", "provedor": "openai", "tentativa": 1}
+{"t": 658.534, "seq": 234, "evento": "executor.respondeu", "executor": "testador", "tentativa": 1}
+{"t": 664.463, "seq": 235, "evento": "modelo.atendeu", "papel": "verifier", "fase": "verifier", "modelo": "agy-claude-opus-4-6-thinking", "provedor": "anthropic", "tentativa": 1}
+{"t": 664.465, "seq": 236, "evento": "portao.aprovado", "portao": "verifier:testador", "ciclo": 1}
+{"t": 664.467, "seq": 237, "evento": "artefato.atualizou", "nome": "testes.py", "tipo": "python", "subagente": "testador", "caminho": "/home/cap/Kortex/motor/runs/722225be2d294983ab9fca68bc5b8823/artefatos/testador__testes.py"}
+{"t": 664.469, "seq": 238, "evento": "onda.concluida", "ids": ["contrato-do-modulo", "testador"]}
+{"t": 664.472, "seq": 239, "evento": "onda.iniciada", "ids": ["prova"]}
+{"t": 664.474, "seq": 240, "evento": "aresta.fluxo", "de": "testador", "para": "prova"}
+{"t": 665.361, "seq": 241, "evento": "validador.rodou", "id": "prova", "alvo": "testador", "kind": "comando", "aprovado": true, "motivo": ""}
+{"t": 665.362, "seq": 242, "evento": "onda.concluida", "ids": ["prova"]}
+{"t": 665.364, "seq": 243, "evento": "paralelo.concluido", "commitados": 4}
+{"t": 665.365, "seq": 244, "evento": "executor.chamado", "executor": "global_evaluator", "modelo": "omniroute/roteado"}
+{"t": 668.846, "seq": 245, "evento": "modelo.atendeu", "papel": "evaluator", "fase": "evaluator", "modelo": "codex-gpt-5.6-luna", "provedor": "openai", "tentativa": 1}
+{"t": 668.848, "seq": 246, "evento": "portao.aprovado", "portao": "cobertura"}
+{"t": 668.852, "seq": 247, "evento": "executor.chamado", "executor": "synthesizer", "modelo": "omniroute/roteado"}
+{"t": 680.249, "seq": 248, "evento": "modelo.atendeu", "papel": "synthesizer", "fase": "synthesizer", "modelo": "codex-gpt-5.6-luna", "provedor": "openai", "tentativa": 1}
+{"t": 680.252, "seq": 249, "evento": "evidencia.cobertura", "missao": "ebay-portao-de-processo", "execucao": 2, "artefatos": 2}
+{"t": 680.254, "seq": 250, "evento": "tarefa.concluida", "missao": "ebay-portao-de-processo"}
+{"t": 680.255, "seq": 251, "evento": "medicao.monetaria_desligada", "motivo": "operador declarou sem_contencao_monetaria"}
+{"t": 680.296, "seq": 252, "evento": "run.perfil", "perfil": "certificado"}
+{"t": 680.298, "seq": 253, "evento": "spec.recebida", "missao": "ebay-portao-de-processo", "subagentes": 4}
+{"t": 680.3, "seq": 254, "evento": "gate.auto", "portao": "plano", "decisao": "prosseguir"}
+{"t": 680.302, "seq": 255, "evento": "grafo_dep.iniciado", "subagentes": ["codificador", "testador", "contrato-do-modulo", "prova"]}
+{"t": 680.305, "seq": 256, "evento": "onda.iniciada", "ids": ["codificador"]}
+{"t": 680.307, "seq": 257, "evento": "executor.chamado", "executor": "codificador", "papel": "executor", "tier": null, "tentativa": 1, "modelo": "omniroute/roteado"}
+{"t": 705.698, "seq": 258, "evento": "modelo.atendeu", "papel": "executor", "fase": "executor", "modelo": "codex-gpt-5.6-luna", "provedor": "openai", "tentativa": 1}
+{"t": 705.7, "seq": 259, "evento": "executor.respondeu", "executor": "codificador", "tentativa": 1}
+{"t": 713.354, "seq": 260, "evento": "modelo.atendeu", "papel": "verifier", "fase": "verifier", "modelo": "agy-claude-opus-4-6-thinking", "provedor": "anthropic", "tentativa": 1}
+{"t": 713.357, "seq": 261, "evento": "portao.aprovado", "portao": "verifier:codificador", "ciclo": 1}
+{"t": 713.359, "seq": 262, "evento": "artefato.atualizou", "nome": "ebay.py", "tipo": "python", "subagente": "codificador", "caminho": "/home/cap/Kortex/motor/runs/ea7439e146df4742bfa3ff6dd0cc1dcf/artefatos/codificador__ebay.py"}
+{"t": 713.361, "seq": 263, "evento": "onda.concluida", "ids": ["codificador"]}
+{"t": 713.363, "seq": 264, "evento": "onda.iniciada", "ids": ["contrato-do-modulo", "testador"]}
+{"t": 713.365, "seq": 265, "evento": "aresta.fluxo", "de": "codificador", "para": "contrato-do-modulo"}
+{"t": 714.032, "seq": 266, "evento": "validador.rodou", "id": "contrato-do-modulo", "alvo": "codificador", "kind": "comando", "aprovado": true, "motivo": ""}
+{"t": 714.034, "seq": 267, "evento": "aresta.fluxo", "de": "codificador", "para": "testador"}
+{"t": 714.035, "seq": 268, "evento": "executor.chamado", "executor": "testador", "papel": "executor", "tier": null, "tentativa": 1, "modelo": "omniroute/roteado"}
+{"t": 743.556, "seq": 269, "evento": "modelo.atendeu", "papel": "executor", "fase": "executor", "modelo": "codex-gpt-5.6-luna", "provedor": "openai", "tentativa": 1}
+{"t": 743.558, "seq": 270, "evento": "executor.respondeu", "executor": "testador", "tentativa": 1}
+{"t": 748.804, "seq": 271, "evento": "modelo.atendeu", "papel": "verifier", "fase": "verifier", "modelo": "agy-claude-opus-4-6-thinking", "provedor": "anthropic", "tentativa": 1}
+{"t": 748.806, "seq": 272, "evento": "portao.aprovado", "portao": "verifier:testador", "ciclo": 1}
+{"t": 748.807, "seq": 273, "evento": "artefato.atualizou", "nome": "testes.py", "tipo": "python", "subagente": "testador", "caminho": "/home/cap/Kortex/motor/runs/ea7439e146df4742bfa3ff6dd0cc1dcf/artefatos/testador__testes.py"}
+{"t": 748.809, "seq": 274, "evento": "onda.concluida", "ids": ["contrato-do-modulo", "testador"]}
+{"t": 748.81, "seq": 275, "evento": "onda.iniciada", "ids": ["prova"]}
+{"t": 748.811, "seq": 276, "evento": "aresta.fluxo", "de": "testador", "para": "prova"}
+{"t": 749.683, "seq": 277, "evento": "validador.rodou", "id": "prova", "alvo": "testador", "kind": "comando", "aprovado": true, "motivo": ""}
+{"t": 749.685, "seq": 278, "evento": "onda.concluida", "ids": ["prova"]}
+{"t": 749.687, "seq": 279, "evento": "paralelo.concluido", "commitados": 4}
+{"t": 749.688, "seq": 280, "evento": "executor.chamado", "executor": "global_evaluator", "modelo": "omniroute/roteado"}
+{"t": 752.197, "seq": 281, "evento": "modelo.atendeu", "papel": "evaluator", "fase": "evaluator", "modelo": "codex-gpt-5.6-luna", "provedor": "openai", "tentativa": 1}
+{"t": 752.198, "seq": 282, "evento": "portao.aprovado", "portao": "cobertura"}
+{"t": 752.203, "seq": 283, "evento": "executor.chamado", "executor": "synthesizer", "modelo": "omniroute/roteado"}
+{"t": 764.852, "seq": 284, "evento": "modelo.atendeu", "papel": "synthesizer", "fase": "synthesizer", "modelo": "codex-gpt-5.6-luna", "provedor": "openai", "tentativa": 1}
+{"t": 764.854, "seq": 285, "evento": "evidencia.cobertura", "missao": "ebay-portao-de-processo", "execucao": 2, "artefatos": 2}
+{"t": 764.856, "seq": 286, "evento": "tarefa.concluida", "missao": "ebay-portao-de-processo"}
+{"t": 764.857, "seq": 287, "evento": "medicao.monetaria_desligada", "motivo": "operador declarou sem_contencao_monetaria"}
+{"t": 764.898, "seq": 288, "evento": "run.perfil", "perfil": "certificado"}
+{"t": 764.9, "seq": 289, "evento": "spec.recebida", "missao": "ebay-portao-de-processo", "subagentes": 4}
+{"t": 764.902, "seq": 290, "evento": "gate.auto", "portao": "plano", "decisao": "prosseguir"}
+{"t": 764.905, "seq": 291, "evento": "grafo_dep.iniciado", "subagentes": ["codificador", "testador", "contrato-do-modulo", "prova"]}
+{"t": 764.906, "seq": 292, "evento": "onda.iniciada", "ids": ["codificador"]}
+{"t": 764.908, "seq": 293, "evento": "executor.chamado", "executor": "codificador", "papel": "executor", "tier": null, "tentativa": 1, "modelo": "omniroute/roteado"}
+{"t": 800.208, "seq": 294, "evento": "modelo.atendeu", "papel": "executor", "fase": "executor", "modelo": "codex-gpt-5.6-luna", "provedor": "openai", "tentativa": 1}
+{"t": 800.209, "seq": 295, "evento": "executor.respondeu", "executor": "codificador", "tentativa": 1}
+{"t": 808.842, "seq": 296, "evento": "modelo.atendeu", "papel": "verifier", "fase": "verifier", "modelo": "agy-claude-opus-4-6-thinking", "provedor": "anthropic", "tentativa": 1}
+{"t": 808.843, "seq": 297, "evento": "portao.aprovado", "portao": "verifier:codificador", "ciclo": 1}
+{"t": 808.845, "seq": 298, "evento": "artefato.atualizou", "nome": "ebay.py", "tipo": "python", "subagente": "codificador", "caminho": "/home/cap/Kortex/motor/runs/e5c904fe48024ebf8b3ba008d0344c92/artefatos/codificador__ebay.py"}
+{"t": 808.847, "seq": 299, "evento": "onda.concluida", "ids": ["codificador"]}
+{"t": 808.848, "seq": 300, "evento": "onda.iniciada", "ids": ["contrato-do-modulo", "testador"]}
+{"t": 808.849, "seq": 301, "evento": "aresta.fluxo", "de": "codificador", "para": "contrato-do-modulo"}
+{"t": 809.511, "seq": 302, "evento": "validador.rodou", "id": "contrato-do-modulo", "alvo": "codificador", "kind": "comando", "aprovado": true, "motivo": ""}
+{"t": 809.513, "seq": 303, "evento": "aresta.fluxo", "de": "codificador", "para": "testador"}
+{"t": 809.514, "seq": 304, "evento": "executor.chamado", "executor": "testador", "papel": "executor", "tier": null, "tentativa": 1, "modelo": "omniroute/roteado"}
+{"t": 836.774, "seq": 305, "evento": "modelo.atendeu", "papel": "executor", "fase": "executor", "modelo": "codex-gpt-5.6-luna", "provedor": "openai", "tentativa": 1}
+{"t": 836.776, "seq": 306, "evento": "executor.respondeu", "executor": "testador", "tentativa": 1}
+{"t": 842.424, "seq": 307, "evento": "modelo.atendeu", "papel": "verifier", "fase": "verifier", "modelo": "agy-claude-opus-4-6-thinking", "provedor": "anthropic", "tentativa": 1}
+{"t": 842.426, "seq": 308, "evento": "portao.aprovado", "portao": "verifier:testador", "ciclo": 1}
+{"t": 842.428, "seq": 309, "evento": "artefato.atualizou", "nome": "testes.py", "tipo": "python", "subagente": "testador", "caminho": "/home/cap/Kortex/motor/runs/e5c904fe48024ebf8b3ba008d0344c92/artefatos/testador__testes.py"}
+{"t": 842.429, "seq": 310, "evento": "onda.concluida", "ids": ["contrato-do-modulo", "testador"]}
+{"t": 842.431, "seq": 311, "evento": "onda.iniciada", "ids": ["prova"]}
+{"t": 842.432, "seq": 312, "evento": "aresta.fluxo", "de": "testador", "para": "prova"}
+{"t": 843.333, "seq": 313, "evento": "validador.rodou", "id": "prova", "alvo": "testador", "kind": "comando", "aprovado": false, "motivo": ".........F..                                                             [100%]\n=================================== FAILURES ===================================\n____________________ test_obter_token_com_timeout_propagado ____________________\n\n    def test_obter_token_com_timeout_propagado():\n        with patch(\n            \"codificador__ebay.requests.post\",\n            side_effect=requests.exceptions.Timeout,\n        ):\n            with pytest.raises(requests.exceptions.Timeout):\n>               ebay.obter_token()\n\ntestador__testes.py:119: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\n    def obter_token() -> str:\n        client_id = os.environ.get(\"EBAY_CLIENT_ID\")\n        client_secret = os.environ.get(\"EBAY_CLIENT_SECRET\")\n    \n        if not client_id or not client_secret:\n>           raise EbayAPIError(\n                \"As credenciais EBAY_CLIENT_ID e EBAY_CLIENT_SECRET são obrigatórias.\"\n            )\nE           codificador__ebay.EbayAPIError: As credenciais EBAY_CLIENT_ID e EBAY_CLIENT_SECRET são obrigatórias.\n\ncodificador__ebay.py:56: EbayAPIError\n=========================== short test summary info ============================\nFAILED testador__testes.py::test_obter_token_com_timeout_propagado - codifica...\n1 failed, 11 passed in 0.23s"}
+{"t": 843.334, "seq": 314, "evento": "onda.concluida", "ids": ["prova"]}
+{"t": 843.336, "seq": 315, "evento": "paralelo.concluido", "commitados": 4}
+{"t": 843.337, "seq": 316, "evento": "executor.chamado", "executor": "global_evaluator", "modelo": "omniroute/roteado"}
+{"t": 848.872, "seq": 317, "evento": "modelo.atendeu", "papel": "evaluator", "fase": "evaluator", "modelo": "codex-gpt-5.6-luna", "provedor": "openai", "tentativa": 1}
+{"t": 848.877, "seq": 318, "evento": "portao.reprovado", "portao": "cobertura", "lacunas": ["A suíte de testes não termina com exit code 0: 1 teste falha porque test_obter_token_com_timeout_propagado não configura credenciais sintéticas antes de chamar obter_token(), que falha na validação de credenciais antes de atingir o mock de timeout.", "subagente reprovado: prova"]}
+{"t": 848.879, "seq": 319, "evento": "gate.auto", "portao": "cobertura", "decisao": "escalar"}
+{"t": 848.881, "seq": 320, "evento": "gate.escalado", "portao": "cobertura", "evitando": "openai", "tentativa": 1}
+{"t": 848.883, "seq": 321, "evento": "executor.chamado", "executor": "global_evaluator", "modelo": "omniroute/roteado"}
+{"t": 853.205, "seq": 322, "evento": "modelo.atendeu", "papel": "evaluator", "fase": "evaluator", "modelo": "agy-claude-opus-4-6-thinking", "provedor": "anthropic", "tentativa": 1}
+{"t": 853.21, "seq": 323, "evento": "reconciliacao.iniciada", "nos": ["prova", "testador"]}
+{"t": 853.212, "seq": 324, "evento": "executor.chamado", "executor": "testador", "papel": "executor", "tier": null, "tentativa": 1, "modelo": "omniroute/roteado"}
+{"t": 876.244, "seq": 325, "evento": "modelo.atendeu", "papel": "executor", "fase": "executor", "modelo": "codex-gpt-5.6-luna", "provedor": "openai", "tentativa": 1}
+{"t": 876.246, "seq": 326, "evento": "executor.respondeu", "executor": "testador", "tentativa": 1}
+{"t": 881.659, "seq": 327, "evento": "modelo.atendeu", "papel": "verifier", "fase": "verifier", "modelo": "agy-claude-opus-4-6-thinking", "provedor": "anthropic", "tentativa": 1}
+{"t": 881.661, "seq": 328, "evento": "portao.aprovado", "portao": "verifier:testador", "ciclo": 1}
+{"t": 881.664, "seq": 329, "evento": "artefato.atualizou", "nome": "testes.py", "tipo": "python", "subagente": "testador", "caminho": "/home/cap/Kortex/motor/runs/e5c904fe48024ebf8b3ba008d0344c92/artefatos/testador__testes.py"}
+{"t": 881.666, "seq": 330, "evento": "lacuna.preenchida", "subagente": "testador"}
+{"t": 882.574, "seq": 331, "evento": "validador.rodou", "id": "prova", "alvo": "testador", "kind": "comando", "aprovado": true, "motivo": ""}
+{"t": 882.576, "seq": 332, "evento": "lacuna.preenchida", "subagente": "prova"}
+{"t": 882.577, "seq": 333, "evento": "reconciliacao.concluida", "nos": ["testador", "prova"]}
+{"t": 882.579, "seq": 334, "evento": "executor.chamado", "executor": "global_evaluator", "modelo": "omniroute/roteado"}
+{"t": 886.14, "seq": 335, "evento": "modelo.atendeu", "papel": "evaluator", "fase": "evaluator", "modelo": "codex-gpt-5.6-luna", "provedor": "openai", "tentativa": 1}
+{"t": 886.142, "seq": 336, "evento": "portao.aprovado", "portao": "cobertura"}
+{"t": 886.145, "seq": 337, "evento": "executor.chamado", "executor": "synthesizer", "modelo": "omniroute/roteado"}
+{"t": 898.782, "seq": 338, "evento": "modelo.atendeu", "papel": "synthesizer", "fase": "synthesizer", "modelo": "codex-gpt-5.6-luna", "provedor": "openai", "tentativa": 1}
+{"t": 898.785, "seq": 339, "evento": "evidencia.cobertura", "missao": "ebay-portao-de-processo", "execucao": 2, "artefatos": 2}
+{"t": 898.787, "seq": 340, "evento": "tarefa.concluida", "missao": "ebay-portao-de-processo"}
+{"t": 898.788, "seq": 341, "evento": "medicao.monetaria_desligada", "motivo": "operador declarou sem_contencao_monetaria"}
+{"t": 898.829, "seq": 342, "evento": "run.perfil", "perfil": "certificado"}
+{"t": 898.831, "seq": 343, "evento": "spec.recebida", "missao": "cli-tarefas", "subagentes": 5}
+{"t": 898.833, "seq": 344, "evento": "gate.auto", "portao": "plano", "decisao": "prosseguir"}
+{"t": 898.835, "seq": 345, "evento": "grafo_dep.iniciado", "subagentes": ["codificador", "testador", "contrato-do-modulo", "programa-de-verdade", "prova"]}
+{"t": 898.837, "seq": 346, "evento": "onda.iniciada", "ids": ["codificador"]}
+{"t": 898.837, "seq": 347, "evento": "executor.chamado", "executor": "codificador", "papel": "executor", "tier": null, "tentativa": 1, "modelo": "omniroute/roteado"}
+{"t": 922.386, "seq": 348, "evento": "modelo.atendeu", "papel": "executor", "fase": "executor", "modelo": "codex-gpt-5.6-luna", "provedor": "openai", "tentativa": 1}
+{"t": 922.389, "seq": 349, "evento": "executor.respondeu", "executor": "codificador", "tentativa": 1}
+{"t": 928.852, "seq": 350, "evento": "modelo.atendeu", "papel": "verifier", "fase": "verifier", "modelo": "agy-claude-opus-4-6-thinking", "provedor": "anthropic", "tentativa": 1}
+{"t": 928.855, "seq": 351, "evento": "portao.aprovado", "portao": "verifier:codificador", "ciclo": 1}
+{"t": 928.857, "seq": 352, "evento": "artefato.atualizou", "nome": "tarefas.py", "tipo": "python", "subagente": "codificador", "caminho": "/home/cap/Kortex/motor/runs/c8add5e5496e4bcba08328285ffffc11/artefatos/codificador__tarefas.py"}
+{"t": 928.859, "seq": 353, "evento": "onda.concluida", "ids": ["codificador"]}
+{"t": 928.86, "seq": 354, "evento": "onda.iniciada", "ids": ["contrato-do-modulo", "programa-de-verdade", "testador"]}
+{"t": 928.861, "seq": 355, "evento": "aresta.fluxo", "de": "codificador", "para": "contrato-do-modulo"}
+{"t": 929.216, "seq": 356, "evento": "validador.rodou", "id": "contrato-do-modulo", "alvo": "codificador", "kind": "comando", "aprovado": true, "motivo": ""}
+{"t": 929.218, "seq": 357, "evento": "aresta.fluxo", "de": "codificador", "para": "programa-de-verdade"}
+{"t": 929.872, "seq": 358, "evento": "validador.rodou", "id": "programa-de-verdade", "alvo": "codificador", "kind": "comando", "aprovado": true, "motivo": ""}
+{"t": 929.873, "seq": 359, "evento": "aresta.fluxo", "de": "codificador", "para": "testador"}
+{"t": 929.874, "seq": 360, "evento": "executor.chamado", "executor": "testador", "papel": "executor", "tier": null, "tentativa": 1, "modelo": "omniroute/roteado"}
+{"t": 955.443, "seq": 361, "evento": "modelo.atendeu", "papel": "executor", "fase": "executor", "modelo": "codex-gpt-5.6-luna", "provedor": "openai", "tentativa": 1}
+{"t": 955.445, "seq": 362, "evento": "executor.respondeu", "executor": "testador", "tentativa": 1}
+{"t": 962.109, "seq": 363, "evento": "modelo.atendeu", "papel": "verifier", "fase": "verifier", "modelo": "agy-claude-opus-4-6-thinking", "provedor": "anthropic", "tentativa": 1}
+{"t": 962.11, "seq": 364, "evento": "portao.aprovado", "portao": "verifier:testador", "ciclo": 1}
+{"t": 962.112, "seq": 365, "evento": "artefato.atualizou", "nome": "testes.py", "tipo": "python", "subagente": "testador", "caminho": "/home/cap/Kortex/motor/runs/c8add5e5496e4bcba08328285ffffc11/artefatos/testador__testes.py"}
+{"t": 962.113, "seq": 366, "evento": "onda.concluida", "ids": ["contrato-do-modulo", "programa-de-verdade", "testador"]}
+{"t": 962.115, "seq": 367, "evento": "onda.iniciada", "ids": ["prova"]}
+{"t": 962.116, "seq": 368, "evento": "aresta.fluxo", "de": "testador", "para": "prova"}
+{"t": 962.779, "seq": 369, "evento": "validador.rodou", "id": "prova", "alvo": "testador", "kind": "comando", "aprovado": true, "motivo": ""}
+{"t": 962.781, "seq": 370, "evento": "onda.concluida", "ids": ["prova"]}
+{"t": 962.783, "seq": 371, "evento": "paralelo.concluido", "commitados": 5}
+{"t": 962.784, "seq": 372, "evento": "executor.chamado", "executor": "global_evaluator", "modelo": "omniroute/roteado"}
+{"t": 971.76, "seq": 373, "evento": "modelo.atendeu", "papel": "evaluator", "fase": "evaluator", "modelo": "codex-gpt-5.6-luna", "provedor": "openai", "tentativa": 1}
+{"t": 971.765, "seq": 374, "evento": "portao.reprovado", "portao": "cobertura", "lacunas": ["Não há prova de uma invocação CLI com id inexistente retornando exit code 1 e mensagem em stderr.", "Não há prova de persistência entre invocações distintas do programa pela linha de comando; os testes usam chamadas de main no mesmo processo.", "A execução CLI feliz foi apenas reportada como \"CLI OK\", sem evidências dos comandos executados nem de seu estado persistido.", "A suíte não testa os requisitos de subprocesso/CLI e persistência entre processos."]}
+{"t": 971.767, "seq": 375, "evento": "gate.auto", "portao": "cobertura", "decisao": "escalar"}
+{"t": 971.769, "seq": 376, "evento": "gate.escalado", "portao": "cobertura", "evitando": "openai", "tentativa": 1}
+{"t": 971.77, "seq": 377, "evento": "executor.chamado", "executor": "global_evaluator", "modelo": "omniroute/roteado"}
+{"t": 974.25, "seq": 378, "evento": "modelo.atendeu", "papel": "evaluator", "fase": "evaluator", "modelo": "agy-claude-opus-4-6-thinking", "provedor": "anthropic", "tentativa": 1}
+{"t": 974.252, "seq": 379, "evento": "portao.aprovado", "portao": "cobertura"}
+{"t": 974.255, "seq": 380, "evento": "executor.chamado", "executor": "synthesizer", "modelo": "omniroute/roteado"}
+{"t": 999.271, "seq": 381, "evento": "modelo.atendeu", "papel": "synthesizer", "fase": "synthesizer", "modelo": "codex-gpt-5.6-luna", "provedor": "openai", "tentativa": 1}
+{"t": 999.273, "seq": 382, "evento": "evidencia.cobertura", "missao": "cli-tarefas", "execucao": 2, "artefatos": 2}
+{"t": 999.281, "seq": 383, "evento": "tarefa.concluida", "missao": "cli-tarefas"}
+{"t": 999.282, "seq": 384, "evento": "medicao.monetaria_desligada", "motivo": "operador declarou sem_contencao_monetaria"}
+{"t": 999.323, "seq": 385, "evento": "run.perfil", "perfil": "certificado"}
+{"t": 999.325, "seq": 386, "evento": "spec.recebida", "missao": "cli-tarefas", "subagentes": 5}
+{"t": 999.327, "seq": 387, "evento": "gate.auto", "portao": "plano", "decisao": "prosseguir"}
+{"t": 999.329, "seq": 388, "evento": "grafo_dep.iniciado", "subagentes": ["codificador", "testador", "contrato-do-modulo", "programa-de-verdade", "prova"]}
+{"t": 999.33, "seq": 389, "evento": "onda.iniciada", "ids": ["codificador"]}
+{"t": 999.332, "seq": 390, "evento": "executor.chamado", "executor": "codificador", "papel": "executor", "tier": null, "tentativa": 1, "modelo": "omniroute/roteado"}
+{"t": 1028.458, "seq": 391, "evento": "modelo.atendeu", "papel": "executor", "fase": "executor", "modelo": "codex-gpt-5.6-luna", "provedor": "openai", "tentativa": 1}
+{"t": 1028.46, "seq": 392, "evento": "executor.respondeu", "executor": "codificador", "tentativa": 1}
+{"t": 1034.667, "seq": 393, "evento": "modelo.atendeu", "papel": "verifier", "fase": "verifier", "modelo": "agy-claude-opus-4-6-thinking", "provedor": "anthropic", "tentativa": 1}
+{"t": 1034.669, "seq": 394, "evento": "portao.aprovado", "portao": "verifier:codificador", "ciclo": 1}
+{"t": 1034.672, "seq": 395, "evento": "artefato.atualizou", "nome": "tarefas.py", "tipo": "python", "subagente": "codificador", "caminho": "/home/cap/Kortex/motor/runs/b1a02c771ab94b5bac3596b3b040c548/artefatos/codificador__tarefas.py"}
+{"t": 1034.673, "seq": 396, "evento": "onda.concluida", "ids": ["codificador"]}
+{"t": 1034.675, "seq": 397, "evento": "onda.iniciada", "ids": ["contrato-do-modulo", "programa-de-verdade", "testador"]}
+{"t": 1034.677, "seq": 398, "evento": "aresta.fluxo", "de": "codificador", "para": "contrato-do-modulo"}
+{"t": 1035.022, "seq": 399, "evento": "validador.rodou", "id": "contrato-do-modulo", "alvo": "codificador", "kind": "comando", "aprovado": true, "motivo": ""}
+{"t": 1035.024, "seq": 400, "evento": "aresta.fluxo", "de": "codificador", "para": "programa-de-verdade"}
+{"t": 1035.707, "seq": 401, "evento": "validador.rodou", "id": "programa-de-verdade", "alvo": "codificador", "kind": "comando", "aprovado": true, "motivo": ""}
+{"t": 1035.708, "seq": 402, "evento": "aresta.fluxo", "de": "codificador", "para": "testador"}
+{"t": 1035.71, "seq": 403, "evento": "executor.chamado", "executor": "testador", "papel": "executor", "tier": null, "tentativa": 1, "modelo": "omniroute/roteado"}
+{"t": 1061.741, "seq": 404, "evento": "modelo.atendeu", "papel": "executor", "fase": "executor", "modelo": "codex-gpt-5.6-luna", "provedor": "openai", "tentativa": 1}
+{"t": 1061.743, "seq": 405, "evento": "executor.respondeu", "executor": "testador", "tentativa": 1}
+{"t": 1066.626, "seq": 406, "evento": "modelo.atendeu", "papel": "verifier", "fase": "verifier", "modelo": "agy-claude-opus-4-6-thinking", "provedor": "anthropic", "tentativa": 1}
+{"t": 1066.629, "seq": 407, "evento": "portao.reprovado", "portao": "verifier:testador", "ciclo": 1, "motivo": "O critério 'a saída é Python puro, sem cerca de markdown' falha: os últimos caracteres do arquivo contêm '、】【' (caracteres não-Python) após o último teste, o que causa SyntaxError e impede a execução da suite."}
+{"t": 1066.631, "seq": 408, "evento": "executor.chamado", "executor": "testador", "papel": "executor", "tier": null, "tentativa": 2, "modelo": "omniroute/roteado"}
+{"t": 1087.305, "seq": 409, "evento": "modelo.atendeu", "papel": "executor", "fase": "executor", "modelo": "codex-gpt-5.6-luna", "provedor": "openai", "tentativa": 1}
+{"t": 1087.307, "seq": 410, "evento": "executor.respondeu", "executor": "testador", "tentativa": 2}
+{"t": 1093.45, "seq": 411, "evento": "modelo.atendeu", "papel": "verifier", "fase": "verifier", "modelo": "agy-claude-opus-4-6-thinking", "provedor": "anthropic", "tentativa": 1}
+{"t": 1093.452, "seq": 412, "evento": "portao.aprovado", "portao": "verifier:testador", "ciclo": 2}
+{"t": 1093.454, "seq": 413, "evento": "artefato.atualizou", "nome": "testes.py", "tipo": "python", "subagente": "testador", "caminho": "/home/cap/Kortex/motor/runs/b1a02c771ab94b5bac3596b3b040c548/artefatos/testador__testes.py"}
+{"t": 1093.455, "seq": 414, "evento": "onda.concluida", "ids": ["contrato-do-modulo", "programa-de-verdade", "testador"]}
+{"t": 1093.457, "seq": 415, "evento": "onda.iniciada", "ids": ["prova"]}
+{"t": 1093.458, "seq": 416, "evento": "aresta.fluxo", "de": "testador", "para": "prova"}
+{"t": 1094.205, "seq": 417, "evento": "validador.rodou", "id": "prova", "alvo": "testador", "kind": "comando", "aprovado": true, "motivo": ""}
+{"t": 1094.207, "seq": 418, "evento": "onda.concluida", "ids": ["prova"]}
+{"t": 1094.209, "seq": 419, "evento": "paralelo.concluido", "commitados": 5}
+{"t": 1094.21, "seq": 420, "evento": "executor.chamado", "executor": "global_evaluator", "modelo": "omniroute/roteado"}
+{"t": 1097.668, "seq": 421, "evento": "modelo.atendeu", "papel": "evaluator", "fase": "evaluator", "modelo": "codex-gpt-5.6-luna", "provedor": "openai", "tentativa": 1}
+{"t": 1097.671, "seq": 422, "evento": "portao.aprovado", "portao": "cobertura"}
+{"t": 1097.675, "seq": 423, "evento": "executor.chamado", "executor": "synthesizer", "modelo": "omniroute/roteado"}
+{"t": 1132.297, "seq": 424, "evento": "modelo.atendeu", "papel": "synthesizer", "fase": "synthesizer", "modelo": "codex-gpt-5.6-luna", "provedor": "openai", "tentativa": 1}
+{"t": 1132.3, "seq": 425, "evento": "evidencia.cobertura", "missao": "cli-tarefas", "execucao": 2, "artefatos": 2}
+{"t": 1132.303, "seq": 426, "evento": "tarefa.concluida", "missao": "cli-tarefas"}
